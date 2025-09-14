@@ -30,7 +30,7 @@ def decode_udp_packet(data: bytes):
     }
 
 
-async def forward():
+async def forward(forward_addr):
     # ---- Init Ethernet ----
     nic = network.WIZNET5K()
     nic.active(True)
@@ -57,15 +57,15 @@ async def forward():
 
         fields = decode_udp_packet(data)
         if fields:
-            print("UDP -->", fields)
+            print("UDP <--", fields)
 
         # Forward packet
-        sock.sendto(data, (FORWARD_IP, LISTEN_PORT))
+        sock.sendto(data, (forward_addr, LISTEN_PORT))
 
 
 async def main():
     await asyncio.gather(
-        forward()
+        forward(FORWARD_IP)
     )
 
 if __name__ == "__main__":
