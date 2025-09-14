@@ -4,11 +4,7 @@ from machine import Pin, UART
 # VISCA constants
 VISCA_END = 0xFF
 
-# UART configuration
-uart0 = UART(0, baudrate=9600, tx=Pin(0), rx=Pin(1))  # VISCA default = 9600
-uart1 = UART(1, baudrate=9600, tx=Pin(4), rx=Pin(5))
-
-async def visca_monitor(uart, name="UART"):
+async def monitor(uart, name="UART"):
     buffer = bytearray()
     while True:
         if uart.any():
@@ -36,18 +32,21 @@ async def visca_monitor(uart, name="UART"):
         await asyncio.sleep(0.01)
 
 # Example sender: send VISCA Inquiry (zoom position)
-async def send_visca_inquiry(uart, interval=2.0):
+async def test(uart, interval=2.0):
     inquiry = bytearray([0x81, 0x09, 0x04, 0x47, 0xFF])  # Zoom Position Inquiry
     while True:
         uart.write(inquiry)
-        #print("Sent VISCA Zoom Inquiry:", [hex(x) for x in inquiry])
         await asyncio.sleep(interval)
 
 async def main():
+    uart0 = UART(0, baudrate=9600, tx=Pin(0), rx=Pin(1))
+    uart1 = UART(1, baudrate=9600, tx=Pin(4), rx=Pin(5))
     await asyncio.gather(
-        visca_monitor(uart0, "UART0"),
-        visca_monitor(uart1, "UART1"),
-        send_visca_inquiry(uart0, interval=5.0)
+        monitor(uart0, "UART0"),
+        monitor(uart1, "UART1"),
+        test(uart0, interval=0.5),
+        test(uart1, interval=0.5)
     )
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())

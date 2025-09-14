@@ -9,18 +9,6 @@ LISTEN_PORT = 8888
 FORWARD_IP = "192.168.1.123"
 BUFFER_SIZE = 1024
 
-# ---- Init Ethernet ----
-nic = network.WIZNET5K()
-nic.active(True)
-print("Bringing up Ethernet...")
-
-while not nic.isconnected():
-    print(".", end="")
-    time.sleep(0.5)
-
-print("\nEthernet connected:", nic.ifconfig())
-
-
 def decode_udp_packet(data: bytes):
     """Decode a 16-byte control packet into fields."""
     if len(data) < 16:
@@ -42,7 +30,18 @@ def decode_udp_packet(data: bytes):
     }
 
 
-async def udp_forwarder():
+async def forward():
+    # ---- Init Ethernet ----
+    nic = network.WIZNET5K()
+    nic.active(True)
+    print("Bringing up Ethernet...")
+
+    while not nic.isconnected():
+        print(".", end="")
+        time.sleep(0.5)
+
+    print("\nEthernet connected:", nic.ifconfig())
+
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setblocking(False)
     sock.bind(("0.0.0.0", LISTEN_PORT))
@@ -65,7 +64,9 @@ async def udp_forwarder():
 
 
 async def main():
-    await udp_forwarder()
+    await asyncio.gather(
+        forward()
+    )
 
-
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())

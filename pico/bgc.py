@@ -140,10 +140,6 @@ def crc16_calculate(data):
                 crc_register ^= polynomial
     return crc_register
 
-# UART configuration
-uart0 = UART(0, baudrate=115200, tx=Pin(0), rx=Pin(1))
-uart1 = UART(1, baudrate=115200, tx=Pin(4), rx=Pin(5))
-
 PACKET_START = 0x24
 HEADER_LEN = 3
 CRC_LEN = 2
@@ -156,7 +152,7 @@ def create_test_packet(command_id=0x56, payload=b'\x00\x00'):
     crc_bytes = bytearray([crc & 0xFF, (crc >> 8) & 0xFF])
     return bytearray([PACKET_START]) + header_and_payload + crc_bytes
 
-async def uart_monitor(uart, name="UART"):
+async def monitor(uart, name="UART"):
     buffer = bytearray()
     while True:
         # Read all available bytes
@@ -209,19 +205,21 @@ async def uart_monitor(uart, name="UART"):
         await asyncio.sleep(0.01)
 
 # Periodic test packet sender
-async def send_test_packets(uart, interval=2.0, name="UART"):
+async def test(uart, interval=2.0):
     while True:
         packet = create_test_packet()
         uart.write(packet)
-        # print(f"{name}: Sent test packet:", [hex(x) for x in packet])
         await asyncio.sleep(interval)
 
 async def main():
+    uart0 = UART(0, baudrate=115200, tx=Pin(0), rx=Pin(1))
+    uart1 = UART(1, baudrate=115200, tx=Pin(4), rx=Pin(5))
     await asyncio.gather(
-        uart_monitor(uart0, "UART0"),
-        uart_monitor(uart1, "UART1"),
-        send_test_packets(uart0, interval=0.01, name="UART0"),
-        send_test_packets(uart1, interval=0.01, name="UART1")
+        monitor(uart0, "UART0"),
+        monitor(uart1, "UART1"),
+        test(uart0, interval=0.01),
+        test(uart1, interval=0.01)
     )
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())
