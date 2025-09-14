@@ -31,21 +31,9 @@ def decode_udp_packet(data: bytes):
 
 
 async def forward(forward_addr):
-    # ---- Init Ethernet ----
-    nic = network.WIZNET5K()
-    nic.active(True)
-    print("Bringing up Ethernet...")
-
-    while not nic.isconnected():
-        print(".", end="")
-        time.sleep(0.5)
-
-    print("\nEthernet connected:", nic.ifconfig())
-
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setblocking(False)
     sock.bind(("0.0.0.0", LISTEN_PORT))
-    print(f"Listening for UDP packets on port {LISTEN_PORT}")
 
     while True:
         try:
@@ -62,11 +50,27 @@ async def forward(forward_addr):
         # Forward packet
         sock.sendto(data, (forward_addr, LISTEN_PORT))
 
+def get_tasks(forward_ip):
+    # ---- Init Ethernet ----
+    nic = network.WIZNET5K()
+    nic.active(True)
+    print("Bringing up Ethernet...")
+
+    while not nic.isconnected():
+        print(".", end="")
+        time.sleep(0.5)
+
+    print("\nEthernet connected:", nic.ifconfig())
+
+    tasks = [forward(forward_ip)]
+    print(f'Listening for UDP packets on port {LISTEN_PORT}, forwarding to {forward_ip}:{LISTEN_PORT}')
+
+    return tasks
 
 async def main():
-    await asyncio.gather(
-        forward(FORWARD_IP)
-    )
+    tasks = get_tasks(FORWARD_IP)
+
+    await asyncio.gather(*tasks)
 
 if __name__ == "__main__":
     asyncio.run(main())

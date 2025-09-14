@@ -1,6 +1,8 @@
 import uasyncio as asyncio
 from machine import Pin, UART
 
+BAUDRATE = 115200
+
 cmd_dict = {
     82: "CMD_READ_PARAMS",
     87: "CMD_WRITE_PARAMS",
@@ -205,21 +207,34 @@ async def monitor(uart, name="UART"):
         await asyncio.sleep(0.01)
 
 # Periodic test packet sender
-async def test(uart, interval=2.0):
+async def generate(uart, interval=2.0):
     while True:
         packet = create_test_packet()
         uart.write(packet)
         await asyncio.sleep(interval)
 
+def get_tasks(uart_id, direction, test=False):
+    if uart_id == 0:
+        uart = UART(uart_id, baudrate=BAUDRATE, tx=Pin(0), rx=Pin(1))
+    elif uart_id == 1:
+        uart = UART(uart_id, baudrate=BAUDRATE, tx=Pin(4), rx=Pin(5))
+    else:
+        raise ValueError("Invalid UART ID")
+
+    tasks = [monitor(uart, f"BGC {direction}")]
+    print("Listening for BGC traffic on UART", uart_id)
+
+    if test:
+        tasks += [generate(uart)]
+        print("Generating BGC traffic on UART", uart_id)
+
+    return tasks
+
 async def main():
-    uart0 = UART(0, baudrate=115200, tx=Pin(0), rx=Pin(1))
-    uart1 = UART(1, baudrate=115200, tx=Pin(4), rx=Pin(5))
-    await asyncio.gather(
-        monitor(uart0, "UART0"),
-        monitor(uart1, "UART1"),
-        test(uart0, interval=0.01),
-        test(uart1, interval=0.01)
-    )
+    tasks = get_tasks(0, "-->", test=True)
+    tasks += get_tasks(1, "<--", test=True)
+
+    await asyncio.gather(*tasks)
 
 if __name__ == "__main__":
     asyncio.run(main())

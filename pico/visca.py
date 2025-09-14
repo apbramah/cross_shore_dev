@@ -1,6 +1,8 @@
 import uasyncio as asyncio
 from machine import Pin, UART
 
+BAUDRATE = 9600
+
 # VISCA constants
 VISCA_END = 0xFF
 
@@ -32,21 +34,34 @@ async def monitor(uart, name="UART"):
         await asyncio.sleep(0.01)
 
 # Example sender: send VISCA Inquiry (zoom position)
-async def test(uart, interval=2.0):
+async def generate(uart, interval=2.0):
     inquiry = bytearray([0x81, 0x09, 0x04, 0x47, 0xFF])  # Zoom Position Inquiry
     while True:
         uart.write(inquiry)
         await asyncio.sleep(interval)
 
+def get_tasks(uart_id, direction, test=False):
+    if uart_id == 0:
+        uart = UART(uart_id, baudrate=BAUDRATE, tx=Pin(0), rx=Pin(1))
+    elif uart_id == 1:
+        uart = UART(uart_id, baudrate=BAUDRATE, tx=Pin(4), rx=Pin(5))
+    else:
+        raise ValueError("Invalid UART ID")
+
+    tasks = [monitor(uart, f"VISCA {direction}")]
+    print("Listening for VISCA traffic on UART", uart_id)
+
+    if test:
+        tasks += [generate(uart)]
+        print("Generating VISCA traffic on UART", uart_id)
+
+    return tasks
+
 async def main():
-    uart0 = UART(0, baudrate=9600, tx=Pin(0), rx=Pin(1))
-    uart1 = UART(1, baudrate=9600, tx=Pin(4), rx=Pin(5))
-    await asyncio.gather(
-        monitor(uart0, "UART0"),
-        monitor(uart1, "UART1"),
-        test(uart0, interval=0.5),
-        test(uart1, interval=0.5)
-    )
+    tasks = get_tasks(0, "-->", test=True)
+    tasks += get_tasks(1, "<--", test=True)
+
+    await asyncio.gather(*tasks)
 
 if __name__ == "__main__":
     asyncio.run(main())
