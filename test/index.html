@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Camera Control</title>
+  <style>
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      margin: 5px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+    .active {
+      background-color: limegreen;
+      color: white;
+    }
+    .inactive {
+      background-color: lightgray;
+      color: black;
+    }
+  </style>
+</head>
+<body>
+  <h1>Mode Control</h1>
+  <button id="autoCamBtn" class="inactive" onclick="sendMessage('auto_cam')">Enable auto cam</button>
+  <button id="joystickBtn" class="inactive" onclick="sendMessage('joystick')">Enable joystick</button>
+
+  <pre id="log"></pre>
+
+  <script>
+    const log = msg => document.getElementById("log").textContent += msg + "\n";
+    const autoBtn = document.getElementById("autoCamBtn");
+    const joyBtn = document.getElementById("joystickBtn");
+
+    const ws = new WebSocket("ws://192.168.1.188:80/");
+    ws.onopen = () => {
+      log("Connected as browser controller");
+      ws.send("BROWSER");
+    };
+    ws.onmessage = event => {
+      log("From server: " + event.data);
+
+      const msg = event.data.toLowerCase();
+
+      if (msg.includes("auto_cam")) {
+        autoBtn.classList.add("active");
+        autoBtn.classList.remove("inactive");
+        joyBtn.classList.add("inactive");
+        joyBtn.classList.remove("active");
+      } else if (msg.includes("joystick")) {
+        joyBtn.classList.add("active");
+        joyBtn.classList.remove("inactive");
+        autoBtn.classList.add("inactive");
+        autoBtn.classList.remove("active");
+      }
+    };
+
+    function sendMessage(msg) {
+      log("Sending: " + msg);
+      ws.send(msg);
+    }
+  </script>
+</body>
+</html>

@@ -1,8 +1,9 @@
 import uasyncio as asyncio
-import machine
 import network
 import socket
 import struct
+import uwebsockets.client
+from machine import Pin, UART
 
 # ==== CONFIGURATION ====
 TCP_PORT   = 8080
@@ -11,10 +12,13 @@ UART_BAUD  = 115200
 LISTEN_PORT_JOYSTICK = 8888
 LISTEN_PORT_AUTOCAM = 8889
 BUFFER_SIZE = 1024
+WS_URL = "ws://192.168.1.188:80/"
+TEST_MODE = False   # True = test mode, False = UART bridge
 # ========================
 
 # Setup UART
-uart = machine.UART(UART_ID, UART_BAUD)
+uart = UART(UART_ID, UART_BAUD)
+led = Pin(25, Pin.OUT)
 
 # Setup Ethernet
 nic = network.WIZNET5K()
@@ -25,9 +29,8 @@ while not nic.isconnected():
     pass
 print("Ethernet connected:", nic.ifconfig())
 
-# ==== CONFIGURATION ====
-TEST_MODE = False   # True = test mode, False = UART bridge
-# ========================
+led.value(0)
+mode = "joystick"  # "joystick" or "auto_cam"
 
 def hexdump(data: bytes) -> str:
     """Return a hex dump string for given bytes."""
@@ -152,8 +155,6 @@ def crc16_calculate(data):
     return crc_register
 
 PACKET_START = 0x24
-HEADER_LEN = 3
-CRC_LEN = 2
 
 def create_packet(command_id, payload):
     payload_size = len(payload)
@@ -178,6 +179,9 @@ async def joystick():
             await asyncio.sleep(0)  # yield to scheduler
             continue
 
+        if mode != "joystick":
+            continue
+
         fields = decode_udp_packet(data)
         if fields:
             payload = struct.pack(">3H", fields["yaw"], fields["pitch"], fields["roll"])
@@ -199,6 +203,9 @@ async def auto_cam():
             await asyncio.sleep(0)  # yield to scheduler
             continue
 
+        if mode != "auto_cam":
+            continue
+
         fields = decode_udp_packet(data)
         if fields:
             payload = struct.pack(">3H", fields["yaw"], fields["pitch"], fields["roll"])
@@ -210,8 +217,49 @@ async def server_task():
     await asyncio.start_server(handle_client, "0.0.0.0", TCP_PORT)
     print("TCP server listening on port", TCP_PORT)
 
+async def websocket_client():
+    global mode
+    ws = None
+    try:
+        print("Connecting to WebSocket server...")
+        ws = uwebsockets.client.connect(WS_URL)
+        ws.sock.setblocking(False)
+        print("Connected!")
+        ws.send("DEVICE")  # announce as device
+        ws.send(mode)  # send initial mode
+
+        while True:
+
+            # Check for incoming messages
+            msg = ws.recv()
+            if msg:
+                print("Received:", msg)
+                if msg == "auto_cam":
+                    led.value(1)
+                    mode = "auto_cam"
+                    ws.send(mode + " enabled")
+                elif msg == "joystick":
+                    led.value(0)
+                    mode = "joystick"
+                    ws.send(mode + " enabled")
+
+            await asyncio.sleep(0)
+
+    except Exception as e:
+        print("WebSocket error:", e)
+    finally:
+        if ws:
+            ws.close()
+            print("Connection closed")
+
+async def websocket():
+    while True:
+        await websocket_client()
+        print("Reconnecting in 1 seconds...")
+        await asyncio.sleep(1)
+
 async def main():
-    tasks = [server_task(), joystick(), auto_cam()]
+    tasks = [server_task(), joystick(), auto_cam(), websocket()]
 
     # Run all tasks concurrently
     await asyncio.gather(*tasks)
