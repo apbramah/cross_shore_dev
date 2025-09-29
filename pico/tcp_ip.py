@@ -1,11 +1,16 @@
 import uasyncio as asyncio
 import machine
 import network
+import socket
+import struct
 
 # ==== CONFIGURATION ====
 TCP_PORT   = 8080
 UART_ID    = 0           # 0 or 1
 UART_BAUD  = 115200
+LISTEN_PORT_JOYSTICK = 8888
+LISTEN_PORT_AUTOCAM = 8889
+BUFFER_SIZE = 1024
 # ========================
 
 # Setup UART
@@ -101,14 +106,115 @@ async def handle_client(reader, writer):
     await writer.wait_closed()
     print("Client handler finished")
 
-async def main():
-    server = await asyncio.start_server(handle_client, "0.0.0.0", TCP_PORT)
+def decode_udp_packet(data: bytes):
+    """Decode a 16-byte control packet into fields."""
+    if len(data) != 16:
+        print("Unexpected length:", len(data))
+        return None
+
+    if data[0] != 0xDE:
+        print("Invalid header:", data[0])
+        return None
+
+    data_type = data[1]
+
+    if data_type == 0xFD:
+        zoom, focus, iris, yaw, pitch, roll, _ = struct.unpack(">6H2s", data[2:16])
+        return {
+            "zoom": zoom,
+            "focus": focus,
+            "iris": iris,
+            "yaw": yaw,
+            "pitch": pitch,
+            "roll": roll,
+        }
+    elif data_type == 0xF3:
+        pitch, roll, yaw, zoom, focus, iris, _ = struct.unpack(">6H2s", data[2:16])
+        return {
+            "zoom": zoom,
+            "focus": focus,
+            "iris": iris,
+            "yaw": yaw,
+            "pitch": pitch,
+            "roll": roll,
+        }
+
+def crc16_calculate(data):
+    polynomial = 0x8005
+    crc_register = 0
+    for byte in data:
+        for shift_register in range(8):
+            data_bit = (byte >> shift_register) & 1
+            crc_bit = (crc_register >> 15) & 1
+            crc_register = (crc_register << 1) & 0xFFFF
+            if data_bit != crc_bit:
+                crc_register ^= polynomial
+    return crc_register
+
+PACKET_START = 0x24
+HEADER_LEN = 3
+CRC_LEN = 2
+
+def create_packet(command_id, payload):
+    payload_size = len(payload)
+    header_checksum = (command_id + payload_size) % 256
+    header = bytearray([command_id, payload_size, header_checksum])
+    header_and_payload = header + payload
+    crc = crc16_calculate(header_and_payload)
+    crc_bytes = bytearray([crc & 0xFF, (crc >> 8) & 0xFF])
+    return bytearray([PACKET_START]) + header_and_payload + crc_bytes
+
+async def joystick():
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.setblocking(False)
+    sock.bind(("0.0.0.0", LISTEN_PORT_JOYSTICK))
+    print("Listening for joystick UDP packets on port", LISTEN_PORT_JOYSTICK)
+
+    while True:
+        try:
+            data, addr = sock.recvfrom(BUFFER_SIZE)  # non-blocking
+        except OSError:
+            # No data available
+            await asyncio.sleep(0)  # yield to scheduler
+            continue
+
+        fields = decode_udp_packet(data)
+        if fields:
+            payload = struct.pack(">3H", fields["yaw"], fields["pitch"], fields["roll"])
+            packet = create_packet(45, payload)
+            print("UART joystick -->", hexdump(packet))
+            uart.write(packet)
+
+async def auto_cam():
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.setblocking(False)
+    sock.bind(("0.0.0.0", LISTEN_PORT_AUTOCAM))
+    print("Listening for auto_cam UDP packets on port", LISTEN_PORT_AUTOCAM)
+
+    while True:
+        try:
+            data, addr = sock.recvfrom(BUFFER_SIZE)  # non-blocking
+        except OSError:
+            # No data available
+            await asyncio.sleep(0)  # yield to scheduler
+            continue
+
+        fields = decode_udp_packet(data)
+        if fields:
+            payload = struct.pack(">3H", fields["yaw"], fields["pitch"], fields["roll"])
+            packet = create_packet(45, payload)
+            print("UART auto_cam -->", hexdump(packet))
+            uart.write(packet)
+
+async def server_task():
+    await asyncio.start_server(handle_client, "0.0.0.0", TCP_PORT)
     print("TCP server listening on port", TCP_PORT)
 
-    # Keep running forever
-    while True:
-        await asyncio.sleep(3600)  # sleep in long chunks
+async def main():
+    tasks = [server_task(), joystick(), auto_cam()]
 
+    # Run all tasks concurrently
+    await asyncio.gather(*tasks)
 
 try:
     asyncio.run(main())
