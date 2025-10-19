@@ -7,23 +7,27 @@ from machine import Pin, UART
 
 # ==== CONFIGURATION ====
 TCP_PORT   = 8080
+TCP_PORT2   = 8081
 UART_ID    = 0           # 0 or 1
+UART_ID1    = 1           # 0 or 1
 UART_BAUD  = 115200
+UART_BAUD1  = 9600
 LISTEN_PORT_JOYSTICK = 8888
 LISTEN_PORT_AUTOCAM = 8889
 BUFFER_SIZE = 1024
-WS_URL = "ws://192.168.1.188:80/"
+WS_URL = "ws://192.168.1.52:80/"
 TEST_MODE = False   # True = test mode, False = UART bridge
 # ========================
 
 # Setup UART
 uart = UART(UART_ID, UART_BAUD)
+uart1 = UART(UART_ID1, UART_BAUD1)
 led = Pin(25, Pin.OUT)
 
 # Setup Ethernet
 nic = network.WIZNET5K()
 nic.active(True)
-
+nic.ifconfig(('192.168.1.51', '255.255.255.0', '192.168.1.1', '8.8.8.8'))
 print("Waiting for Ethernet link...")
 while not nic.isconnected():
     pass
@@ -98,12 +102,50 @@ async def handle_client(reader, writer):
                 if not data:
                     print("TCP client disconnected")
                     break
-                print("TCP -> UART:", hexdump(data))
                 uart.write(data)
 
         task1 = asyncio.create_task(uart_to_tcp_task())
         task2 = asyncio.create_task(tcp_to_uart_task())
         await asyncio.gather(task1, task2)
+
+    writer.close()
+    await writer.wait_closed()
+    print("Client handler finished")
+
+async def handle_client2(reader, writer):
+    print("Client connected")
+
+    # --- NORMAL UART BRIDGE MODE ---
+    async def uart_to_tcp_task():
+        while True:
+            if uart1.any():
+                data = uart1.read()
+                if data:
+                    print("Camera UART -> TCP:", hexdump(data))
+                    try:
+                        writer.write(data)
+                        await writer.drain()
+                    except Exception as e:
+                        print("TCP write error:", e)
+                        break
+            await asyncio.sleep_ms(5)
+
+    async def tcp_to_uart_task():
+        while True:
+            try:
+                data = await reader.read(100)
+            except Exception as e:
+                print("TCP read error:", e)
+                break
+            if not data:
+                print("TCP client disconnected")
+                break
+            print("Camera TCP -> UART:", hexdump(data))
+            uart1.write(data)
+
+    task1 = asyncio.create_task(uart_to_tcp_task())
+    task2 = asyncio.create_task(tcp_to_uart_task())
+    await asyncio.gather(task1, task2)
 
     writer.close()
     await writer.wait_closed()
@@ -122,7 +164,7 @@ def decode_udp_packet(data: bytes):
     data_type = data[1]
 
     if data_type == 0xFD:
-        zoom, focus, iris, yaw, pitch, roll, _ = struct.unpack(">6H2s", data[2:16])
+        zoom, focus, iris, yaw, pitch, roll, _ = struct.unpack("<6H2s", data[2:16])
         return {
             "zoom": zoom,
             "focus": focus,
@@ -132,7 +174,7 @@ def decode_udp_packet(data: bytes):
             "roll": roll,
         }
     elif data_type == 0xF3:
-        pitch, roll, yaw, zoom, focus, iris, _ = struct.unpack(">6H2s", data[2:16])
+        pitch, roll, yaw, zoom, focus, iris, _ = struct.unpack("<6H2s", data[2:16])
         return {
             "zoom": zoom,
             "focus": focus,
@@ -217,6 +259,10 @@ async def server_task():
     await asyncio.start_server(handle_client, "0.0.0.0", TCP_PORT)
     print("TCP server listening on port", TCP_PORT)
 
+async def server_task2():
+    await asyncio.start_server(handle_client2, "0.0.0.0", TCP_PORT2)
+    print("TCP server listening on port", TCP_PORT2)
+
 async def websocket_client():
     global mode
     ws = None
@@ -259,7 +305,7 @@ async def websocket():
         await asyncio.sleep(1)
 
 async def main():
-    tasks = [server_task(), joystick(), auto_cam(), websocket()]
+    tasks = [server_task(), server_task2(), joystick(), auto_cam(), websocket()]
 
     # Run all tasks concurrently
     await asyncio.gather(*tasks)

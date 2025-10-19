@@ -1,0 +1,19 @@
+Auto has header 0xDE
+Joystick has header 0xEC (no actually this was probably the fixed/absolute one)
+
+Positions of BGC controller serial wires:
+11 - GP8 UART1 TX White
+12 - GP9 UART1 RX Green
+13 - GND          Black
+
+Positions of camera controller serial wires seem wrong:
+17 - GP13 UART0 RX ??? Blue
+19 - GP14 ???          White
+
+
+com0com settings:
+Created COM2 and COM7 as a pair (install PortName=COM2 PortName=COM7)
+com2tcp.exe --ignore-dsr \\.\COM7 192.168.1.51 8081
+
+
+

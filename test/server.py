@@ -55,7 +55,7 @@ async def handler(ws):
 
 async def main():
     host_ip = get_lan_ip()
-    async with websockets.serve(handler, "0.0.0.0", 80, compression=None):
+    async with websockets.serve(handler, "192.168.1.52", 80, compression=None):
         print(f"WebSocket server listening on ws://{host_ip}:80")
         await asyncio.Future()  # run forever
 
