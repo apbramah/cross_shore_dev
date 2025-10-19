@@ -16,7 +16,6 @@ LISTEN_PORT_JOYSTICK = 8888
 LISTEN_PORT_AUTOCAM = 8889
 BUFFER_SIZE = 1024
 WS_URL = "ws://192.168.1.52:80/"
-TEST_MODE = False   # True = test mode, False = UART bridge
 # ========================
 
 # Setup UART
@@ -43,85 +42,12 @@ def hexdump(data: bytes) -> str:
 async def handle_client(reader, writer):
     print("Client connected")
 
-    if TEST_MODE:
-        # --- TEST MODE: no UART, respond to TCP packets ---
-        while True:
-            try:
-                data = await reader.read(100)
-            except Exception as e:
-                print("TCP read error:", e)
-                break
-            if not data:
-                print("TCP client disconnected")
-                break
-
-            print("TCP received:", hexdump(data))
-
-            if data[0] == 0x24:
-                continue
-
-            cmd = data[1]
-            if cmd == 0x56:
-                response = bytearray([0x3e, 0x56, 0x12, 0x68, 0x24, 0x92, 0xa, 0x2c, 0xbf, 0xfd, 0x0, 0x0, 0x0, 0x0, 0x0, 0x95, 0x2, 0x0, 0x0, 0x0, 0x0, 0x0, 0x3f])
-            elif cmd == 20:
-                response = bytearray([0x3e, 0x14, 0x1, 0x15, 0x20, 0x20])
-            else:
-                response = bytearray([0x3e, 0x43, 0x1, 0x44, cmd, cmd])
-
-            print("TCP send:", hexdump(response))
-
-            try:
-                writer.write(response)
-                await writer.drain()
-            except Exception as e:
-                print("TCP write error:", e)
-                break
-
-    else:
-        # --- NORMAL UART BRIDGE MODE ---
-        async def uart_to_tcp_task():
-            while True:
-                if uart.any():
-                    data = uart.read()
-                    if data:
-                        try:
-                            writer.write(data)
-                            await writer.drain()
-                        except Exception as e:
-                            print("TCP write error:", e)
-                            break
-                await asyncio.sleep_ms(5)
-
-        async def tcp_to_uart_task():
-            while True:
-                try:
-                    data = await reader.read(100)
-                except Exception as e:
-                    print("TCP read error:", e)
-                    break
-                if not data:
-                    print("TCP client disconnected")
-                    break
-                uart.write(data)
-
-        task1 = asyncio.create_task(uart_to_tcp_task())
-        task2 = asyncio.create_task(tcp_to_uart_task())
-        await asyncio.gather(task1, task2)
-
-    writer.close()
-    await writer.wait_closed()
-    print("Client handler finished")
-
-async def handle_client2(reader, writer):
-    print("Client connected")
-
     # --- NORMAL UART BRIDGE MODE ---
     async def uart_to_tcp_task():
         while True:
-            if uart1.any():
-                data = uart1.read()
+            if uart.any():
+                data = uart.read()
                 if data:
-                    print("Camera UART -> TCP:", hexdump(data))
                     try:
                         writer.write(data)
                         await writer.drain()
@@ -140,7 +66,43 @@ async def handle_client2(reader, writer):
             if not data:
                 print("TCP client disconnected")
                 break
-            print("Camera TCP -> UART:", hexdump(data))
+            uart.write(data)
+
+    task1 = asyncio.create_task(uart_to_tcp_task())
+    task2 = asyncio.create_task(tcp_to_uart_task())
+    await asyncio.gather(task1, task2)
+
+    writer.close()
+    await writer.wait_closed()
+    print("Client handler finished")
+
+async def handle_client2(reader, writer):
+    print("Client connected")
+
+    # --- NORMAL UART BRIDGE MODE ---
+    async def uart_to_tcp_task():
+        while True:
+            if uart1.any():
+                data = uart1.read()
+                if data:
+                    try:
+                        writer.write(data)
+                        await writer.drain()
+                    except Exception as e:
+                        print("TCP write error:", e)
+                        break
+            await asyncio.sleep_ms(5)
+
+    async def tcp_to_uart_task():
+        while True:
+            try:
+                data = await reader.read(100)
+            except Exception as e:
+                print("TCP read error:", e)
+                break
+            if not data:
+                print("TCP client disconnected")
+                break
             uart1.write(data)
 
     task1 = asyncio.create_task(uart_to_tcp_task())
