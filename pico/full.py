@@ -175,6 +175,10 @@ async def joystick():
     sock.bind(("0.0.0.0", LISTEN_PORT_JOYSTICK))
     print("Listening for joystick UDP packets on port", LISTEN_PORT_JOYSTICK)
 
+    payload = bytearray([0x01, 0x26, 0x00, 0x15, 0x00, 0x00])
+    packet = create_packet(121, payload)
+    uart.write(packet)
+
     while True:
         try:
             data, addr = sock.recvfrom(BUFFER_SIZE)  # non-blocking
@@ -212,9 +216,13 @@ async def auto_cam():
 
         fields = decode_udp_packet(data)
         if fields:
-            payload = struct.pack(">3H", fields["yaw"], fields["pitch"], fields["roll"])
-            packet = create_packet(45, payload)
-            print("UART auto_cam -->", hexdump(packet))
+            yaw = struct.pack(">H", fields['yaw'])
+            pitch = struct.pack(">H", fields['pitch'])
+            roll = struct.pack(">H", fields['roll'])
+
+            payload = bytearray([0x42, 0x08, 0x02, 0x00]) + pitch + bytearray([0x02, 0x00]) + roll + bytearray([0x02, 0x00]) + yaw
+            packet = create_packet(121, payload)
+            print("UART autocam -->", hexdump(packet))
             uart.write(packet)
 
 async def server_task():
@@ -249,6 +257,10 @@ async def websocket_client():
                 elif msg == "joystick":
                     led.value(0)
                     mode = "joystick"
+                    # When switching to joystick mode, ensure that the angle mode is disabled
+                    payload = bytearray([0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
+                    packet = create_packet(67, payload)
+                    uart.write(packet)
                     ws.send(mode + " enabled")
 
             await asyncio.sleep(0)
