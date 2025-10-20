@@ -169,15 +169,16 @@ def create_packet(command_id, payload):
     crc_bytes = bytearray([crc & 0xFF, (crc >> 8) & 0xFF])
     return bytearray([PACKET_START]) + header_and_payload + crc_bytes
 
+CMD_SET_ADJ_VARS_VAL = 31
+CMD_API_VIRT_CH_CONTROL = 45
+CMD_CONTROL_EXT = 121
+CMD_CONTROL = 67
+
 async def joystick():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setblocking(False)
     sock.bind(("0.0.0.0", LISTEN_PORT_JOYSTICK))
     print("Listening for joystick UDP packets on port", LISTEN_PORT_JOYSTICK)
-
-    payload = bytearray([0x01, 0x26, 0x00, 0x15, 0x00, 0x00])
-    packet = create_packet(121, payload)
-    uart.write(packet)
 
     while True:
         try:
@@ -193,7 +194,7 @@ async def joystick():
         fields = decode_udp_packet(data)
         if fields:
             payload = struct.pack(">3H", fields["yaw"], fields["pitch"], fields["roll"])
-            packet = create_packet(45, payload)
+            packet = create_packet(CMD_API_VIRT_CH_CONTROL, payload)
             print("UART joystick -->", hexdump(packet))
             uart.write(packet)
 
@@ -221,7 +222,7 @@ async def auto_cam():
             roll = struct.pack(">H", fields['roll'])
 
             payload = bytearray([0x42, 0x08, 0x02, 0x00]) + pitch + bytearray([0x02, 0x00]) + roll + bytearray([0x02, 0x00]) + yaw
-            packet = create_packet(121, payload)
+            packet = create_packet(CMD_CONTROL_EXT, payload)
             print("UART autocam -->", hexdump(packet))
             uart.write(packet)
 
@@ -257,9 +258,14 @@ async def websocket_client():
                 elif msg == "joystick":
                     led.value(0)
                     mode = "joystick"
+
+                    payload = bytearray([0x01, 0x26, 0x00, 0x15, 0x00, 0x00])
+                    packet = create_packet(CMD_SET_ADJ_VARS_VAL, payload)
+                    uart.write(packet)
+
                     # When switching to joystick mode, ensure that the angle mode is disabled
                     payload = bytearray([0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
-                    packet = create_packet(67, payload)
+                    packet = create_packet(CMD_CONTROL, payload)
                     uart.write(packet)
                     ws.send(mode + " enabled")
 
