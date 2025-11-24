@@ -9,20 +9,6 @@ ws = None
 WS_URL = "ws://192.168.1.52:80/"
 # ====================
 
-_original_print = print
-
-def print(*args, **kwargs):
-    sep = kwargs.get("sep", " ")
-    end = kwargs.get("end", "\n")
-    
-    # Build the full message string (same as print would output)
-    message = sep.join(str(arg) for arg in args) + end
-    
-    # Call the handler with the plain message
-    if ws:
-        ws.send('log:' + message.strip())
-    _original_print(*args, **kwargs)
-
 def path_exists(path):
     try:
         os.stat(path)
@@ -73,18 +59,18 @@ def connect_wifi():
 # ------------------------------
 def get_active_slot():
     try:
-        with open("active_slot.txt") as f:
+        with open("/active_slot.txt") as f:
             return f.read().strip().lower()
     except:
-        with open("active_slot.txt", "w") as f:
+        with open("/active_slot.txt", "w") as f:
             f.write("a")
         return "a"
 
 def set_active_slot(slot):
-    tmp = "active_slot.tmp"
+    tmp = "/active_slot.tmp"
     with open(tmp, "w") as f:
         f.write(slot)
-    os.rename(tmp, "active_slot.txt")  # atomic-ish
+    os.rename(tmp, "/active_slot.txt")  # atomic-ish
 
 def cleanup_dir(path):
     # if not os.path.exists(path):
