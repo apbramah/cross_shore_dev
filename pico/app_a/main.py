@@ -1,6 +1,10 @@
 import os
-from ota_update import check_for_version_update
-check_for_version_update()
+
+try:
+    import ota
+    ota.update()
+except Exception as e:
+    print("OTA update failed:", e)
 
 from time import sleep
 while True:
