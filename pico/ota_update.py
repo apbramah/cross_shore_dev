@@ -1,6 +1,8 @@
 import network, os, time, machine, json, hashlib
 import uwebsockets.client
 
+wdt = machine.WDT(timeout=8000)   # timeout in milliseconds
+
 # ====== CONFIG ======
 BASE_URL = "normal_app"
 MANIFEST_URL = BASE_URL + "/manifest.json"
@@ -90,11 +92,13 @@ def rollback():
     machine.reset()
 
 def trust():
+    wdt.feed()
     with open('manifest.json') as f:
         manifest = json.load(f)
-        manifest["trusted"] = True
-    with open('manifest.json', 'w') as f:
-        json.dump(manifest, f)
+        if not manifest["trusted"]:
+            manifest["trusted"] = True
+            with open('manifest.json', 'w') as f:
+                json.dump(manifest, f)
 
 def cleanup_dir(path):
     # if not os.path.exists(path):

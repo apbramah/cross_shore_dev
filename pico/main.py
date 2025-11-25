@@ -1,9 +1,10 @@
 import machine, sys, os, json
-from ota_update import rollback, get_active_dir, check_for_version_update
+from ota_update import rollback, get_active_dir, check_for_version_update, trust
 
 # Create a simple API module for the app
 class OTA_API:
     update = staticmethod(check_for_version_update)
+    trust = staticmethod(trust)
 
 sys.modules["ota"] = OTA_API()
 
