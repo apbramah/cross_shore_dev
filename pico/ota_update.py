@@ -2,7 +2,7 @@ import network, os, time, machine, json, hashlib
 import uwebsockets.client
 
 # ====== CONFIG ======
-BASE_URL = "pico/app_a"
+BASE_URL = "normal_app"
 MANIFEST_URL = BASE_URL + "/manifest.json"
 REBOOT_AFTER_UPDATE = True
 ws = None
@@ -57,20 +57,44 @@ def connect_wifi():
 # ------------------------------
 # Utility functions
 # ------------------------------
-def get_active_slot():
+def get_active_dir():
     try:
         with open("/active_slot.txt") as f:
-            return f.read().strip().lower()
+            active_dir = f.read().strip().lower()
+            if active_dir not in ("/app_a", "/app_b"):
+                raise ValueError
+            return active_dir
     except:
         with open("/active_slot.txt", "w") as f:
-            f.write("a")
-        return "a"
+            f.write("/app_a")
+        return "/app_a"
 
-def set_active_slot(slot):
+def get_target_dir():
+    active_dir = get_active_dir()
+    target_dir = "/app_b" if active_dir == "/app_a" else "/app_a"
+    return target_dir
+
+def set_active_dir(active_dir):
     tmp = "/active_slot.tmp"
     with open(tmp, "w") as f:
-        f.write(slot)
+        f.write(active_dir)
     os.rename(tmp, "/active_slot.txt")  # atomic-ish
+
+def rollback():
+    print("Rolling back to previous firmware...")
+    target_dir = get_target_dir()
+    set_active_dir(target_dir)
+    print("Switched active slot to:", target_dir)
+    print("Rebooting...")
+    time.sleep(1)
+    machine.reset()
+
+def trust():
+    with open('manifest.json') as f:
+        manifest = json.load(f)
+        manifest["trusted"] = True
+    with open('manifest.json', 'w') as f:
+        json.dump(manifest, f)
 
 def cleanup_dir(path):
     # if not os.path.exists(path):
@@ -129,10 +153,17 @@ def verify_files(manifest, base_dir):
     return True
 
 def apply_update(manifest):
-    current = get_active_slot()
-    target = "b" if current == "a" else "a"
-    target_dir = f"/app_{target}"
+    target_dir = get_target_dir()
     print("Updating inactive slot:", target_dir)
+
+    try:
+        with open(f"{target_dir}/manifest.json") as f:
+            old_manifest = json.load(f)
+            if old_manifest["version"] == manifest["version"]:
+                print("Target slot already has this version.")
+                return
+    except:
+        pass
 
     if path_exists(target_dir):
         cleanup_dir(target_dir)
@@ -148,10 +179,12 @@ def apply_update(manifest):
     # if not verify_files(manifest, target_dir):
     #     raise RuntimeError("File verification failed")
 
-    set_active_slot(target)
-    print("Switched active slot to:", target)
-    with open(f"{target_dir}/version.txt", "w") as f:
-        f.write(manifest["version"])
+    manifest["num_boot_attempts"] = 0
+    manifest["trusted"] = False
+    with open(f"{target_dir}/manifest.json", "w") as f:
+        json.dump(manifest, f)
+    set_active_dir(target_dir)
+    print("Switched active slot to:", target_dir)
 
     if REBOOT_AFTER_UPDATE:
         print("Rebooting into new firmware...")
@@ -159,20 +192,15 @@ def apply_update(manifest):
         machine.reset()
 
 def check_for_updates():
-    manifest = load_manifest()
-    new_version = manifest.get("version")
-    active = get_active_slot()
-    active_dir = f"/app_{active}"
-    local_version = None
-    try:
-        with open(f"{active_dir}/version.txt") as f:
-            local_version = f.read().strip()
-    except:
-        print(f"No local version found at {active_dir}/version.txt")
+    with open('manifest.json') as f:
+        local_manifest = json.load(f)
+    remote_manifest = load_manifest()
+    new_version = remote_manifest.get("version")
+    local_version = local_manifest.get("version")
 
     if new_version != local_version:
         print(f"Updating from {local_version} to {new_version}")
-        apply_update(manifest)
+        apply_update(remote_manifest)
     else:
         print("No update required. Current version:", local_version)
         time.sleep(1)
@@ -180,7 +208,7 @@ def check_for_updates():
 # ------------------------------
 # Main
 # ------------------------------
-def main():
+def check_for_version_update():
     try:
         connect_wifi()
         check_for_updates()
