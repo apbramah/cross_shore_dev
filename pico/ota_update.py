@@ -6,7 +6,6 @@ wdt = machine.WDT(timeout=8000)   # timeout in milliseconds
 # ====== CONFIG ======
 BASE_URL = "normal_app"
 MANIFEST_URL = BASE_URL + "/manifest.json"
-REBOOT_AFTER_UPDATE = True
 ws = None
 WS_URL = "ws://192.168.1.52:80/"
 # ====================
@@ -187,13 +186,13 @@ def apply_update(manifest):
     manifest["trusted"] = False
     with open(f"{target_dir}/manifest.json", "w") as f:
         json.dump(manifest, f)
-    set_active_dir(target_dir)
-    print("Switched active slot to:", target_dir)
 
-    if REBOOT_AFTER_UPDATE:
-        print("Rebooting into new firmware...")
-        time.sleep(1)
-        machine.reset()
+    print("Switching active slot to:", target_dir)
+    set_active_dir(target_dir)
+
+    print("Rebooting into new firmware...")
+    time.sleep(1)
+    machine.reset()
 
 def check_for_updates():
     with open('manifest.json') as f:
