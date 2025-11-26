@@ -8,6 +8,6 @@ except Exception as e:
 
 from time import sleep
 while True:
-    print("App A is running...", os.getcwd())
+    print("App running in directory:", os.getcwd())
     sleep(0.5)
     ota.trust()
