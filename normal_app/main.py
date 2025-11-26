@@ -17,10 +17,10 @@ def ota_trust():
 def main():
     while True:
         print("App running in directory:", os.getcwd())
-        time.sleep(0.25)
+        time.sleep(0.5)
         led.toggle()
 
-        #ota_trust()
+        ota_trust()
 
 if __name__ == "__main__":
     main()

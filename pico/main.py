@@ -16,10 +16,16 @@ def run_active_app():
         try:
             with open('manifest.json') as f:
                 manifest = json.load(f)
-                if not manifest["trusted"]:
+                print(manifest)
+                if manifest["trusted"]:
+                    print("App is trusted.")
+                else:
+                    print("App is NOT trusted.")
                     manifest["num_boot_attempts"] += 1
+                    print("Boot attempts:", manifest["num_boot_attempts"])
 
                     if manifest["num_boot_attempts"] > 3:
+                        print("Too many failed boot attempts. Rolling back.")
                         rollback()
 
                     with open('manifest.json', 'w') as f:

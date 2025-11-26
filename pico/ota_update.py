@@ -186,6 +186,7 @@ def apply_update(manifest):
     manifest["trusted"] = False
     with open(f"{target_dir}/manifest.json", "w") as f:
         json.dump(manifest, f)
+    print(manifest)
 
     print("Switching active slot to:", target_dir)
     set_active_dir(target_dir)
