@@ -1,5 +1,5 @@
-import machine, sys, os, json
-from ota_update import rollback, get_active_dir, check_for_version_update, trust
+import sys, os, json
+from ota_update import rollback, get_active_dir, check_for_version_update, trust, reboot
 
 # Create a simple API module for the app
 class OTA_API:
@@ -38,6 +38,6 @@ def run_active_app():
         main.main()
     except Exception as e:
         print("App crashed:", e)
-        machine.reset()
+        reboot()
 
 run_active_app()

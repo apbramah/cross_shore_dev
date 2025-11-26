@@ -81,14 +81,17 @@ def set_active_dir(active_dir):
         f.write(active_dir)
     os.rename(tmp, "/active_slot.txt")  # atomic-ish
 
+def reboot():
+    print("Rebooting...")
+    time.sleep(1)
+    machine.reset()
+
 def rollback():
     print("Rolling back to previous firmware...")
     target_dir = get_target_dir()
     set_active_dir(target_dir)
     print("Switched active slot to:", target_dir)
-    print("Rebooting...")
-    time.sleep(1)
-    machine.reset()
+    reboot()
 
 def trust():
     wdt.feed()
@@ -191,9 +194,7 @@ def apply_update(manifest):
     print("Switching active slot to:", target_dir)
     set_active_dir(target_dir)
 
-    print("Rebooting into new firmware...")
-    time.sleep(1)
-    machine.reset()
+    reboot()
 
 def check_for_updates():
     with open('manifest.json') as f:
@@ -207,7 +208,6 @@ def check_for_updates():
         apply_update(remote_manifest)
     else:
         print("No update required. Current version:", local_version)
-        time.sleep(1)
 
 # ------------------------------
 # Main
