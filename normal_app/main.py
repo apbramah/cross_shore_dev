@@ -1,13 +1,26 @@
-import os
+import os, time
+from machine import Pin
 
+led = Pin(25, Pin.OUT)
+
+ota_present = False
 try:
     import ota
-    ota.update()
+    ota_present = True
 except Exception as e:
-    print("OTA update failed:", e)
+    print("Couldn't import ota:", e)
 
-from time import sleep
-while True:
-    print("App A is running...", os.getcwd())
-    sleep(0.5)
-    ota.trust()
+def ota_trust():
+    if ota_present:
+        ota.trust()
+
+def main():
+    while True:
+        print("App running in directory:", os.getcwd())
+        time.sleep(0.25)
+        led.toggle()
+
+        #ota_trust()
+
+if __name__ == "__main__":
+    main()
