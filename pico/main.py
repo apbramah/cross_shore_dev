@@ -12,7 +12,6 @@ def run_active_app():
     app_dir = get_active_dir()
     print("Booting app from:", app_dir)
 
-    sys.path.insert(0, "/")
     try:
         os.chdir(app_dir)
         try:
