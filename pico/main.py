@@ -3,7 +3,6 @@ from ota_update import rollback, get_active_dir, check_for_version_update, trust
 
 # Create a simple API module for the app
 class OTA_API:
-    update = staticmethod(check_for_version_update)
     trust = staticmethod(trust)
 
 sys.modules["ota"] = OTA_API()
@@ -27,7 +26,10 @@ def run_active_app():
                         json.dump(manifest, f)                    
         except:
             pass
-        exec(open('main.py').read(), globals())
+
+        check_for_version_update()
+        import main
+        main.main()
     except Exception as e:
         print("App crashed:", e)
         machine.reset()
