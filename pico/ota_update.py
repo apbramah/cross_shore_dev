@@ -1,13 +1,9 @@
 import network, sys, os, time, machine, json, hashlib
-import uwebsockets.client
-
+import urequests
 wdt = machine.WDT(timeout=8000)   # timeout in milliseconds
 
 # ====== CONFIG ======
-BASE_URL = "normal_app"
-MANIFEST_URL = BASE_URL + "/manifest.json"
-ws = None
-WS_URL = "ws://192.168.1.52:80/"
+WS_URL = "http://192.168.1.52:80"
 # ====================
 
 def path_exists(path):
@@ -41,7 +37,6 @@ def makedirs(path):
 # Wi-Fi
 # ------------------------------
 def connect_wifi():
-    global ws
     # Setup Ethernet
     nic = network.WIZNET5K()
     nic.active(True)
@@ -50,10 +45,6 @@ def connect_wifi():
     while not nic.isconnected():
         pass
     print("Ethernet connected:", nic.ifconfig())
-
-    print("Connecting to WebSocket server...")
-    ws = uwebsockets.client.connect(WS_URL)
-    ws.send("DEVICE")  # announce as device
 
 # ------------------------------
 # Utility functions
@@ -118,15 +109,16 @@ def cleanup_dir(path):
 # ------------------------------
 def download_file(url, dest_path):
     print("Downloading:", url)
-    ws.send('get:' + url)
-    resp = ws.recv()
+    resp = urequests.get(url)
     dirs = dest_path.rsplit("/", 1)
     if len(dirs) > 1:
         dirpath = dirs[0]
         if not path_exists(dirpath):
             makedirs(dirpath)
     with open(dest_path, "wb") as f:
-        f.write(resp)
+        f.write(resp.text)
+
+    resp.close()
 
 def file_hash(path):
     h = hashlib.sha256()
@@ -143,9 +135,9 @@ def file_hash(path):
 # ------------------------------
 def load_manifest():
     print("Fetching manifest...")
-    ws.send('get:' + MANIFEST_URL)
-    resp = ws.recv()
-    manifest = json.loads(resp)
+    resp = urequests.get(f"{WS_URL}/manifest.json")
+    manifest = json.loads(resp.text)
+    resp.close()
     return manifest
 
 def verify_files(manifest, base_dir):
@@ -178,7 +170,7 @@ def apply_update(manifest):
 
     for path in manifest["files"]:
         print("Updating file:", path)
-        url = f"{BASE_URL}/{path}"
+        url = f"{WS_URL}/{path}"
         dest = f"{target_dir}/{path}"
         download_file(url, dest)
 
