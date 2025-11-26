@@ -2,10 +2,6 @@ import network, sys, os, time, machine, json, hashlib
 import urequests
 wdt = machine.WDT(timeout=8000)   # timeout in milliseconds
 
-# ====== CONFIG ======
-WS_URL = "http://192.168.1.52:80"
-# ====================
-
 def path_exists(path):
     try:
         os.stat(path)
@@ -133,9 +129,9 @@ def file_hash(path):
 # ------------------------------
 # OTA logic
 # ------------------------------
-def load_manifest():
+def load_manifest(home_url):
     print("Fetching manifest...")
-    resp = urequests.get(f"{WS_URL}/manifest.json")
+    resp = urequests.get(f"{home_url}/manifest.json")
     manifest = json.loads(resp.text)
     resp.close()
     return manifest
@@ -150,7 +146,7 @@ def verify_files(manifest, base_dir):
             return False
     return True
 
-def apply_update(manifest):
+def apply_update(home_url, manifest):
     target_dir = get_target_dir()
     print("Updating inactive slot:", target_dir)
 
@@ -170,7 +166,7 @@ def apply_update(manifest):
 
     for path in manifest["files"]:
         print("Updating file:", path)
-        url = f"{WS_URL}/{path}"
+        url = f"{home_url}/{path}"
         dest = f"{target_dir}/{path}"
         download_file(url, dest)
 
@@ -188,28 +184,30 @@ def apply_update(manifest):
 
     reboot()
 
-def check_for_updates():
+def check_for_updates(home_url):
     with open('manifest.json') as f:
         local_manifest = json.load(f)
-    remote_manifest = load_manifest()
+    remote_manifest = load_manifest(home_url)
     new_version = remote_manifest.get("version")
     local_version = local_manifest.get("version")
 
     if new_version != local_version:
         print(f"Updating from {local_version} to {new_version}")
-        apply_update(remote_manifest)
+        apply_update(home_url, remote_manifest)
     else:
         print("No update required. Current version:", local_version)
 
 # ------------------------------
 # Main
 # ------------------------------
-def check_for_version_update():
-    try:
-        connect_wifi()
-        check_for_updates()
-    except Exception as e:
-        print("OTA failed:", e)
+def check_for_version_update(home_urls):
+    for home_url in home_urls:
+        try:
+            connect_wifi()
+            check_for_updates(home_url)
+            break
+        except Exception as e:
+            print("OTA failed:", e)
 
 # Create a simple API module for the app
 class OTA_API:
@@ -217,7 +215,7 @@ class OTA_API:
 
 sys.modules["ota"] = OTA_API()
 
-def run_active_app():
+def run_active_app(home_urls):
     app_dir = get_active_dir()
     print("Booting app from:", app_dir)
 
@@ -243,7 +241,7 @@ def run_active_app():
         except:
             pass
 
-        check_for_version_update()
+        check_for_version_update(home_urls)
         import main
         main.main()
     except Exception as e:
