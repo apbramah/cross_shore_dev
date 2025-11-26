@@ -1,10 +1,3 @@
-import sys
-from ota_update import run_active_app, trust
+import ota_update
 
-# Create a simple API module for the app
-class OTA_API:
-    trust = staticmethod(trust)
-
-sys.modules["ota"] = OTA_API()
-
-run_active_app()
+ota_update.run_active_app()

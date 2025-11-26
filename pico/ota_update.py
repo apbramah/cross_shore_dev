@@ -1,4 +1,4 @@
-import network, os, time, machine, json, hashlib
+import network, sys, os, time, machine, json, hashlib
 import uwebsockets.client
 
 wdt = machine.WDT(timeout=8000)   # timeout in milliseconds
@@ -218,6 +218,12 @@ def check_for_version_update():
         check_for_updates()
     except Exception as e:
         print("OTA failed:", e)
+
+# Create a simple API module for the app
+class OTA_API:
+    trust = staticmethod(trust)
+
+sys.modules["ota"] = OTA_API()
 
 def run_active_app():
     app_dir = get_active_dir()
