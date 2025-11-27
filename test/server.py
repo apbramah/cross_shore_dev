@@ -3,6 +3,7 @@ import websockets, json
 
 heads = set()
 controllers = set()
+uid_to_head = dict()
 
 async def handler(ws):
     # First message tells us who they are
@@ -10,8 +11,16 @@ async def handler(ws):
         hello = await ws.recv()
         hello = json.loads(hello)
         if hello["type"] == "DEVICE":
-            print("Head connected", hello.get("uid", "unknown UID"))
+            uid = hello.get("uid", "unknown")
+
+            print("Head connected", uid)
             heads.add(ws)
+            uid_to_head[uid] = ws
+
+            # Notify browsers
+            notify = json.dumps({"type": "HEAD_CONNECTED", "uid": uid})
+            for ctrl in controllers:
+                await ctrl.send(notify)
         else:
             print("Browser connected")
             controllers.add(ws)
@@ -19,9 +28,12 @@ async def handler(ws):
         async for message in ws:
             # If message came from browser → send to device
             if ws in controllers:
-                for head in heads:
-                    print("Server: Forwarding", message, "to device")
-                    await head.send(message)
+                msg = json.loads(message)
+                if msg["type"] == "SET_MODE":
+                    uid = msg["uid"]
+                    head = uid_to_head.get(uid)
+                    if head:
+                        await head.send(message)
 
             # If message came from device → broadcast to all browsers
             elif ws in heads:
@@ -47,6 +59,19 @@ async def handler(ws):
         if ws in heads:
             print("Head disconnected")
             heads.remove(ws)
+
+            # find UID that belonged to this ws
+            dead_uid = None
+            for uid, sock in uid_to_head.items():
+                if sock == ws:
+                    dead_uid = uid
+                    break
+
+            if dead_uid:
+                del uid_to_head[dead_uid]
+                notify = json.dumps({"type": "HEAD_DISCONNECTED", "uid": dead_uid})
+                for ctrl in controllers:
+                    await ctrl.send(notify)
         elif ws in controllers:
             print("Browser disconnected")
             controllers.remove(ws)

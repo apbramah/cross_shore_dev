@@ -2,70 +2,124 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Camera Control</title>
+  <title>Head Manager</title>
+
   <style>
+    .head-panel {
+      border: 2px solid #aaa;
+      border-radius: 10px;
+      padding: 10px;
+      margin: 10px 0;
+      background: #f8f8f8;
+      width: 250px;
+    }
     button {
-      padding: 10px 20px;
-      font-size: 16px;
+      padding: 8px 15px;
+      font-size: 14px;
       margin: 5px;
       border: none;
       border-radius: 6px;
       cursor: pointer;
-      transition: background-color 0.3s;
     }
-    .active {
-      background-color: limegreen;
-      color: white;
-    }
-    .inactive {
-      background-color: lightgray;
-      color: black;
-    }
+    .active { background: limegreen; color: white; }
+    .inactive { background: lightgray; color: black; }
   </style>
 </head>
+
 <body>
-  <h1>Mode Control</h1>
-  <button id="autoCamBtn" class="inactive" onclick="sendMessage('auto_cam')">Enable auto cam</button>
-  <button id="joystickBtn" class="inactive" onclick="sendMessage('joystick')">Enable joystick</button>
+  <h1>Connected Heads</h1>
+  <div id="headsContainer"></div>
 
   <pre id="log"></pre>
 
   <script>
-    const log = msg => document.getElementById("log").textContent += msg + "\n";
-    const autoBtn = document.getElementById("autoCamBtn");
-    const joyBtn = document.getElementById("joystickBtn");
+    const log = m => document.getElementById("log").textContent += m + "\n";
 
     const ws = new WebSocket("ws://192.168.1.52:443/");
+
+    // Store head panels: uid → DOM element
+    const headPanels = {};
+
     ws.onopen = () => {
-      log("Connected as browser controller");
-
-      const helloMessage = {
-        type: "BROWSER"
-      };
-
-      ws.send(JSON.stringify(helloMessage));
+      ws.send(JSON.stringify({type: "BROWSER"}));
+      log("Browser connected to server");
     };
+
     ws.onmessage = event => {
       log("From server: " + event.data);
 
-      const msg = event.data.toLowerCase();
+      let msg;
+      try { msg = JSON.parse(event.data); }
+      catch { return; }
 
-      if (msg.includes("auto_cam")) {
-        autoBtn.classList.add("active");
-        autoBtn.classList.remove("inactive");
-        joyBtn.classList.add("inactive");
-        joyBtn.classList.remove("active");
-      } else if (msg.includes("joystick")) {
-        joyBtn.classList.add("active");
-        joyBtn.classList.remove("inactive");
-        autoBtn.classList.add("inactive");
-        autoBtn.classList.remove("active");
+      switch (msg.type) {
+
+        case "HEAD_CONNECTED":
+          addHeadPanel(msg.uid);
+          break;
+
+        case "HEAD_DISCONNECTED":
+          removeHeadPanel(msg.uid);
+          break;
+
+        case "STATE_UPDATE":  
+          updateHeadButtons(msg.uid, msg.mode);
+          break;
       }
     };
 
-    function sendMessage(msg) {
-      log("Sending: " + msg);
-      ws.send(msg);
+    // -------------------------
+    // PANEL MANAGEMENT
+    // -------------------------
+
+    function addHeadPanel(uid) {
+      if (headPanels[uid]) return; // Already exists
+
+      const div = document.createElement("div");
+      div.className = "head-panel";
+      div.id = "head_" + uid;
+
+      div.innerHTML = `
+        <h3>Head UID: ${uid}</h3>
+        <button class="inactive" onclick="sendMode('${uid}','auto_cam')" id="auto_${uid}">
+          Auto Cam
+        </button>
+        <button class="inactive" onclick="sendMode('${uid}','joystick')" id="joy_${uid}">
+          Joystick
+        </button>
+      `;
+
+      document.getElementById("headsContainer").appendChild(div);
+      headPanels[uid] = div;
+    }
+
+    function removeHeadPanel(uid) {
+      const div = headPanels[uid];
+      if (div) div.remove();
+      delete headPanels[uid];
+    }
+
+    function updateHeadButtons(uid, mode) {
+      const auto = document.getElementById("auto_" + uid);
+      const joy = document.getElementById("joy_" + uid);
+      if (!auto || !joy) return;
+
+      if (mode === "auto_cam") {
+        auto.classList.add("active"); auto.classList.remove("inactive");
+        joy.classList.add("inactive"); joy.classList.remove("active");
+      } else if (mode === "joystick") {
+        joy.classList.add("active"); joy.classList.remove("inactive");
+        auto.classList.add("inactive"); auto.classList.remove("active");
+      }
+    }
+
+    // -------------------------
+    // SEND MESSAGES
+    // -------------------------
+    function sendMode(uid, mode) {
+      const obj = {type: "SET_MODE", uid: uid, mode: mode};
+      log("Sending: " + JSON.stringify(obj));
+      ws.send(JSON.stringify(obj));
     }
   </script>
 </body>

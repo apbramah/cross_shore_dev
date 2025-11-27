@@ -284,23 +284,28 @@ async def websocket_client():
             msg = ws.recv()
             if msg:
                 print("Received:", msg)
-                if msg == "auto_cam":
-                    led.value(1)
-                    mode = "auto_cam"
-                    ws.send(mode + " enabled")
-                elif msg == "joystick":
-                    led.value(0)
-                    mode = "joystick"
+                try:
+                    my_dict = json.loads(msg)
+                    if my_dict["type"] == "SET_MODE":
+                        if my_dict['mode'] == "auto_cam":
+                            led.value(1)
+                            mode = "auto_cam"
+                            ws.send(mode + " enabled")
+                        elif my_dict['mode'] == "joystick":
+                            led.value(0)
+                            mode = "joystick"
 
-                    payload = bytearray([0x01, 0x26, 0x00, 0x15, 0x00, 0x00])
-                    packet = create_packet(CMD_SET_ADJ_VARS_VAL, payload)
-                    uart.write(packet)
+                            payload = bytearray([0x01, 0x26, 0x00, 0x15, 0x00, 0x00])
+                            packet = create_packet(CMD_SET_ADJ_VARS_VAL, payload)
+                            uart.write(packet)
 
-                    # When switching to joystick mode, ensure that the angle mode is disabled
-                    payload = bytearray([0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
-                    packet = create_packet(CMD_CONTROL, payload)
-                    uart.write(packet)
-                    ws.send(mode + " enabled")
+                            # When switching to joystick mode, ensure that the angle mode is disabled
+                            payload = bytearray([0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
+                            packet = create_packet(CMD_CONTROL, payload)
+                            uart.write(packet)
+                            ws.send(mode + " enabled")
+                except Exception as e:
+                    print("Error processing message:", e)            
 
             ota_trust()
             await asyncio.sleep(0)
