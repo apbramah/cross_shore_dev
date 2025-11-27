@@ -290,7 +290,10 @@ async def websocket_client():
                         if my_dict['mode'] == "auto_cam":
                             led.value(1)
                             mode = "auto_cam"
-                            ws.send(mode + " enabled")
+                            data = {"type": "CURRENT_MODE",
+                                    "uid": uid_hex,
+                                    "mode": mode}
+                            ws.send(json.dumps(data))
                         elif my_dict['mode'] == "joystick":
                             led.value(0)
                             mode = "joystick"
@@ -303,7 +306,11 @@ async def websocket_client():
                             payload = bytearray([0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
                             packet = create_packet(CMD_CONTROL, payload)
                             uart.write(packet)
-                            ws.send(mode + " enabled")
+
+                            data = {"type": "CURRENT_MODE",
+                                    "uid": uid_hex,
+                                    "mode": mode}
+                            ws.send(json.dumps(data))
                 except Exception as e:
                     print("Error processing message:", e)            
 
