@@ -27,13 +27,21 @@ def makedirs(path):
             except OSError:
                 pass  # already exists or race condition
 
+STATIC_IP = ('192.168.1.51', '255.255.255.0', '192.168.1.1', '8.8.8.8')
+
 def connect_network():
     nic = network.WIZNET5K()
     nic.active(True)
-    nic.ifconfig(('192.168.1.51', '255.255.255.0', '192.168.1.1', '8.8.8.8'))
-    print("Waiting for Ethernet link...")
+    try:
+        print("Attempting to connect to Ethernet using DHCP...")
+        nic.ifconfig('dhcp')
+    except:
+        print("...failed. Falling back to static IP")
+        nic.ifconfig(STATIC_IP)
+
     while not nic.isconnected():
         pass
+
     print("Ethernet connected:", nic.ifconfig())
 
 def get_active_dir():
