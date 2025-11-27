@@ -245,15 +245,33 @@ async def server_task2():
     await asyncio.start_server(handle_client2, "0.0.0.0", TCP_PORT2)
     print("TCP server listening on port", TCP_PORT2)
 
+ws = None
+
+import builtins
+
+# print function that also sends to websocket if available
+def ws_print(*args, **kwargs):
+    original_print(*args, **kwargs)
+
+    global ws
+    if ws:
+        sep = kwargs.get("sep", " ")
+        end = kwargs.get("end", "\n")
+        message = sep.join(str(arg) for arg in args) + end
+        ws.send('log:' + message.strip())
+
+# Override the built-in print function
+original_print = builtins.print
+builtins.print = ws_print
+
 async def websocket_client():
-    global mode
-    ws = None
+    global mode, ws
     try:
         print("Connecting to WebSocket server...")
         ws = uwebsockets.client.connect(WS_URL)
         ws.sock.setblocking(False)
-        print("Connected!")
         ws.send("DEVICE")  # announce as device
+        print("Connected!")
         ws.send(mode)  # send initial mode
 
         while True:
