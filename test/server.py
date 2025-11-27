@@ -80,8 +80,10 @@ async def handler(ws):
             print("Browser disconnected")
             controllers.remove(ws)
 
+import sys
+
 async def main():
-    async with websockets.serve(handler, "192.168.1.52", 443, compression=None):
+    async with websockets.serve(handler, sys.argv[1], 443, compression=None):
         await asyncio.Future()  # run forever
 
 asyncio.run(main())
