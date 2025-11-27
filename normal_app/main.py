@@ -34,24 +34,6 @@ uart = UART(UART_ID, UART_BAUD)
 uart1 = UART(UART_ID1, UART_BAUD1)
 led = Pin(25, Pin.OUT)
 
-# Setup Ethernet
-global nic
-try:
-    nic
-except NameError:
-    nic = None
-
-if nic and nic.isconnected():
-    print("Network already connected.", nic.ifconfig())
-else:
-    nic = network.WIZNET5K()
-    nic.active(True)
-    nic.ifconfig(('192.168.1.51', '255.255.255.0', '192.168.1.1', '8.8.8.8'))
-    print("Waiting for Ethernet link...")
-    while not nic.isconnected():
-        pass
-    print("Ethernet connected:", nic.ifconfig())
-
 led.value(0)
 mode = "joystick"  # "joystick" or "auto_cam"
 
@@ -336,4 +318,5 @@ def main():
         asyncio.new_event_loop()
 
 if __name__ == "__main__":
+    # Need network setup here
     main()
