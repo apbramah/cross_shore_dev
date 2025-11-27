@@ -25,6 +25,10 @@ async def handler(ws):
             print("Browser connected")
             controllers.add(ws)
 
+            for uid, sock in uid_to_head.items():
+                notify = json.dumps({"type": "HEAD_CONNECTED", "uid": uid})
+                await ws.send(notify)
+
         async for message in ws:
             # If message came from browser → send to device
             if ws in controllers:
