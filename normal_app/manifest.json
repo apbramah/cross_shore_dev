@@ -1,6 +1,9 @@
 {
-  "version": "1",
+  "version": "4",
   "files": {
-    "main.py": "a2f4c3d5..."
+    "main.py": "a2f4c3d5...",
+    "logging.py": "b4e5f6a7...",
+    "uwebsockets/client.py": "c7d8e9f0...",
+    "uwebsockets/protocol.py": "d1e2f3a4..."
   }
 }

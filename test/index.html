@@ -35,7 +35,7 @@
     const autoBtn = document.getElementById("autoCamBtn");
     const joyBtn = document.getElementById("joystickBtn");
 
-    const ws = new WebSocket("ws://192.168.1.52:80/");
+    const ws = new WebSocket("ws://192.168.1.52:443/");
     ws.onopen = () => {
       log("Connected as browser controller");
       ws.send("BROWSER");

@@ -1,18 +1,5 @@
 import asyncio
 import websockets
-import socket
-
-# Helper: get LAN IP
-def get_lan_ip():
-    try:
-        # connect to an external address (doesn't actually send data)
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-        return ip
-    except Exception:
-        return "127.0.0.1"
 
 device = None        # Pico W
 controllers = set()  # Browsers
@@ -64,9 +51,7 @@ async def handler(ws):
             controllers.remove(ws)
 
 async def main():
-    host_ip = get_lan_ip()
-    async with websockets.serve(handler, "192.168.1.52", 80, compression=None):
-        print(f"WebSocket server listening on ws://{host_ip}:80")
+    async with websockets.serve(handler, "192.168.1.52", 443, compression=None):
         await asyncio.Future()  # run forever
 
 asyncio.run(main())
