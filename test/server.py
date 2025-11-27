@@ -1,37 +1,37 @@
 import asyncio
 import websockets, json
 
-device = None        # Pico W
-controllers = set()  # Browsers
+heads = set()
+controllers = set()
 
 async def handler(ws):
-    global device
-
     # First message tells us who they are
     try:
         hello = await ws.recv()
         hello = json.loads(hello)
         if hello["type"] == "DEVICE":
-            print("Pico W connected", hello.get("uid", "unknown UID"))
-            device = ws
+            print("Head connected", hello.get("uid", "unknown UID"))
+            heads.add(ws)
         else:
             print("Browser connected")
             controllers.add(ws)
 
         async for message in ws:
             # If message came from browser → send to device
-            if ws in controllers and device:
-                await device.send(message)
+            if ws in controllers:
+                for head in heads:
+                    print("Server: Forwarding", message, "to device")
+                    await head.send(message)
 
             # If message came from device → broadcast to all browsers
-            elif ws == device:
+            elif ws in heads:
                 if 'get:' in message:
                     filename = message.split('get:')[1]
                     print("Server: Sending file to device:", filename)
                     f = open(filename, 'r')
                     data = f.read()
                     f.close()
-                    await device.send(data)
+                    await ws.send(data)
                 elif 'log:' in message:
                     log_msg = message.split('log:')[1]
                     print("Device:", log_msg)
@@ -44,9 +44,9 @@ async def handler(ws):
         print("Connection closed")
 
     finally:
-        if ws == device:
-            print("Device disconnected")
-            device = None
+        if ws in heads:
+            print("Head disconnected")
+            heads.remove(ws)
         elif ws in controllers:
             print("Browser disconnected")
             controllers.remove(ws)
