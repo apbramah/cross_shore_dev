@@ -154,9 +154,14 @@ def check_for_updates(home_url):
         print("No update required. Current version:", local_version)
 
 def check_for_version_update(home_urls):
+    try:
+        connect_network()
+    except Exception as e:
+        print("Network connection failed:", e)
+        return
+
     for home_url in home_urls:
         try:
-            connect_network()
             check_for_updates(home_url)
             break
         except Exception as e:
