@@ -255,13 +255,26 @@ def ws_print(*args, **kwargs):
 original_print = builtins.print
 builtins.print = ws_print
 
+import json
+import machine
+import ubinascii
+
 async def websocket_client():
     global mode, ws
     try:
         print("Connecting to WebSocket server...")
         ws = uwebsockets.client.connect(WS_URL)
         ws.sock.setblocking(False)
-        ws.send("DEVICE")  # announce as device
+
+        # Get the unique ID as bytes
+        uid_bytes = machine.unique_id()
+
+        # Convert to hex string
+        uid_hex = ubinascii.hexlify(uid_bytes).decode()
+
+        data = {"type": "DEVICE",
+                "uid": uid_hex}
+        ws.send(json.dumps(data))  # announce as device
         print("Connected!")
         ws.send(mode)  # send initial mode
 

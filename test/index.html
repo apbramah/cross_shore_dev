@@ -38,7 +38,12 @@
     const ws = new WebSocket("ws://192.168.1.52:443/");
     ws.onopen = () => {
       log("Connected as browser controller");
-      ws.send("BROWSER");
+
+      const helloMessage = {
+        type: "BROWSER"
+      };
+
+      ws.send(JSON.stringify(helloMessage));
     };
     ws.onmessage = event => {
       log("From server: " + event.data);

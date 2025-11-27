@@ -1,18 +1,17 @@
 import asyncio
-import websockets
+import websockets, json
 
-device = None        # Pico W
+heads = set()      # Head devices
 controllers = set()  # Browsers
 
 async def handler(ws):
-    global device
-
     # First message tells us who they are
     try:
         hello = await ws.recv()
-        if hello == "DEVICE":
-            print("Pico W connected")
-            device = ws
+        hello = json.loads(hello)
+        if hello["type"] == "DEVICE":
+            print("Pico W connected", hello.get("uid", "unknown UID"))
+            heads.add(ws)
         else:
             print("Browser connected")
             controllers.add(ws)
