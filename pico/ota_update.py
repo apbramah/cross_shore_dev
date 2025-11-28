@@ -206,7 +206,7 @@ def run_active_app(home_urls):
         check_for_version_update(home_urls)
 
         global wdt
-        wdt = machine.WDT(timeout=8000)   # timeout in milliseconds
+        # wdt = machine.WDT(timeout=8000)   # timeout in milliseconds
 
         import main
         main.main()
@@ -218,7 +218,8 @@ trusted = False
 
 def trust():
     global wdt, trusted
-    wdt.feed()
+    if wdt:
+        wdt.feed()
 
     # We use the trusted flag to avoid flash operations on every call
     if not trusted:
