@@ -12,22 +12,25 @@ async def handler(ws):
         hello = json.loads(hello)
         if hello["type"] == "DEVICE":
             uid = hello.get("uid", "unknown")
-
             print("Head connected", uid)
-            heads.add(ws)
-            uid_to_head[uid] = ws
+            head = ws
 
-            # Notify browsers
-            notify = json.dumps({"type": "HEAD_CONNECTED", "uid": uid})
+            heads.add(head)
+            uid_to_head[uid] = head
+
+            ip = head.remote_address[0]
+            notify = json.dumps({"type": "HEAD_CONNECTED", "uid": uid, "ip": ip})
             for ctrl in controllers:
                 await ctrl.send(notify)
         else:
             print("Browser connected")
-            controllers.add(ws)
+            controller = ws
+            controllers.add(controller)
 
-            for uid, sock in uid_to_head.items():
-                notify = json.dumps({"type": "HEAD_CONNECTED", "uid": uid})
-                await ws.send(notify)
+            for uid, head in uid_to_head.items():
+                ip = head.remote_address[0]
+                notify = json.dumps({"type": "HEAD_CONNECTED", "uid": uid, "ip": ip})
+                await controller.send(notify)
 
         async for message in ws:
             # If message came from browser → send to device
