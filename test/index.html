@@ -80,9 +80,8 @@
       div.id = "head_" + uid;
 
       div.innerHTML = `
-        <h3>Head UID: ${uid}</h3>
+        <h3><a href="simplebgc://${ip}:8080">Head UID: ${uid}</a></h3>
         <p>IP: ${ip}</p>
-        <a href="simplebgc://${ip}:8080">Run my batch file</a>
         <button class="inactive" onclick="sendMode('${uid}','auto_cam')" id="auto_${uid}">
           Auto Cam
         </button>
