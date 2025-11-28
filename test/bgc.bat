@@ -1,9 +1,10 @@
 @echo off
 
-:: Path to the log file
-set LOGFILE=C:\Users\apbra\Documents\cross_shore_dev\test\bgc_log.txt
-
 setlocal enabledelayedexpansion
+
+set "CONFIG=C:\Users\apbra\Downloads\SimpleBGC_GUI_2_70b0\SimpleBGC_GUI_2_70b0\conf\bgc.properties"
+set "EXE_PATH=C:\Users\apbra\Downloads\SimpleBGC_GUI_2_70b0\SimpleBGC_GUI_2_70b0\SimpleBGC_GUI.exe"
+
 
 :: The argument comes in as %1, e.g.:
 :: simplebgc://192.168.60.218:8080/
@@ -23,11 +24,6 @@ for /f "tokens=1,2 delims=:" %%a in ("!temp!") do (
     set "ip=%%a"
     set "port=%%b"
 )
-
-echo IP = %ip% >> "%LOGFILE%"
-echo PORT = %port% >> "%LOGFILE%"
-
-set "CONFIG=C:\Users\apbra\Downloads\SimpleBGC_GUI_2_70b0\SimpleBGC_GUI_2_70b0\conf\bgc.properties"
 
 set "newHost=tcp.remote_host=%ip%"
 set "newPort=tcp.remote_port=%port%"
@@ -49,11 +45,17 @@ move /y "%CONFIG%.tmp" "%CONFIG%" >nul
 @echo off
 setlocal
 
-:: Path to the executable
-set "EXE_PATH=C:\Users\apbra\Downloads\SimpleBGC_GUI_2_70b0\SimpleBGC_GUI_2_70b0\SimpleBGC_GUI.exe"
-
 :: Get the folder the exe is in
 for %%I in ("%EXE_PATH%") do set "EXE_DIR=%%~dpI"
+
+:: Extract the executable name
+for %%I in ("%EXE_PATH%") do set "EXE_NAME=%%~nxI"
+
+:: Kill any running instances (forcefully). Note: THIS IS NOT FUTURE-PROOF when the SimpleBGC GUI updates!
+taskkill /f /fi "WINDOWTITLE eq SimpleBGC32 GUI v2.70 b0" >nul 2>&1
+
+:: Optional: wait a little to ensure process is terminated
+timeout /t 1 >nul
 
 :: Start the exe in its folder
 start "" /D "%EXE_DIR%" "%EXE_PATH%"
