@@ -26,3 +26,36 @@ for /f "tokens=1,2 delims=:" %%a in ("!temp!") do (
 
 echo IP = %ip% >> "%LOGFILE%"
 echo PORT = %port% >> "%LOGFILE%"
+
+set "CONFIG=C:\Users\apbra\Downloads\SimpleBGC_GUI_2_70b0\SimpleBGC_GUI_2_70b0\conf\bgc.properties"
+
+set "newHost=tcp.remote_host=%ip%"
+set "newPort=tcp.remote_port=%port%"
+
+> "%CONFIG%.tmp" (
+    for /f "usebackq delims=" %%A in ("%CONFIG%") do (
+        set "line=%%A"
+
+        rem Replace only the exact matching lines
+        if "!line:~0,16!"=="tcp.remote_host=" set "line=!newHost!"
+        if "!line:~0,16!"=="tcp.remote_port=" set "line=!newPort!"
+
+        echo !line!
+    )
+)
+
+move /y "%CONFIG%.tmp" "%CONFIG%" >nul
+
+@echo off
+setlocal
+
+:: Path to the executable
+set "EXE_PATH=C:\Users\apbra\Downloads\SimpleBGC_GUI_2_70b0\SimpleBGC_GUI_2_70b0\SimpleBGC_GUI.exe"
+
+:: Get the folder the exe is in
+for %%I in ("%EXE_PATH%") do set "EXE_DIR=%%~dpI"
+
+:: Start the exe in its folder
+start "" /D "%EXE_DIR%" "%EXE_PATH%"
+
+endlocal
