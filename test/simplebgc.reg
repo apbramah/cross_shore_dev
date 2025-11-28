@@ -1,0 +1,12 @@
+Windows Registry Editor Version 5.00
+
+[HKEY_CLASSES_ROOT\simplebgc]
+"URL Protocol"=""
+@="Run My Script Protocol"
+
+[HKEY_CLASSES_ROOT\simplebgc\shell]
+
+[HKEY_CLASSES_ROOT\simplebgc\shell\open]
+
+[HKEY_CLASSES_ROOT\simplebgc\shell\open\command]
+@="\"C:\\Users\\apbra\\Documents\\cross_shore_dev\\test\\bgc.bat\" \"%1\""
