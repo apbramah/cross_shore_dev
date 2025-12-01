@@ -88,6 +88,12 @@
         <button class="inactive" onclick="sendMode('${uid}','joystick')" id="joy_${uid}">
           Joystick
         </button>
+        <button class="inactive" onclick="sendMode('${uid}','fixed')" id="fixed_${uid}">
+          Fixed
+        </button>
+        <button class="inactive" onclick="reboot('${uid}')" id="reboot_${uid}">
+          Reboot
+        </button>
       `;
 
       document.getElementById("headsContainer").appendChild(div);
