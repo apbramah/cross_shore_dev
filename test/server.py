@@ -41,6 +41,11 @@ async def handler(ws):
                     head = uid_to_head.get(uid)
                     if head:
                         await head.send(message)
+                elif msg["type"] == "REBOOT":
+                    uid = msg["uid"]
+                    head = uid_to_head.get(uid)
+                    if head:
+                        await head.send(message)
 
             # If message came from device → broadcast to all browsers
             elif ws in heads:

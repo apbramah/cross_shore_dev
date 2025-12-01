@@ -1,5 +1,6 @@
 import uasyncio as asyncio
 import network
+import time
 import socket
 import struct
 import uwebsockets.client
@@ -319,6 +320,10 @@ async def websocket_client():
                                     "uid": uid_hex,
                                     "mode": mode}
                             ws.send(json.dumps(data))
+                    elif my_dict["type"] == "REBOOT":
+                        print("Rebooting as requested...")
+                        time.sleep(1)
+                        machine.reset()
                 except Exception as e:
                     print("Error processing message:", e)            
 
