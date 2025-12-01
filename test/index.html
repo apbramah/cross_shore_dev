@@ -109,14 +109,21 @@
     function updateHeadButtons(uid, mode) {
       const auto = document.getElementById("auto_" + uid);
       const joy = document.getElementById("joy_" + uid);
-      if (!auto || !joy) return;
+      const fixed = document.getElementById("fixed_" + uid);
+      if (!auto || !joy || !fixed) return;
 
       if (mode === "auto_cam") {
         auto.classList.add("active"); auto.classList.remove("inactive");
         joy.classList.add("inactive"); joy.classList.remove("active");
+        fixed.classList.add("inactive"); fixed.classList.remove("active");
       } else if (mode === "joystick") {
         joy.classList.add("active"); joy.classList.remove("inactive");
         auto.classList.add("inactive"); auto.classList.remove("active");
+        fixed.classList.add("inactive"); fixed.classList.remove("active");
+      } else if (mode === "fixed") {
+        fixed.classList.add("active"); fixed.classList.remove("inactive");
+        auto.classList.add("inactive"); auto.classList.remove("active");
+        joy.classList.add("inactive"); joy.classList.remove("active");
       }
     }
 
