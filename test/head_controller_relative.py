@@ -3,7 +3,7 @@ from tkinter import ttk
 import socket
 import time
 
-UDP_IP = "192.168.1.51"  # Change this to your target IP
+UDP_IP = "192.168.60.87"  # Change this to your target IP
 UDP_PORT = 8888
 
 map_zoom = lambda value: (value + 0)
