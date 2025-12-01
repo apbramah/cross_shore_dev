@@ -135,6 +135,11 @@
       log("Sending: " + JSON.stringify(obj));
       ws.send(JSON.stringify(obj));
     }
+    function reboot(uid) {
+      const obj = {type: "REBOOT", uid: uid};
+      log("Sending: " + JSON.stringify(obj));
+      ws.send(JSON.stringify(obj));
+    }
   </script>
 </body>
 </html>
