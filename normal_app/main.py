@@ -277,7 +277,10 @@ async def websocket_client():
                 "uid": uid_hex}
         ws.send(json.dumps(data))  # announce as device
         print("Connected!")
-        ws.send(mode)  # send initial mode
+        data = {"type": "CURRENT_MODE",
+                "uid": uid_hex,
+                "mode": mode}
+        ws.send(json.dumps(data))
 
         while True:
 
