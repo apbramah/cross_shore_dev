@@ -373,6 +373,7 @@ async def websocket_client():
                 elif my_dict["type"] == "REBOOT":
                     print("Rebooting as requested...")
                     time.sleep(1)
+                    ws.close()
                     machine.reset()
                 elif my_dict["type"] == "SET_NAME":
                     new_name = my_dict.get("name")
