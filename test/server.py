@@ -39,23 +39,12 @@ async def handler(ws):
             # If message came from browser → send to device
             if ws in controllers:
                 msg = json.loads(message)
-                if msg["type"] == "SET_MODE":
-                    uid = msg["uid"]
-                    head = uid_to_head.get(uid)
-                    if head:
-                        await head.send(message)
-                elif msg["type"] == "REBOOT":
-                    uid = msg["uid"]
-                    head = uid_to_head.get(uid)
-                    if head:
-                        await head.send(message)
-                elif msg["type"] == "SET_NAME":
-                    uid = msg["uid"]
-                    name = msg.get("name", "unknown")
-                    head = uid_to_head.get(uid)
-                    if head:
-                        await head.send(json.dumps({"type": "SET_NAME", "name": name}))
-                        head.name = name
+                uid = msg["uid"]
+                head = uid_to_head.get(uid)
+                if head:
+                    await head.send(message)
+                    if msg["type"] == "SET_NAME":
+                        head.name = msg.get("name", "unknown")
 
             # If message came from device → broadcast to all browsers
             elif ws in heads:
