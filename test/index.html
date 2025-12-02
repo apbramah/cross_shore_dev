@@ -45,45 +45,62 @@
   <script>
     const log = m => document.getElementById("log").textContent += m + "\n";
 
-    const ws = new WebSocket("ws://192.168.60.91:443/");
+    let ws;
+    const RECONNECT_DELAY_MS = 1000;
 
     // Store head panels: uid → DOM element
     const headPanels = {};
 
-    ws.onopen = () => {
-      ws.send(JSON.stringify({type: "BROWSER"}));
-      log("Browser connected to server");
-    };
+    function connectWebSocket() {
+      ws = new WebSocket("ws://192.168.60.91:443/");
 
-    ws.onmessage = event => {
-      let msg;
-      try { msg = JSON.parse(event.data); }
-      catch { return; }
+      ws.onopen = () => {
+        ws.send(JSON.stringify({type: "BROWSER"}));
+        log("Browser connected to server");
+      };
 
-      switch (msg.type) {
+      ws.onmessage = event => {
+        let msg;
+        try { msg = JSON.parse(event.data); }
+        catch { return; }
 
-        case "HEAD_CONNECTED":
-          addHeadPanel(msg.uid, msg.ip, msg.name || "unknown");
-          log("From server: " + event.data);
-          break;
+        switch (msg.type) {
 
-        case "HEAD_DISCONNECTED":
-          removeHeadPanel(msg.uid);
-          log("From server: " + event.data);
-          break;
+          case "HEAD_CONNECTED":
+            addHeadPanel(msg.uid, msg.ip, msg.name || "unknown");
+            log("From server: " + event.data);
+            break;
 
-        case "CURRENT_MODE":  
-          updateHeadButtons(msg.uid, msg.mode);
-          appendHeadLog(msg.uid, event.data)
-          break;
+          case "HEAD_DISCONNECTED":
+            removeHeadPanel(msg.uid);
+            log("From server: " + event.data);
+            break;
 
-        case "PRINTF":
-          if (msg.uid) {
-            appendHeadLog(msg.uid, msg.message || "");
-          }
-          break;
-      }
-    };
+          case "CURRENT_MODE":  
+            updateHeadButtons(msg.uid, msg.mode);
+            appendHeadLog(msg.uid, event.data)
+            break;
+
+          case "PRINTF":
+            if (msg.uid) {
+              appendHeadLog(msg.uid, msg.message || "");
+            }
+            break;
+        }
+      };
+
+      ws.onclose = () => {
+        log("Connection to server closed. Reconnecting...");
+        setTimeout(connectWebSocket, RECONNECT_DELAY_MS);
+      };
+
+      ws.onerror = () => {
+        log("WebSocket error. Closing and reconnecting...");
+        try { ws.close(); } catch (e) {}
+      };
+    }
+
+    connectWebSocket();
 
     // -------------------------
     // PANEL MANAGEMENT
