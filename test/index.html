@@ -67,7 +67,7 @@
         switch (msg.type) {
 
           case "HEAD_CONNECTED":
-            addHeadPanel(msg.uid, msg.ip, msg.name || "unknown");
+            addHeadPanel(msg.uid, msg.ip, msg.name || "unknown", msg.version);
             log("From server: " + event.data);
             break;
 
@@ -122,7 +122,7 @@
       panel.scrollTop = panel.scrollHeight;
     }
 
-    function addHeadPanel(uid, ip, name) {
+    function addHeadPanel(uid, ip, name, version) {
       if (headPanels[uid]) return; // Already exists
 
       const div = document.createElement("div");
@@ -132,6 +132,7 @@
       div.innerHTML = `
         <h3><a href="simplebgc://${ip}:8080">Head UID: ${uid}</a></h3>
         <p>IP: ${ip}</p>
+        <p>Version: ${version}</p>
         <p>
           Name:
           <input type="text" id="name_${uid}" value="${escapeHtml(name)}">

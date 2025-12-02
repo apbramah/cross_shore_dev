@@ -298,6 +298,11 @@ def ws_print(*args, **kwargs):
 original_print = builtins.print
 builtins.print = ws_print
 
+def get_manifest():
+    with open('manifest.json') as f:
+        manifest = json.load(f)
+    return manifest
+
 async def websocket_client():
     global mode, ws
     try:
@@ -306,10 +311,12 @@ async def websocket_client():
         ws.sock.setblocking(False)
 
         device_name = get_device_name()
+        manifest = get_manifest()
 
         data = {"type": "HEAD_CONNECTED",
                 "uid": uid_hex,
-                "name": device_name}
+                "name": device_name,
+                "version": manifest["version"]}
         ws.send(json.dumps(data))  # announce as device
         print("Connected!")
         data = {"type": "CURRENT_MODE",

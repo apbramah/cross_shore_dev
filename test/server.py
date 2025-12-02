@@ -13,12 +13,14 @@ async def handler(ws):
         if msg["type"] == "HEAD_CONNECTED":
             uid = msg.get("uid", "unknown")
             name = msg.get("name", "unknown")
+            version = msg.get("version", "unknown")
             print("Head connected", uid)
             head = ws
 
             heads.add(head)
             uid_to_head[uid] = head
             head.name = name
+            head.version = version
 
             ip = head.remote_address[0]
             msg["ip"] = ip
@@ -32,7 +34,8 @@ async def handler(ws):
             for uid, head in uid_to_head.items():
                 ip = head.remote_address[0]
                 name = head.name
-                notify = json.dumps({"type": "HEAD_CONNECTED", "uid": uid, "ip": ip, "name": name})
+                version = head.version
+                notify = json.dumps({"type": "HEAD_CONNECTED", "uid": uid, "ip": ip, "name": name, "version": version})
                 await controller.send(notify)
                 notify = json.dumps({"type": "CURRENT_MODE", "uid": uid, "mode": head.mode})
                 await controller.send(notify)
