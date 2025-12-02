@@ -16,6 +16,7 @@ except Exception as e:
 import json
 import machine
 import ubinascii
+from uwebsockets.protocol import ConnectionClosed
 
 REGISTRY_PATH = "/registry.json"
 
@@ -283,7 +284,7 @@ def ws_print(*args, **kwargs):
     original_print(*args, **kwargs)
 
     global ws
-    if ws:
+    if ws and ws.open:
         sep = kwargs.get("sep", " ")
         end = kwargs.get("end", "\n")
         message = sep.join(str(arg) for arg in args) + end
@@ -319,54 +320,66 @@ async def websocket_client():
         while True:
 
             # Check for incoming messages
-            msg = ws.recv()
-            if msg:
-                print("Received:", msg)
-                try:
-                    my_dict = json.loads(msg)
-                    if my_dict["type"] == "SET_MODE":
-                        if my_dict['mode'] == "auto_cam":
-                            led.value(1)
-                            mode = "auto_cam"
-                            data = {"type": "CURRENT_MODE",
-                                    "uid": uid_hex,
-                                    "mode": mode}
-                            ws.send(json.dumps(data))
-                        elif my_dict['mode'] == "joystick":
-                            led.value(0)
-                            mode = "joystick"
+            try:
+                msg = ws.recv()
+            except ConnectionClosed:
+                print("WebSocket ConnectionClosed")
+                break
 
-                            payload = bytearray([0x01, 0x26, 0x00, 0x15, 0x00, 0x00])
-                            packet = create_packet(CMD_SET_ADJ_VARS_VAL, payload)
-                            uart.write(packet)
+            # None means a close frame; empty string means "no data yet" on non-blocking socket
+            if msg is None:
+                print("WebSocket server closed")
+                break
+            if msg == "":
+                await asyncio.sleep(0)
+                continue
 
-                            # When switching to joystick mode, ensure that the angle mode is disabled
-                            payload = bytearray([0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
-                            packet = create_packet(CMD_CONTROL, payload)
-                            uart.write(packet)
+            print("Received:", msg)
+            try:
+                my_dict = json.loads(msg)
+                if my_dict["type"] == "SET_MODE":
+                    if my_dict['mode'] == "auto_cam":
+                        led.value(1)
+                        mode = "auto_cam"
+                        data = {"type": "CURRENT_MODE",
+                                "uid": uid_hex,
+                                "mode": mode}
+                        ws.send(json.dumps(data))
+                    elif my_dict['mode'] == "joystick":
+                        led.value(0)
+                        mode = "joystick"
 
-                            data = {"type": "CURRENT_MODE",
-                                    "uid": uid_hex,
-                                    "mode": mode}
-                            ws.send(json.dumps(data))
-                        elif my_dict['mode'] == "fixed":
-                            led.value(0)
-                            mode = "fixed"
+                        payload = bytearray([0x01, 0x26, 0x00, 0x15, 0x00, 0x00])
+                        packet = create_packet(CMD_SET_ADJ_VARS_VAL, payload)
+                        uart.write(packet)
 
-                            data = {"type": "CURRENT_MODE",
-                                    "uid": uid_hex,
-                                    "mode": mode}
-                            ws.send(json.dumps(data))
-                    elif my_dict["type"] == "REBOOT":
-                        print("Rebooting as requested...")
-                        time.sleep(1)
-                        machine.reset()
-                    elif my_dict["type"] == "SET_NAME":
-                        new_name = my_dict.get("name")
-                        if new_name:
-                            set_device_name(new_name)
-                except Exception as e:
-                    print("Error processing message:", e)            
+                        # When switching to joystick mode, ensure that the angle mode is disabled
+                        payload = bytearray([0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
+                        packet = create_packet(CMD_CONTROL, payload)
+                        uart.write(packet)
+
+                        data = {"type": "CURRENT_MODE",
+                                "uid": uid_hex,
+                                "mode": mode}
+                        ws.send(json.dumps(data))
+                    elif my_dict['mode'] == "fixed":
+                        led.value(0)
+                        mode = "fixed"
+
+                        data = {"type": "CURRENT_MODE",
+                                "uid": uid_hex,
+                                "mode": mode}
+                        ws.send(json.dumps(data))
+                elif my_dict["type"] == "REBOOT":
+                    print("Rebooting as requested...")
+                    time.sleep(1)
+                    machine.reset()
+                elif my_dict["type"] == "SET_NAME":
+                    new_name = my_dict.get("name")
+                    if new_name:
+                        set_device_name(new_name)
+            except Exception as e:
+                print("Error processing message:", e)
 
             ota_trust()
             await asyncio.sleep(0)

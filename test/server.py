@@ -82,6 +82,8 @@ async def handler(ws):
             print("Browser disconnected")
             controllers.remove(ws)
 
+        await ws.close()
+
 import sys
 
 async def main():
