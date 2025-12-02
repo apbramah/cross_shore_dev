@@ -306,7 +306,7 @@ async def websocket_client():
 
         device_name = get_device_name()
 
-        data = {"type": "DEVICE",
+        data = {"type": "HEAD_CONNECTED",
                 "uid": uid_hex,
                 "name": device_name}
         ws.send(json.dumps(data))  # announce as device

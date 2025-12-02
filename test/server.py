@@ -8,11 +8,11 @@ uid_to_head = dict()
 async def handler(ws):
     # First message tells us who they are
     try:
-        hello = await ws.recv()
-        hello = json.loads(hello)
-        if hello["type"] == "DEVICE":
-            uid = hello.get("uid", "unknown")
-            name = hello.get("name", "unknown")
+        message = await ws.recv()
+        msg = json.loads(message)
+        if msg["type"] == "HEAD_CONNECTED":
+            uid = msg.get("uid", "unknown")
+            name = msg.get("name", "unknown")
             print("Head connected", uid)
             head = ws
 
@@ -21,9 +21,9 @@ async def handler(ws):
             head.name = name
 
             ip = head.remote_address[0]
-            notify = json.dumps({"type": "HEAD_CONNECTED", "uid": uid, "ip": ip, "name": name})
+            msg["ip"] = ip
             for ctrl in controllers:
-                await ctrl.send(notify)
+                await ctrl.send(json.dumps(msg))
         else:
             print("Browser connected")
             controller = ws
