@@ -24,7 +24,7 @@ async def handler(ws):
             msg["ip"] = ip
             for ctrl in controllers:
                 await ctrl.send(json.dumps(msg))
-        else:
+        elif msg["type"] == "BROWSER":
             print("Browser connected")
             controller = ws
             controllers.add(controller)
