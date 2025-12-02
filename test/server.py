@@ -34,6 +34,8 @@ async def handler(ws):
                 name = head.name
                 notify = json.dumps({"type": "HEAD_CONNECTED", "uid": uid, "ip": ip, "name": name})
                 await controller.send(notify)
+                notify = json.dumps({"type": "CURRENT_MODE", "uid": uid, "mode": head.mode})
+                await controller.send(notify)
 
         async for message in ws:
             # If message came from browser → send to device
@@ -48,6 +50,10 @@ async def handler(ws):
 
             # If message came from device → broadcast to all browsers
             elif ws in heads:
+                head = ws
+                msg = json.loads(message)
+                if msg["type"] == "CURRENT_MODE":
+                    head.mode = msg["mode"]
                 for ctrl in controllers:
                     print("Server: Forwarding", message, "to browser")
                     await ctrl.send(message)
