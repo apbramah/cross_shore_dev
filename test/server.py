@@ -4,6 +4,7 @@ import websockets, json
 heads = set()
 controllers = set()
 uid_to_head = dict()
+uid_to_name = dict()
 
 async def handler(ws):
     # First message tells us who they are
@@ -12,14 +13,16 @@ async def handler(ws):
         hello = json.loads(hello)
         if hello["type"] == "DEVICE":
             uid = hello.get("uid", "unknown")
+            name = hello.get("name", "unknown")
             print("Head connected", uid)
             head = ws
 
             heads.add(head)
             uid_to_head[uid] = head
+            uid_to_name[uid] = name
 
             ip = head.remote_address[0]
-            notify = json.dumps({"type": "HEAD_CONNECTED", "uid": uid, "ip": ip})
+            notify = json.dumps({"type": "HEAD_CONNECTED", "uid": uid, "ip": ip, "name": name})
             for ctrl in controllers:
                 await ctrl.send(notify)
         else:
@@ -29,7 +32,8 @@ async def handler(ws):
 
             for uid, head in uid_to_head.items():
                 ip = head.remote_address[0]
-                notify = json.dumps({"type": "HEAD_CONNECTED", "uid": uid, "ip": ip})
+                name = uid_to_name.get(uid, "unknown")
+                notify = json.dumps({"type": "HEAD_CONNECTED", "uid": uid, "ip": ip, "name": name})
                 await controller.send(notify)
 
         async for message in ws:
@@ -46,6 +50,13 @@ async def handler(ws):
                     head = uid_to_head.get(uid)
                     if head:
                         await head.send(message)
+                elif msg["type"] == "SET_NAME":
+                    uid = msg["uid"]
+                    name = msg.get("name", "unknown")
+                    head = uid_to_head.get(uid)
+                    if head:
+                        await head.send(json.dumps({"type": "SET_NAME", "name": name}))
+                    uid_to_name[uid] = name
 
             # If message came from device → broadcast to all browsers
             elif ws in heads:

@@ -13,6 +13,37 @@ try:
 except Exception as e:
     print("Couldn't import ota:", e)
 
+import json
+import machine
+import ubinascii
+
+REGISTRY_PATH = "/registry.json"
+
+def get_device_name():
+    try:
+        with open(REGISTRY_PATH) as f:
+            data = json.load(f)
+        name = data.get("name")
+        if name:
+            return name
+    except Exception as e:
+        print("Error reading registry:", e)
+    data = {"name": "unknown"}
+    try:
+        with open(REGISTRY_PATH, "w") as f:
+            json.dump(data, f)
+    except Exception as e:
+        print("Error writing default registry:", e)
+    return "unknown"
+
+def set_device_name(name):
+    try:
+        data = {"name": name}
+        with open(REGISTRY_PATH, "w") as f:
+            json.dump(data, f)
+    except Exception as e:
+        print("Error updating registry:", e)
+
 def ota_trust():
     if ota_present:
         ota.trust()
@@ -256,10 +287,6 @@ def ws_print(*args, **kwargs):
 original_print = builtins.print
 builtins.print = ws_print
 
-import json
-import machine
-import ubinascii
-
 async def websocket_client():
     global mode, ws
     try:
@@ -273,8 +300,11 @@ async def websocket_client():
         # Convert to hex string
         uid_hex = ubinascii.hexlify(uid_bytes).decode()
 
+        device_name = get_device_name()
+
         data = {"type": "DEVICE",
-                "uid": uid_hex}
+                "uid": uid_hex,
+                "name": device_name}
         ws.send(json.dumps(data))  # announce as device
         print("Connected!")
         data = {"type": "CURRENT_MODE",
@@ -327,6 +357,10 @@ async def websocket_client():
                         print("Rebooting as requested...")
                         time.sleep(1)
                         machine.reset()
+                    elif my_dict["type"] == "SET_NAME":
+                        new_name = my_dict.get("name")
+                        if new_name:
+                            set_device_name(new_name)
                 except Exception as e:
                     print("Error processing message:", e)            
 
