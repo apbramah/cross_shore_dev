@@ -272,6 +272,12 @@ ws = None
 
 import builtins
 
+# Get the unique ID as bytes
+uid_bytes = machine.unique_id()
+
+# Convert to hex string
+uid_hex = ubinascii.hexlify(uid_bytes).decode()
+
 # print function that also sends to websocket if available
 def ws_print(*args, **kwargs):
     original_print(*args, **kwargs)
@@ -281,7 +287,11 @@ def ws_print(*args, **kwargs):
         sep = kwargs.get("sep", " ")
         end = kwargs.get("end", "\n")
         message = sep.join(str(arg) for arg in args) + end
-        ws.send('log:' + message.strip())
+
+        data = {"type": "PRINTF",
+                "uid": uid_hex,
+                "message": message.strip()}
+        ws.send(json.dumps(data))
 
 # Override the built-in print function
 original_print = builtins.print
@@ -293,12 +303,6 @@ async def websocket_client():
         print("Connecting to WebSocket server...")
         ws = uwebsockets.client.connect(WS_URL)
         ws.sock.setblocking(False)
-
-        # Get the unique ID as bytes
-        uid_bytes = machine.unique_id()
-
-        # Convert to hex string
-        uid_hex = ubinascii.hexlify(uid_bytes).decode()
 
         device_name = get_device_name()
 
