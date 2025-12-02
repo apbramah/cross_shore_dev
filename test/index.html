@@ -72,6 +72,15 @@
     // PANEL MANAGEMENT
     // -------------------------
 
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
     function addHeadPanel(uid, ip, name) {
       if (headPanels[uid]) return; // Already exists
 
@@ -84,7 +93,7 @@
         <p>IP: ${ip}</p>
         <p>
           Name:
-          <input type="text" id="name_${uid}" value="${name}">
+          <input type="text" id="name_${uid}" value="${escapeHtml(name)}">
           <button onclick="setName('${uid}')">Save</button>
         </p>
         <button class="inactive" onclick="sendMode('${uid}','auto_cam')" id="auto_${uid}">

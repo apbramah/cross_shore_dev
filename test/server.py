@@ -92,6 +92,8 @@ async def handler(ws):
 
             if dead_uid:
                 del uid_to_head[dead_uid]
+                if dead_uid in uid_to_name:
+                    del uid_to_name[dead_uid]
                 notify = json.dumps({"type": "HEAD_DISCONNECTED", "uid": dead_uid})
                 for ctrl in controllers:
                     await ctrl.send(notify)
