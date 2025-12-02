@@ -56,7 +56,7 @@ async def handler(ws):
                     head = uid_to_head.get(uid)
                     if head:
                         await head.send(json.dumps({"type": "SET_NAME", "name": name}))
-                    uid_to_name[uid] = name
+                        uid_to_name[uid] = name
 
             # If message came from device → broadcast to all browsers
             elif ws in heads:
