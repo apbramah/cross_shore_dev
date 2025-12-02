@@ -21,6 +21,16 @@
       border-radius: 6px;
       cursor: pointer;
     }
+    .head-log {
+      margin-top: 8px;
+      padding: 5px;
+      border: 1px solid #ddd;
+      background: #ffffff;
+      max-height: 120px;
+      overflow-y: auto;
+      font-size: 11px;
+      white-space: pre-wrap;
+    }
     .active { background: limegreen; color: white; }
     .inactive { background: lightgray; color: black; }
   </style>
@@ -46,8 +56,6 @@
     };
 
     ws.onmessage = event => {
-      log("From server: " + event.data);
-
       let msg;
       try { msg = JSON.parse(event.data); }
       catch { return; }
@@ -56,14 +64,23 @@
 
         case "HEAD_CONNECTED":
           addHeadPanel(msg.uid, msg.ip, msg.name || "unknown");
+          log("From server: " + event.data);
           break;
 
         case "HEAD_DISCONNECTED":
           removeHeadPanel(msg.uid);
+          log("From server: " + event.data);
           break;
 
         case "CURRENT_MODE":  
           updateHeadButtons(msg.uid, msg.mode);
+          appendHeadLog(msg.uid, event.data)
+          break;
+
+        case "PRINTF":
+          if (msg.uid) {
+            appendHeadLog(msg.uid, msg.message || "");
+          }
           break;
       }
     };
@@ -79,6 +96,13 @@
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#39;");
+    }
+
+    function appendHeadLog(uid, line) {
+      const panel = document.getElementById("head_log_" + uid);
+      if (!panel) return;
+      panel.textContent += line + "\n";
+      panel.scrollTop = panel.scrollHeight;
     }
 
     function addHeadPanel(uid, ip, name) {
@@ -108,6 +132,7 @@
         <button class="inactive" onclick="reboot('${uid}')" id="reboot_${uid}">
           Reboot
         </button>
+        <pre class="head-log" id="head_log_${uid}"></pre>
       `;
 
       document.getElementById("headsContainer").appendChild(div);
@@ -146,19 +171,19 @@
     // -------------------------
     function sendMode(uid, mode) {
       const obj = {type: "SET_MODE", uid: uid, mode: mode};
-      log("Sending: " + JSON.stringify(obj));
+      appendHeadLog(uid, "Sending: " + JSON.stringify(obj));
       ws.send(JSON.stringify(obj));
     }
     function reboot(uid) {
       const obj = {type: "REBOOT", uid: uid};
-      log("Sending: " + JSON.stringify(obj));
+      appendHeadLog(uid, "Sending: " + JSON.stringify(obj));
       ws.send(JSON.stringify(obj));
     }
     function setName(uid) {
       const input = document.getElementById("name_" + uid);
       if (!input) return;
       const obj = {type: "SET_NAME", uid: uid, name: input.value};
-      log("Sending: " + JSON.stringify(obj));
+      appendHeadLog(uid, "Sending: " + JSON.stringify(obj));
       ws.send(JSON.stringify(obj));
     }
   </script>
