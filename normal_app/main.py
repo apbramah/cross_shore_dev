@@ -6,6 +6,8 @@ import struct
 import uwebsockets.client
 from machine import Pin, UART
 
+# Benign change
+
 ota_present = False
 try:
     import ota
