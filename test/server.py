@@ -37,7 +37,8 @@ async def handler(ws):
                 version = head.version
                 notify = json.dumps({"type": "HEAD_CONNECTED", "uid": uid, "ip": ip, "name": name, "version": version})
                 await controller.send(notify)
-                notify = json.dumps({"type": "CURRENT_MODE", "uid": uid, "mode": head.mode})
+                mode = getattr(head, 'mode', 'unknown')
+                notify = json.dumps({"type": "CURRENT_MODE", "uid": uid, "mode": mode})
                 await controller.send(notify)
 
         async for message in ws:
