@@ -269,36 +269,33 @@ def trust():
 
 REGISTRY_PATH = root_dir + os_path_sep + 'registry.json'
 
-def get_device_name():
+def _load_registry():
     try:
         with open(REGISTRY_PATH) as f:
-            data = json.load(f)
-        name = data.get("name")
-        if name:
-            return name
-    except Exception as e:
-        print("Error reading registry:", e)
-    data = {"name": "unknown"}
-    try:
-        with open(REGISTRY_PATH, "w") as f:
-            json.dump(data, f)
-    except Exception as e:
-        print("Error writing default registry:", e)
-    return "unknown"
+            registry = json.load(f)
+    except:
+        registry = {}
 
-def set_device_name(name):
-    try:
-        data = {"name": name}
-        with open(REGISTRY_PATH, "w") as f:
-            json.dump(data, f)
-    except Exception as e:
-        print("Error updating registry:", e)
+    return registry
+
+def _save_registry(registry):
+    with open(REGISTRY_PATH, "w") as f:
+        json.dump(registry, f)
+
+def registry_get(key, default):
+    registry = _load_registry()
+    return registry.get(key, default)
+
+def registry_set(key, value):
+    registry = _load_registry()
+    registry[key] = value
+    _save_registry(registry)
 
 # Create a simple API module for the app
 class OTA_API:
     trust = staticmethod(trust)
-    get_device_name = staticmethod(get_device_name)
-    set_device_name = staticmethod(set_device_name)
+    registry_get = staticmethod(registry_get)
+    registry_set = staticmethod(registry_set)
     reboot = staticmethod(reboot)
 
 sys.modules["ota"] = OTA_API()

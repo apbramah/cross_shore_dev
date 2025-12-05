@@ -103,7 +103,7 @@ async def websocket_client():
         print("Connecting to WebSocket server...")
         ws = await open_websocket(WS_URL)
 
-        device_name = ota.get_device_name()
+        device_name = ota.registry_get('name', 'unknown')
         manifest = get_manifest()
 
         data = {"type": "HEAD_CONNECTED",
@@ -126,7 +126,7 @@ async def websocket_client():
                 elif my_dict["type"] == "SET_NAME":
                     new_name = my_dict.get("name")
                     if new_name:
-                        ota.set_device_name(new_name)
+                        ota.registry_set('name', new_name)
             except Exception as e:
                 print("Error processing message:", e)
 
