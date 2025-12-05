@@ -1,1 +1,1 @@
-/app_a
+app_a

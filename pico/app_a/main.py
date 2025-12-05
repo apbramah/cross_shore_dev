@@ -1,6 +1,58 @@
-import uasyncio as asyncio
+try:
+    import uasyncio as asyncio
+except:
+    import asyncio
 import time
-import uwebsockets.client
+
+import json
+try:
+    import machine
+    import ubinascii
+
+    # Get the unique ID as bytes
+    uid_bytes = machine.unique_id()
+
+    # Convert to hex string
+    uid_hex = ubinascii.hexlify(uid_bytes).decode()
+
+    class MicroPythonWebSocket:
+        def __init__(self, websocket):
+            self.websocket = websocket
+
+        async def recv(self):
+            while True:
+                msg = self.websocket.recv()
+                if msg != "":
+                    return msg
+                else:
+                    await asyncio.sleep(0)
+
+        async def send(self, data):
+            self.websocket.send(data)
+
+    async def open_websocket(url):
+        import uwebsockets.client
+        ws = uwebsockets.client.connect(url)
+        ws.sock.setblocking(False)
+        return MicroPythonWebSocket(ws)
+
+except:
+    class CPythonWebSocket:
+        def __init__(self, websocket):
+            self.websocket = websocket
+
+        async def recv(self):
+            return await self.websocket.recv()
+
+        async def send(self, data):
+            await self.websocket.send(data)
+    
+    uid_hex = 'andy_is_unique'
+
+    async def open_websocket(url):
+        import websockets
+        ws = await websockets.connect(url)
+        return CPythonWebSocket(ws)
 
 ota_present = False
 try:
@@ -8,38 +60,6 @@ try:
     ota_present = True
 except Exception as e:
     print("Couldn't import ota:", e)
-
-import json
-import machine
-import ubinascii
-from uwebsockets.protocol import ConnectionClosed
-
-REGISTRY_PATH = "/registry.json"
-
-def get_device_name():
-    try:
-        with open(REGISTRY_PATH) as f:
-            data = json.load(f)
-        name = data.get("name")
-        if name:
-            return name
-    except Exception as e:
-        print("Error reading registry:", e)
-    data = {"name": "unknown"}
-    try:
-        with open(REGISTRY_PATH, "w") as f:
-            json.dump(data, f)
-    except Exception as e:
-        print("Error writing default registry:", e)
-    return "unknown"
-
-def set_device_name(name):
-    try:
-        data = {"name": name}
-        with open(REGISTRY_PATH, "w") as f:
-            json.dump(data, f)
-    except Exception as e:
-        print("Error updating registry:", e)
 
 def ota_trust():
     if ota_present:
@@ -53,30 +73,24 @@ ws = None
 
 import builtins
 
-# Get the unique ID as bytes
-uid_bytes = machine.unique_id()
-
-# Convert to hex string
-uid_hex = ubinascii.hexlify(uid_bytes).decode()
-
 # print function that also sends to websocket if available
-def ws_print(*args, **kwargs):
-    original_print(*args, **kwargs)
+# def ws_print(*args, **kwargs):
+#     original_print(*args, **kwargs)
 
-    global ws
-    if ws and ws.open:
-        sep = kwargs.get("sep", " ")
-        end = kwargs.get("end", "\n")
-        message = sep.join(str(arg) for arg in args) + end
+#     global ws
+#     if ws and getattr(ws, 'open', True):
+#         sep = kwargs.get("sep", " ")
+#         end = kwargs.get("end", "\n")
+#         message = sep.join(str(arg) for arg in args) + end
 
-        data = {"type": "PRINTF",
-                "uid": uid_hex,
-                "message": message.strip()}
-        ws.send(json.dumps(data))
+#         data = {"type": "PRINTF",
+#                 "uid": uid_hex,
+#                 "message": message.strip()}
+#         ws.send(json.dumps(data))
 
 # Override the built-in print function
-original_print = builtins.print
-builtins.print = ws_print
+# original_print = builtins.print
+# builtins.print = ws_print
 
 def get_manifest():
     with open('manifest.json') as f:
@@ -87,53 +101,34 @@ async def websocket_client():
     global ws
     try:
         print("Connecting to WebSocket server...")
-        ws = uwebsockets.client.connect(WS_URL)
-        ws.sock.setblocking(False)
+        ws = await open_websocket(WS_URL)
 
-        device_name = get_device_name()
+        device_name = ota.get_device_name()
         manifest = get_manifest()
 
         data = {"type": "HEAD_CONNECTED",
                 "uid": uid_hex,
                 "name": device_name,
                 "version": manifest["version"]}
-        ws.send(json.dumps(data))  # announce as device
+        await ws.send(json.dumps(data))  # announce as device
         print("Connected!")
 
+        ota_trust()
+
         while True:
-
-            # Check for incoming messages
-            try:
-                msg = ws.recv()
-            except ConnectionClosed:
-                print("WebSocket ConnectionClosed")
-                break
-
-            # None means a close frame; empty string means "no data yet" on non-blocking socket
-            if msg is None:
-                print("WebSocket server closed")
-                break
-            if msg == "":
-                await asyncio.sleep(0)
-                continue
+            msg = await ws.recv()
 
             print("Received:", msg)
             try:
                 my_dict = json.loads(msg)
                 if my_dict["type"] == "REBOOT":
-                    print("Rebooting as requested...")
-                    time.sleep(1)
-                    ws.close()
-                    machine.reset()
+                    ota.reboot()
                 elif my_dict["type"] == "SET_NAME":
                     new_name = my_dict.get("name")
                     if new_name:
-                        set_device_name(new_name)
+                        ota.set_device_name(new_name)
             except Exception as e:
                 print("Error processing message:", e)
-
-            ota_trust()
-            await asyncio.sleep(0)
 
     except Exception as e:
         print("WebSocket error:", e)

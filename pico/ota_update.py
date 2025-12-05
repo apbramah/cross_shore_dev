@@ -1,4 +1,12 @@
-import network, sys, os, time, machine, json, urequests
+import sys, os, time, json
+
+try:
+    import network
+    import machine
+    import urequests
+    os_path_sep = '/'
+except:
+    os_path_sep = os.path.sep
 
 def path_exists(path):
     try:
@@ -44,17 +52,20 @@ def connect_network():
 
     print("Ethernet connected:", nic.ifconfig())
 
+root_dir = os.getcwd()
+
 def get_active_dir():
+    filename = root_dir + os_path_sep + 'active_slot.txt'
     try:
-        with open("/active_slot.txt") as f:
+        with open(filename) as f:
             active_dir = f.read().strip().lower()
-            if active_dir not in ("/app_a", "/app_b"):
+            if active_dir not in ("app_a", "app_b"):
                 raise ValueError
-            return active_dir
+            return root_dir + os_path_sep + active_dir
     except:
-        with open("/active_slot.txt", "w") as f:
-            f.write("/app_a")
-        return "/app_a"
+        with open(filename, "w") as f:
+            f.write('app_a')
+        return root_dir + os_path_sep + 'app_a'
 
 def get_target_dir():
     active_dir = get_active_dir()
@@ -70,7 +81,12 @@ def set_active_dir(active_dir):
 def reboot():
     print("Rebooting...")
     time.sleep(1)
-    machine.reset()
+    try:
+        import machine
+        machine.reset()
+    except ImportError:
+        os.chdir(root_dir)
+        os.execv(sys.executable, [sys.executable] + sys.argv)        
 
 def rollback():
     print("Rolling back to previous firmware...")
@@ -181,38 +197,35 @@ def run_active_app(home_urls):
     app_dir = get_active_dir()
     print("Booting app from:", app_dir)
 
+    os.chdir(app_dir)
+    sys.path.insert(0, app_dir)
     try:
-        os.chdir(app_dir)
-        try:
-            with open('manifest.json') as f:
-                manifest = json.load(f)
-                print(manifest)
-                if manifest["trusted"]:
-                    print("App is trusted.")
-                else:
-                    print("App is NOT trusted.")
-                    manifest["num_boot_attempts"] += 1
-                    print("Boot attempts:", manifest["num_boot_attempts"])
+        with open('manifest.json') as f:
+            manifest = json.load(f)
+            print(manifest)
+            if manifest["trusted"]:
+                print("App is trusted.")
+            else:
+                print("App is NOT trusted.")
+                manifest["num_boot_attempts"] += 1
+                print("Boot attempts:", manifest["num_boot_attempts"])
 
-                    if manifest["num_boot_attempts"] > 3:
-                        print("Too many failed boot attempts. Rolling back.")
-                        rollback()
+                if manifest["num_boot_attempts"] > 3:
+                    print("Too many failed boot attempts. Rolling back.")
+                    rollback()
 
-                    with open('manifest.json', 'w') as f:
-                        json.dump(manifest, f)                    
-        except:
-            pass
+                with open('manifest.json', 'w') as f:
+                    json.dump(manifest, f)                    
+    except:
+        pass
 
-        check_for_version_update(home_urls)
+    check_for_version_update(home_urls)
 
-        global wdt
-        # wdt = machine.WDT(timeout=8000)   # timeout in milliseconds
+    global wdt
+    # wdt = machine.WDT(timeout=8000)   # timeout in milliseconds
 
-        import main
-        main.main()
-    except Exception as e:
-        print("App crashed:", e)
-        reboot()
+    import main
+    main.main()
 
 trusted = False
 
@@ -231,9 +244,39 @@ def trust():
                     json.dump(manifest, f)
         trusted = True
 
+REGISTRY_PATH = root_dir + os_path_sep + 'registry.json'
+
+def get_device_name():
+    try:
+        with open(REGISTRY_PATH) as f:
+            data = json.load(f)
+        name = data.get("name")
+        if name:
+            return name
+    except Exception as e:
+        print("Error reading registry:", e)
+    data = {"name": "unknown"}
+    try:
+        with open(REGISTRY_PATH, "w") as f:
+            json.dump(data, f)
+    except Exception as e:
+        print("Error writing default registry:", e)
+    return "unknown"
+
+def set_device_name(name):
+    try:
+        data = {"name": name}
+        with open(REGISTRY_PATH, "w") as f:
+            json.dump(data, f)
+    except Exception as e:
+        print("Error updating registry:", e)
+
 # Create a simple API module for the app
 class OTA_API:
     trust = staticmethod(trust)
+    get_device_name = staticmethod(get_device_name)
+    set_device_name = staticmethod(set_device_name)
+    reboot = staticmethod(reboot)
 
 sys.modules["ota"] = OTA_API()
 
