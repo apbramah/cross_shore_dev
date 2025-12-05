@@ -3,9 +3,10 @@ import sys, os, time, json
 try:
     import network
     import machine
-    import urequests
+    import urequests as requests
     os_path_sep = '/'
 except:
+    import requests
     os_path_sep = os.path.sep
 
 def path_exists(path):
@@ -21,19 +22,43 @@ def is_dir(path):
     except OSError:
         return False
 
+def normalize_path(path):
+    # Convert Windows backslashes → forward slashes
+    path = path.replace("\\", "/")
+
+    # Remove trailing slash unless root
+    if len(path) > 1 and path.endswith("/"):
+        path = path.rstrip("/")
+
+    return path
+
 def makedirs(path):
-    """Recursively create directories (like os.makedirs)."""
+    path = normalize_path(path)
+
+    # Split into components
     parts = path.split("/")
-    current = ""
-    for p in parts:
-        if not p:
-            continue
-        current = current + "/" + p
-        if not path_exists(current):
-            try:
-                os.mkdir(current)
-            except OSError:
-                pass  # already exists or race condition
+    
+    # If absolute path, preserve leading slash
+    if path.startswith("/"):
+        current = "/"
+    else:
+        current = ""
+
+    for part in parts:
+        if not part:
+            continue  # skip empty segments (can happen if path starts with '/')
+        
+        if current == "/" or current == "":
+            current = current + part
+        else:
+            current = current + "/" + part
+
+        # Try to create directory
+        try:
+            os.mkdir(current)
+        except OSError:
+            # Directory probably already exists
+            pass
 
 STATIC_IP = ('192.168.1.51', '255.255.255.0', '192.168.1.1', '8.8.8.8')
 
@@ -68,15 +93,14 @@ def get_active_dir():
         return root_dir + os_path_sep + 'app_a'
 
 def get_target_dir():
-    active_dir = get_active_dir()
-    target_dir = "/app_b" if active_dir == "/app_a" else "/app_a"
-    return target_dir
+    active_dir = get_active_dir().split(os_path_sep)[-1]
+    target_dir = "app_b" if active_dir == "app_a" else "app_a"
+    return root_dir + os_path_sep + target_dir
 
 def set_active_dir(active_dir):
-    tmp = "/active_slot.tmp"
-    with open(tmp, "w") as f:
-        f.write(active_dir)
-    os.rename(tmp, "/active_slot.txt")  # atomic-ish
+    filename = root_dir + os_path_sep + 'active_slot.txt'
+    with open(filename, "w") as f:
+        f.write(active_dir.split(os_path_sep)[-1])
 
 def reboot():
     print("Rebooting...")
@@ -111,20 +135,20 @@ def cleanup_dir(path):
 # ------------------------------
 def download_file(url, dest_path):
     print("Downloading:", url)
-    resp = urequests.get(url)
+    resp = requests.get(url)
     dirs = dest_path.rsplit("/", 1)
     if len(dirs) > 1:
         dirpath = dirs[0]
         if not path_exists(dirpath):
             makedirs(dirpath)
     with open(dest_path, "wb") as f:
-        f.write(resp.text)
+        f.write(resp.text.encode('utf-8'))
 
     resp.close()
 
 def load_manifest(home_url):
     print("Fetching manifest...")
-    resp = urequests.get(f"{home_url}/manifest.json")
+    resp = requests.get(f"{home_url}/manifest.json")
     manifest = json.loads(resp.text)
     resp.close()
     return manifest
@@ -182,7 +206,6 @@ def check_for_version_update(home_urls):
         connect_network()
     except Exception as e:
         print("Network connection failed:", e)
-        return
 
     for home_url in home_urls:
         try:
