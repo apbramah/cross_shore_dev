@@ -189,13 +189,20 @@ def apply_update(home_url, manifest):
 
 def check_for_updates(home_url):
     app_dir = get_active_dir()
-    with open(app_dir + '/manifest.json') as f:
-        local_manifest = json.load(f)
+
     remote_manifest = load_manifest(home_url)
     new_version = remote_manifest.get("version")
-    local_version = local_manifest.get("version")
 
-    if new_version != local_version:
+    try:
+        with open(app_dir + '/manifest.json') as f:
+            local_manifest = json.load(f)
+        local_version = local_manifest.get("version")
+        needs_update = (new_version != local_version)
+    except FileNotFoundError:
+        local_version = 'unknown'
+        needs_update = True    
+
+    if needs_update:
         print(f"Updating from {local_version} to {new_version}")
         apply_update(home_url, remote_manifest)
     else:
