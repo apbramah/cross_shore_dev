@@ -5,9 +5,51 @@ try:
     import machine
     import urequests as requests
     os_path_sep = '/'
+
+    def normalize_path(path):
+        # Convert Windows backslashes → forward slashes
+        path = path.replace("\\", "/")
+
+        # Remove trailing slash unless root
+        if len(path) > 1 and path.endswith("/"):
+            path = path.rstrip("/")
+
+        return path
+
+    def makedirs(path):
+        path = normalize_path(path)
+
+        # Split into components
+        parts = path.split("/")
+        
+        # If absolute path, preserve leading slash
+        if path.startswith("/"):
+            current = "/"
+        else:
+            current = ""
+
+        for part in parts:
+            if not part:
+                continue  # skip empty segments (can happen if path starts with '/')
+            
+            if current == "/" or current == "":
+                current = current + part
+            else:
+                current = current + "/" + part
+
+            # Try to create directory
+            try:
+                os.mkdir(current)
+            except OSError:
+                # Directory probably already exists
+                pass
+
+    os_makedirs = makedirs
+
 except:
     import requests
     os_path_sep = os.path.sep
+    os_makedirs = os.makedirs
 
 def path_exists(path):
     try:
@@ -15,50 +57,6 @@ def path_exists(path):
         return True
     except OSError:
         return False
-
-def is_dir(path):
-    try:
-        return os.stat(path)[0] & 0x4000  # directory bit in st_mode
-    except OSError:
-        return False
-
-def normalize_path(path):
-    # Convert Windows backslashes → forward slashes
-    path = path.replace("\\", "/")
-
-    # Remove trailing slash unless root
-    if len(path) > 1 and path.endswith("/"):
-        path = path.rstrip("/")
-
-    return path
-
-def makedirs(path):
-    path = normalize_path(path)
-
-    # Split into components
-    parts = path.split("/")
-    
-    # If absolute path, preserve leading slash
-    if path.startswith("/"):
-        current = "/"
-    else:
-        current = ""
-
-    for part in parts:
-        if not part:
-            continue  # skip empty segments (can happen if path starts with '/')
-        
-        if current == "/" or current == "":
-            current = current + part
-        else:
-            current = current + "/" + part
-
-        # Try to create directory
-        try:
-            os.mkdir(current)
-        except OSError:
-            # Directory probably already exists
-            pass
 
 STATIC_IP = ('192.168.1.51', '255.255.255.0', '192.168.1.1', '8.8.8.8')
 
@@ -140,7 +138,7 @@ def download_file(url, dest_path):
     if len(dirs) > 1:
         dirpath = dirs[0]
         if not path_exists(dirpath):
-            makedirs(dirpath)
+            os_makedirs(dirpath)
     with open(dest_path, "wb") as f:
         f.write(resp.text.encode('utf-8'))
 
