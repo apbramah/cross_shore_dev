@@ -147,8 +147,9 @@ def download_file(url, dest_path):
     resp.close()
 
 def load_manifest(home_url):
-    print("Fetching manifest...")
-    resp = requests.get(f"{home_url}/manifest.json")
+    home_url = '/'.join([home_url, registry_get('app_path', 'apps/base'), 'manifest.json'])
+    print("Fetching manifest:", home_url)
+    resp = requests.get(home_url)
     manifest = json.loads(resp.text)
     resp.close()
     return manifest
@@ -173,7 +174,7 @@ def apply_update(home_url, manifest):
 
     for path in manifest["files"]:
         print("Updating file:", path)
-        url = f"{home_url}/{path}"
+        url = '/'.join([home_url, registry_get('app_path', 'apps/base'), path])
         dest = f"{target_dir}/{path}"
         download_file(url, dest)
 
