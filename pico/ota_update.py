@@ -46,10 +46,17 @@ try:
 
     os_makedirs = makedirs
 
+    def reset():
+        machine.reset()
+
 except:
     import requests
     os_path_sep = os.path.sep
     os_makedirs = os.makedirs
+
+    def reset():
+        os.chdir(root_dir)
+        os.execv(sys.executable, [sys.executable] + sys.argv)
 
 def path_exists(path):
     try:
@@ -103,12 +110,7 @@ def set_active_dir(active_dir):
 def reboot():
     print("Rebooting...")
     time.sleep(1)
-    try:
-        import machine
-        machine.reset()
-    except ImportError:
-        os.chdir(root_dir)
-        os.execv(sys.executable, [sys.executable] + sys.argv)        
+    reset()
 
 def rollback():
     print("Rolling back to previous firmware...")
