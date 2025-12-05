@@ -187,10 +187,9 @@ def apply_update(home_url, manifest):
     print("Switching active slot to:", target_dir)
     set_active_dir(target_dir)
 
-    reboot()
-
 def check_for_updates(home_url):
-    with open('manifest.json') as f:
+    app_dir = get_active_dir()
+    with open(app_dir + '/manifest.json') as f:
         local_manifest = json.load(f)
     remote_manifest = load_manifest(home_url)
     new_version = remote_manifest.get("version")
@@ -208,16 +207,20 @@ def check_for_version_update(home_urls):
     except Exception as e:
         print("Network connection failed:", e)
 
-    for home_url in home_urls:
-        try:
-            check_for_updates(home_url)
-            break
-        except Exception as e:
-            print("OTA failed:", e)
-
-wdt = None
+    checked = False
+    while not checked:
+        for home_url in home_urls:
+            try:
+                check_for_updates(home_url)
+                checked = True
+                break
+            except Exception as e:
+                print("OTA failed:", e)
+        time.sleep(1)
 
 def run_active_app(home_urls):
+    check_for_version_update(home_urls)
+
     app_dir = get_active_dir()
     print("Booting app from:", app_dir)
 
@@ -243,20 +246,13 @@ def run_active_app(home_urls):
     except:
         pass
 
-    check_for_version_update(home_urls)
-
-    global wdt
-    # wdt = machine.WDT(timeout=8000)   # timeout in milliseconds
-
     import main
     main.main()
 
 trusted = False
 
 def trust():
-    global wdt, trusted
-    if wdt:
-        wdt.feed()
+    global trusted
 
     # We use the trusted flag to avoid flash operations on every call
     if not trusted:
