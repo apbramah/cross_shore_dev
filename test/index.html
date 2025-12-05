@@ -67,7 +67,7 @@
         switch (msg.type) {
 
           case "HEAD_CONNECTED":
-            addHeadPanel(msg.uid, msg.ip, msg.name || "unknown", msg.version);
+            addHeadPanel(msg.uid, msg.ip, msg.name || "unknown", msg.version, msg.app_path || 'apps/base');
             log("From server: " + event.data);
             break;
 
@@ -122,7 +122,7 @@
       panel.scrollTop = panel.scrollHeight;
     }
 
-    function addHeadPanel(uid, ip, name, version) {
+    function addHeadPanel(uid, ip, name, version, app_path) {
       if (headPanels[uid]) return; // Already exists
 
       const div = document.createElement("div");
@@ -132,11 +132,16 @@
       div.innerHTML = `
         <h3><a href="simplebgc://${ip}:8080">Head UID: ${uid}</a></h3>
         <p>IP: ${ip}</p>
-        <p>Version: ${version}</p>
+        <p>version: ${version}</p>
         <p>
-          Name:
+          name:
           <input type="text" id="name_${uid}" value="${escapeHtml(name)}">
           <button onclick="setName('${uid}')">Save</button>
+        </p>
+        <p>
+          app_path:
+          <input type="text" id="app_path_${uid}" value="${escapeHtml(app_path)}">
+          <button onclick="setAppPath('${uid}')">Save</button>
         </p>
         <button class="inactive" onclick="sendMode('${uid}','auto_cam')" id="auto_${uid}">
           Auto Cam
@@ -201,6 +206,13 @@
       const input = document.getElementById("name_" + uid);
       if (!input) return;
       const obj = {type: "SET_NAME", uid: uid, name: input.value};
+      appendHeadLog(uid, "Sending: " + JSON.stringify(obj));
+      ws.send(JSON.stringify(obj));
+    }
+    function setAppPath(uid) {
+      const input = document.getElementById("app_path_" + uid);
+      if (!input) return;
+      const obj = {type: "SET_APP_PATH", uid: uid, app_path: input.value};
       appendHeadLog(uid, "Sending: " + JSON.stringify(obj));
       ws.send(JSON.stringify(obj));
     }

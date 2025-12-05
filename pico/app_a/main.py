@@ -104,11 +104,13 @@ async def websocket_client():
         ws = await open_websocket(WS_URL)
 
         device_name = ota.registry_get('name', 'unknown')
+        app_path = ota.registry_get('app_path', 'apps/base')
         manifest = get_manifest()
 
         data = {"type": "HEAD_CONNECTED",
                 "uid": uid_hex,
                 "name": device_name,
+                "app_path": app_path,
                 "version": manifest["version"]}
         await ws.send(json.dumps(data))  # announce as device
         print("Connected!")
@@ -127,6 +129,10 @@ async def websocket_client():
                     new_name = my_dict.get("name")
                     if new_name:
                         ota.registry_set('name', new_name)
+                elif my_dict["type"] == "SET_APP_PATH":
+                    new_app_path = my_dict.get("app_path")
+                    if new_app_path:
+                        ota.registry_set('app_path', new_app_path)
             except Exception as e:
                 print("Error processing message:", e)
 

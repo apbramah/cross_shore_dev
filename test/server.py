@@ -14,6 +14,7 @@ async def handler(ws):
             uid = msg.get("uid", "unknown")
             name = msg.get("name", "unknown")
             version = msg.get("version", "unknown")
+            app_path = msg.get("app_path", "apps/base")
             print("Head connected", uid)
             head = ws
 
@@ -21,6 +22,7 @@ async def handler(ws):
             uid_to_head[uid] = head
             head.name = name
             head.version = version
+            head.app_path = app_path
 
             ip = head.remote_address[0]
             msg["ip"] = ip
@@ -35,7 +37,8 @@ async def handler(ws):
                 ip = head.remote_address[0]
                 name = head.name
                 version = head.version
-                notify = json.dumps({"type": "HEAD_CONNECTED", "uid": uid, "ip": ip, "name": name, "version": version})
+                app_path = head.app_path
+                notify = json.dumps({"type": "HEAD_CONNECTED", "uid": uid, "ip": ip, "name": name, "version": version, "app_path": app_path})
                 await controller.send(notify)
                 mode = getattr(head, 'mode', 'unknown')
                 notify = json.dumps({"type": "CURRENT_MODE", "uid": uid, "mode": mode})
@@ -51,6 +54,8 @@ async def handler(ws):
                     await head.send(message)
                     if msg["type"] == "SET_NAME":
                         head.name = msg.get("name", "unknown")
+                    elif msg["type"] == "SET_APP_PATH":
+                        head.app_path = msg.get("app_path", "apps/base")
 
             # If message came from device → broadcast to all browsers
             elif ws in heads:
