@@ -51,8 +51,26 @@
     // Store head panels: uid → DOM element
     const headPanels = {};
 
+    function httpToWsUrl(httpUrl) {
+      // Convert HTTP URL to WebSocket URL for upgrading the connection
+      if (httpUrl.startsWith('http://')) {
+        return httpUrl.replace('http://', 'ws://');
+      } else if (httpUrl.startsWith('https://')) {
+        return httpUrl.replace('https://', 'wss://');
+      }
+      return httpUrl;
+    }
+
+    function getWebSocketUrl() {
+      // Get the current page's origin and convert to WebSocket URL
+      // Use the same host:port as the HTTP connection, just change protocol
+      const wsUrl = httpToWsUrl(window.location.origin) + '/ws';
+      return wsUrl;
+    }
+
     function connectWebSocket() {
-      ws = new WebSocket("ws://192.168.60.91:443/");
+      const wsUrl = getWebSocketUrl();
+      ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
         ws.send(JSON.stringify({type: "BROWSER"}));

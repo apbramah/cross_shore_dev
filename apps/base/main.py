@@ -29,10 +29,12 @@ try:
 
         async def send(self, data):
             self.websocket.send(data)
-
-    async def open_websocket(url):
+    
+    async def upgrade_http_to_websocket(http_url):
+        """Upgrade an HTTP connection to WebSocket"""
         import uwebsockets.client
-        ws = uwebsockets.client.connect(url)
+        ws_url = http_to_ws_url(http_url) + '/ws'
+        ws = uwebsockets.client.connect(ws_url)
         ws.sock.setblocking(False)
         return MicroPythonWebSocket(ws)
 
@@ -49,9 +51,11 @@ except:
     
     uid_hex = 'andy_is_unique'
 
-    async def open_websocket(url):
+    async def upgrade_http_to_websocket(http_url):
+        """Upgrade an HTTP connection to WebSocket"""
         import websockets
-        ws = await websockets.connect(url)
+        ws_url = http_to_ws_url(http_url) + '/ws'
+        ws = await websockets.connect(ws_url)
         return CPythonWebSocket(ws)
 
 ota_present = False
@@ -65,11 +69,17 @@ def ota_trust():
     if ota_present:
         ota.trust()
 
-# ==== CONFIGURATION ====
-WS_URL = "ws://192.168.60.91:443/"
-# ========================
-
 ws = None
+
+def http_to_ws_url(http_url):
+    """Convert HTTP URL to WebSocket URL for upgrading the connection"""
+    if http_url.startswith('http://'):
+        return http_url.replace('http://', 'ws://', 1)
+    elif http_url.startswith('https://'):
+        return http_url.replace('https://', 'wss://', 1)
+    else:
+        # If it's already a WebSocket URL, return as is
+        return http_url
 
 import builtins
 
@@ -97,12 +107,11 @@ def get_manifest():
         manifest = json.load(f)
     return manifest
 
-async def websocket_client():
+async def websocket_client(ws_connection):
+    """Handle WebSocket client logic with an upgraded connection"""
     global ws
+    ws = ws_connection
     try:
-        print("Connecting to WebSocket server...")
-        ws = await open_websocket(WS_URL)
-
         device_name = ota.registry_get('name', 'unknown')
         app_path = ota.registry_get('app_path', 'apps/base')
         network_configs = ota.registry_get('network_configs', [['dhcp', 'http://192.168.60.91:80']])
@@ -151,7 +160,23 @@ async def websocket_client():
 
 async def websocket():
     while True:
-        await websocket_client()
+        try:
+            # Get the server URL from network_configs (same one used for HTTP/OTA)
+            network_configs = ota.registry_get('network_configs', [['dhcp', 'http://192.168.60.91:80']])
+            if not network_configs:
+                print("No network configs available")
+                await asyncio.sleep(1)
+                continue
+            
+            # Use the first server_url from network_configs
+            server_url = network_configs[0][1] if len(network_configs[0]) > 1 else 'http://192.168.60.91:80'
+            
+            print("Upgrading HTTP connection to WebSocket...")
+            ws_connection = await upgrade_http_to_websocket(server_url)
+            
+            await websocket_client(ws_connection)
+        except Exception as e:
+            print("WebSocket connection error:", e)
         print("Reconnecting in 1 seconds...")
         await asyncio.sleep(1)
 
