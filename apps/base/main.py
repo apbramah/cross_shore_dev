@@ -158,19 +158,10 @@ async def websocket_client(ws_connection):
             ws.close()
             print("Connection closed")
 
-async def websocket():
+async def websocket(server_url):
+    """Upgrade the HTTP connection to WebSocket using the provided server_url"""
     while True:
         try:
-            # Get the server URL from network_configs (same one used for HTTP/OTA)
-            network_configs = ota.registry_get('network_configs', [['dhcp', 'http://192.168.60.91:80']])
-            if not network_configs:
-                print("No network configs available")
-                await asyncio.sleep(1)
-                continue
-            
-            # Use the first server_url from network_configs
-            server_url = network_configs[0][1] if len(network_configs[0]) > 1 else 'http://192.168.60.91:80'
-            
             print("Upgrading HTTP connection to WebSocket...")
             ws_connection = await upgrade_http_to_websocket(server_url)
             
@@ -180,15 +171,16 @@ async def websocket():
         print("Reconnecting in 1 seconds...")
         await asyncio.sleep(1)
 
-async def as_main():
-    tasks = [websocket()]
+async def as_main(server_url):
+    tasks = [websocket(server_url)]
 
     # Run all tasks concurrently
     await asyncio.gather(*tasks)
 
-def main():
+def main(server_url):
+    """Main entry point - receives server_url from ota_update.py"""
     try:
-        asyncio.run(as_main())
+        asyncio.run(as_main(server_url))
     finally:
         asyncio.new_event_loop()
 

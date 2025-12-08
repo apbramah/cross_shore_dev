@@ -205,6 +205,7 @@ def check_for_version_update():
     network_configs = registry_get('network_configs', [('dhcp', 'http://192.168.60.91:80')])
 
     checked = False
+    successful_server_url = None
     while not checked:
         for nic_setup, server_url in network_configs:
             try:
@@ -215,13 +216,16 @@ def check_for_version_update():
             try:
                 check_for_updates(server_url)
                 checked = True
+                successful_server_url = server_url
                 break
             except Exception as e:
                 print("OTA failed:", e)
         time.sleep(1)
+    
+    return successful_server_url
 
 def run_active_app():
-    check_for_version_update()
+    server_url = check_for_version_update()
 
     app_dir = get_active_dir()
     print("Booting app from:", app_dir)
@@ -249,7 +253,7 @@ def run_active_app():
         pass
 
     import main
-    main.main()
+    main.main(server_url)
 
 trusted = False
 
