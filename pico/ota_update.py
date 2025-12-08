@@ -65,17 +65,10 @@ def path_exists(path):
     except OSError:
         return False
 
-STATIC_IP = ('192.168.1.51', '255.255.255.0', '192.168.1.1', '8.8.8.8')
-
-def connect_network():
+def connect_network(nic_setup):
     nic = network.WIZNET5K()
     nic.active(True)
-    try:
-        print("Attempting to connect to Ethernet using DHCP...")
-        nic.ifconfig('dhcp')
-    except:
-        print("...failed. Falling back to static IP")
-        nic.ifconfig(STATIC_IP)
+    nic.ifconfig(nic_setup)
 
     while not nic.isconnected():
         pass
@@ -208,25 +201,27 @@ def check_for_updates(home_url):
     else:
         print("No update required. Current version:", local_version)
 
-def check_for_version_update(home_urls):
-    try:
-        connect_network()
-    except Exception as e:
-        print("Network connection failed:", e)
+def check_for_version_update():
+    network_configs = registry_get('network_configs', [('dhcp', 'http://192.168.60.91:80')])
 
     checked = False
     while not checked:
-        for home_url in home_urls:
+        for nic_setup, server_url in network_configs:
             try:
-                check_for_updates(home_url)
+                connect_network(nic_setup)
+            except Exception as e:
+                print("Network connection failed:", e)
+
+            try:
+                check_for_updates(server_url)
                 checked = True
                 break
             except Exception as e:
                 print("OTA failed:", e)
         time.sleep(1)
 
-def run_active_app(home_urls):
-    check_for_version_update(home_urls)
+def run_active_app():
+    check_for_version_update()
 
     app_dir = get_active_dir()
     print("Booting app from:", app_dir)
