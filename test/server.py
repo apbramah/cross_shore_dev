@@ -114,10 +114,6 @@ async def http_handler(request):
     """Handle HTTP requests - serve files from cross_shore_dev directory"""
     path = request.path.strip('/')
 
-    # If path is empty, serve index.html
-    if not path or path == '':
-        path = 'test/index.html'
-    
     # Build full file path
     file_path = os.path.join(BASE_DIR, path)
     
