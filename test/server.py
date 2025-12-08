@@ -32,6 +32,7 @@ async def websocket_handler(ws, ip_address, port):
             head.version = version
             head.app_path = app_path
             head.network_configs = network_configs
+            head.ip = ip_address
 
             ip = ip_address
             msg["ip"] = ip
@@ -43,7 +44,7 @@ async def websocket_handler(ws, ip_address, port):
             controllers.add(controller)
 
             for uid, head in uid_to_head.items():
-                ip = head.remote if hasattr(head, 'remote') else 'unknown'
+                ip = getattr(head, 'ip', 'unknown')
                 name = head.name
                 version = head.version
                 app_path = head.app_path
@@ -60,16 +61,48 @@ async def websocket_handler(ws, ip_address, port):
                 # If message came from browser → send to device
                 if ws in controllers:
                     msg_data = json.loads(message)
-                    uid = msg_data["uid"]
-                    head = uid_to_head.get(uid)
-                    if head:
-                        await head.send_str(message)
-                        if msg_data["type"] == "SET_NAME":
-                            head.name = msg_data.get("name", "unknown")
-                        elif msg_data["type"] == "SET_APP_PATH":
-                            head.app_path = msg_data.get("app_path", "apps/base")
-                        elif msg_data["type"] == "SET_NETWORK_CONFIGS":
-                            head.network_configs = msg_data.get("network_configs", [])
+                    if msg_data["type"] == "INITIATE_UDP_CONNECTION":
+                        # Handle UDP connection initiation
+                        from_uid = msg_data.get("from_uid")
+                        to_uid = msg_data.get("to_uid")
+                        from_head = uid_to_head.get(from_uid)
+                        to_head = uid_to_head.get(to_uid)
+                        
+                        if from_head and to_head:
+                            # Send connection request to both heads with each other's info
+                            from_msg = {
+                                "type": "UDP_CONNECTION_REQUEST",
+                                "peer_uid": to_uid,
+                                "peer_ip": to_head.ip,
+                                "peer_port": msg_data.get("peer_port", 8889)  # Default UDP port
+                            }
+                            to_msg = {
+                                "type": "UDP_CONNECTION_REQUEST",
+                                "peer_uid": from_uid,
+                                "peer_ip": from_head.ip,
+                                "peer_port": msg_data.get("peer_port", 8889)
+                            }
+                            await from_head.send_str(json.dumps(from_msg))
+                            await to_head.send_str(json.dumps(to_msg))
+                        else:
+                            error_msg = json.dumps({
+                                "type": "UDP_CONNECTION_RESULT",
+                                "uid": from_uid,
+                                "success": False,
+                                "message": "One or both heads not found"
+                            })
+                            await ws.send_str(error_msg)
+                    else:
+                        uid = msg_data.get("uid")
+                        head = uid_to_head.get(uid)
+                        if head:
+                            await head.send_str(message)
+                            if msg_data["type"] == "SET_NAME":
+                                head.name = msg_data.get("name", "unknown")
+                            elif msg_data["type"] == "SET_APP_PATH":
+                                head.app_path = msg_data.get("app_path", "apps/base")
+                            elif msg_data["type"] == "SET_NETWORK_CONFIGS":
+                                head.network_configs = msg_data.get("network_configs", [])
 
                 # If message came from device → broadcast to all browsers
                 elif ws in heads:
@@ -77,6 +110,11 @@ async def websocket_handler(ws, ip_address, port):
                     msg_data = json.loads(message)
                     if msg_data["type"] == "CURRENT_MODE":
                         head.mode = msg_data["mode"]
+                    elif msg_data["type"] == "UDP_CONNECTION_RESULT":
+                        # Forward UDP connection results to browsers
+                        for ctrl in controllers:
+                            await ctrl.send_str(message)
+                        print(f"UDP connection result from {msg_data.get('uid')}: {msg_data.get('success')}")
                     for ctrl in controllers:
                         print("Server: Forwarding", message, "to browser")
                         await ctrl.send_str(message)
