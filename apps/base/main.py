@@ -143,6 +143,9 @@ class UDPConnection:
     
     async def _receiver_loop(self):
         """Main receiver loop - demultiplexes packets to channels"""
+        if not MICROPYTHON:
+            loop = asyncio.get_running_loop()
+
         while self.running:
             try:
                 if MICROPYTHON:
@@ -158,7 +161,7 @@ class UDPConnection:
                 else:
                     self.sock.settimeout(0.25)
                     try:
-                        data, addr = self.sock.recvfrom(2048)
+                        data, addr = await loop.sock_recvfrom(self.sock, 2048)
                     except socket.timeout:
                         print('timeout')
                         continue
