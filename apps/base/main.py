@@ -168,13 +168,11 @@ class UDPConnection:
                 
                 # Verify packet is from expected peer
                 if addr != self.peer_addr:
-                    print("not from expected peer")
                     continue
                 
                 # Decode packet
                 result = self._decode_packet(data)
                 if result is None:
-                    print('result was NONE')
                     continue
                 
                 flags, channel_id, seq_num, payload = result
@@ -551,30 +549,31 @@ async def websocket_client(ws_connection):
                         
                         if success and connection:
                             # Example: Create a reliable and unreliable channel
-                            # reliable_channel = connection.create_channel('reliable')
-                            # await reliable_channel.start()
+                            reliable_channel = connection.create_channel('reliable')
+                            await reliable_channel.start()
                             
                             unreliable_channel = connection.create_channel('unreliable')
                             
                             # Set up message handlers (optional)
-                            # async def on_reliable_message(data):
-                            #     print(f"Reliable channel received: {data}")
+                            async def on_reliable_message(data):
+                                print(f"Reliable channel received: {data}")
                             async def on_unreliable_message(data):
                                 print(f"Unreliable channel received: {data}")
                             
-                            # reliable_channel.on_message = on_reliable_message
+                            reliable_channel.on_message = on_reliable_message
                             unreliable_channel.on_message = on_unreliable_message
                             
                             print(f"Created UDP connection with channels for {peer_uid}")
 
-                            async def occasional_send(channel):
+                            async def occasional_send(channel, my_string):
                                 while True:
-                                    print('sending', uid_hex)
-                                    await channel.send(uid_hex.encode('utf-8'))
+                                    print('sending', my_string)
+                                    await channel.send(my_string.encode('utf-8'))
                                     await asyncio.sleep(1)
 
                             print("Starting occasional_send")
-                            asyncio.create_task(occasional_send(unreliable_channel))
+                            asyncio.create_task(occasional_send(unreliable_channel, uid_hex + 'unrel'))
+                            asyncio.create_task(occasional_send(reliable_channel, uid_hex + 'rel'))
                         
                         # Report result back to server
                         result_msg = {
