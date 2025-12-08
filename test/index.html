@@ -67,7 +67,7 @@
         switch (msg.type) {
 
           case "HEAD_CONNECTED":
-            addHeadPanel(msg.uid, msg.ip, msg.name || "unknown", msg.version, msg.app_path || 'apps/base');
+            addHeadPanel(msg.uid, msg.ip, msg.name || "unknown", msg.version, msg.app_path || 'apps/base', msg.network_configs || [['dhcp', 'http://192.168.60.91:80']]);
             log("From server: " + event.data);
             break;
 
@@ -122,12 +122,27 @@
       panel.scrollTop = panel.scrollHeight;
     }
 
-    function addHeadPanel(uid, ip, name, version, app_path) {
+    function addHeadPanel(uid, ip, name, version, app_path, network_configs) {
       if (headPanels[uid]) return; // Already exists
 
       const div = document.createElement("div");
       div.className = "head-panel";
       div.id = "head_" + uid;
+
+      // Build network_configs HTML
+      let networkConfigsHtml = `<div style="margin: 10px 0;"><strong>Network Configs:</strong><div id="network_configs_${uid}">`;
+      network_configs.forEach((config, idx) => {
+        networkConfigsHtml += `
+          <div style="margin: 5px 0; padding: 5px; border: 1px solid #ccc; border-radius: 4px;">
+            <input type="text" id="nic_${uid}_${idx}" value="${escapeHtml(config[0] || '')}" placeholder="nic_setup" style="width: 100px;">
+            <input type="text" id="url_${uid}_${idx}" value="${escapeHtml(config[1] || '')}" placeholder="server_url" style="width: 200px;">
+            <button onclick="removeNetworkConfig('${uid}', ${idx})" style="padding: 4px 8px; font-size: 12px;">Remove</button>
+          </div>`;
+      });
+      networkConfigsHtml += `</div>`;
+      networkConfigsHtml += `<button onclick="addNetworkConfig('${uid}')" style="padding: 4px 8px; font-size: 12px; margin-top: 5px;">Add Config</button>`;
+      networkConfigsHtml += `<button onclick="saveNetworkConfigs('${uid}')" style="padding: 4px 8px; font-size: 12px; margin-top: 5px; margin-left: 5px;">Save Configs</button>`;
+      networkConfigsHtml += `</div>`;
 
       div.innerHTML = `
         <h3><a href="simplebgc://${ip}:8080">Head UID: ${uid}</a></h3>
@@ -143,6 +158,7 @@
           <input type="text" id="app_path_${uid}" value="${escapeHtml(app_path)}">
           <button onclick="setAppPath('${uid}')">Save</button>
         </p>
+        ${networkConfigsHtml}
         <button class="inactive" onclick="sendMode('${uid}','auto_cam')" id="auto_${uid}">
           Auto Cam
         </button>
@@ -213,6 +229,65 @@
       const input = document.getElementById("app_path_" + uid);
       if (!input) return;
       const obj = {type: "SET_APP_PATH", uid: uid, app_path: input.value};
+      appendHeadLog(uid, "Sending: " + JSON.stringify(obj));
+      ws.send(JSON.stringify(obj));
+    }
+    function addNetworkConfig(uid) {
+      const container = document.getElementById("network_configs_" + uid);
+      if (!container) return;
+      const idx = container.children.length;
+      const div = document.createElement("div");
+      div.style.margin = "5px 0";
+      div.style.padding = "5px";
+      div.style.border = "1px solid #ccc";
+      div.style.borderRadius = "4px";
+      div.innerHTML = `
+        <input type="text" id="nic_${uid}_${idx}" value="" placeholder="nic_setup" style="width: 100px;">
+        <input type="text" id="url_${uid}_${idx}" value="" placeholder="server_url" style="width: 200px;">
+        <button onclick="removeNetworkConfig('${uid}', ${idx})" style="padding: 4px 8px; font-size: 12px;">Remove</button>
+      `;
+      container.appendChild(div);
+    }
+    function removeNetworkConfig(uid, idx) {
+      const container = document.getElementById("network_configs_" + uid);
+      if (!container) return;
+      const divs = container.children;
+      if (idx >= 0 && idx < divs.length) {
+        divs[idx].remove();
+        // Renumber remaining inputs
+        Array.from(container.children).forEach((div, newIdx) => {
+          const nicInput = div.querySelector('input[placeholder="nic_setup"]');
+          const urlInput = div.querySelector('input[placeholder="server_url"]');
+          if (nicInput) {
+            nicInput.id = `nic_${uid}_${newIdx}`;
+          }
+          if (urlInput) {
+            urlInput.id = `url_${uid}_${newIdx}`;
+          }
+          const removeBtn = div.querySelector("button");
+          if (removeBtn) {
+            removeBtn.setAttribute("onclick", `removeNetworkConfig('${uid}', ${newIdx})`);
+          }
+        });
+      }
+    }
+    function saveNetworkConfigs(uid) {
+      const container = document.getElementById("network_configs_" + uid);
+      if (!container) return;
+      const network_configs = [];
+      const divs = container.children;
+      for (let i = 0; i < divs.length; i++) {
+        const nicInput = document.getElementById(`nic_${uid}_${i}`);
+        const urlInput = document.getElementById(`url_${uid}_${i}`);
+        if (nicInput && urlInput) {
+          const nic = nicInput.value.trim();
+          const url = urlInput.value.trim();
+          if (nic || url) {
+            network_configs.push([nic, url]);
+          }
+        }
+      }
+      const obj = {type: "SET_NETWORK_CONFIGS", uid: uid, network_configs: network_configs};
       appendHeadLog(uid, "Sending: " + JSON.stringify(obj));
       ws.send(JSON.stringify(obj));
     }
