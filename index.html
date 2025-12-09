@@ -88,7 +88,7 @@
 
           case "HEAD_CONNECTED":
             allHeads[msg.uid] = {ip: msg.ip, name: msg.name || "unknown"};
-            addHeadPanel(msg.uid, msg.ip, msg.name || "unknown", msg.version, msg.app_path || 'apps/base', msg.network_configs || [['dhcp', 'http://192.168.60.91:80']]);
+            addHeadPanel(msg.uid, msg.ip, msg.name || "unknown", msg.version, msg.app_path || 'apps/base', msg.network_configs || [['dhcp', 'http://192.168.60.91:80']], msg.local_ips || []);
             updateUdpDropdowns();
             log("From server: " + event.data);
             break;
@@ -152,7 +152,7 @@
       panel.scrollTop = panel.scrollHeight;
     }
 
-    function addHeadPanel(uid, ip, name, version, app_path, network_configs) {
+    function addHeadPanel(uid, ip, name, version, app_path, network_configs, local_ips) {
       if (headPanels[uid]) return; // Already exists
 
       const div = document.createElement("div");
@@ -177,6 +177,7 @@
       div.innerHTML = `
         <h3><a href="simplebgc://${ip}:8080">Head UID: ${uid}</a></h3>
         <p>IP: ${ip}</p>
+        <p>Local IPs: <span id="local_ips_${uid}">${(local_ips || []).join(', ')}</span></p>
         <p>version: ${version}</p>
         <p>
           name:
