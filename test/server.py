@@ -23,6 +23,7 @@ async def websocket_handler(ws, ip_address, port):
             version = msg.get("version", "unknown")
             app_path = msg.get("app_path", "apps/base")
             network_configs = msg.get("network_configs", [])
+            local_ips = msg.get("local_ips", [])
             print("Head connected", uid)
             head = ws
 
@@ -33,6 +34,7 @@ async def websocket_handler(ws, ip_address, port):
             head.app_path = app_path
             head.network_configs = network_configs
             head.ip = ip_address
+            head.local_ips = local_ips
 
             ip = ip_address
             msg["ip"] = ip
@@ -49,7 +51,8 @@ async def websocket_handler(ws, ip_address, port):
                 version = head.version
                 app_path = head.app_path
                 network_configs = getattr(head, 'network_configs', [])
-                notify = json.dumps({"type": "HEAD_CONNECTED", "uid": uid, "ip": ip, "name": name, "version": version, "app_path": app_path, "network_configs": network_configs})
+                local_ips = getattr(head, 'local_ips', [])
+                notify = json.dumps({"type": "HEAD_CONNECTED", "uid": uid, "ip": ip, "name": name, "version": version, "app_path": app_path, "network_configs": network_configs, "local_ips": local_ips})
                 await controller.send_str(notify)
                 mode = getattr(head, 'mode', 'unknown')
                 notify = json.dumps({"type": "CURRENT_MODE", "uid": uid, "mode": mode})

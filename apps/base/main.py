@@ -113,6 +113,7 @@ async def websocket_client(ws_connection):
         device_name = ota.registry_get('name', 'unknown')
         app_path = ota.registry_get('app_path', 'apps/base')
         network_configs = ota.registry_get('network_configs', [['dhcp', 'http://192.168.60.91:80']])
+        local_ips = ota.get_local_ips()
         manifest = get_manifest()
 
         data = {"type": "HEAD_CONNECTED",
@@ -120,7 +121,8 @@ async def websocket_client(ws_connection):
                 "name": device_name,
                 "app_path": app_path,
                 "network_configs": network_configs,
-                "version": manifest["version"]}
+                "version": manifest["version"],
+                "local_ips": local_ips}
         await ws.send(json.dumps(data))  # announce as device
         print("Connected!")
 

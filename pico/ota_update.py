@@ -309,12 +309,15 @@ def registry_set(key, value):
     registry[key] = value
     _save_registry(registry)
 
+def get_local_ips():
+    return local_ips
+
 # Create a simple API module for the app
 class OTA_API:
     trust = staticmethod(trust)
     registry_get = staticmethod(registry_get)
     registry_set = staticmethod(registry_set)
     reboot = staticmethod(reboot)
+    get_local_ips = staticmethod(get_local_ips)
 
 sys.modules["ota"] = OTA_API()
-
