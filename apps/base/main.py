@@ -2,6 +2,7 @@ from udp_con import *
 
 import json
 try:
+    MICROPYTHON = True
     import uasyncio as asyncio
     import machine
     import ubinascii
@@ -26,7 +27,10 @@ try:
 
         async def send(self, data):
             self.websocket.send(data)
-    
+
+        def send_sync(self, data):
+            self.websocket.send(data)
+        
     async def upgrade_http_to_websocket(http_url):
         """Upgrade an HTTP connection to WebSocket"""
         import uwebsockets.client
@@ -36,6 +40,7 @@ try:
         return MicroPythonWebSocket(ws)
 
 except ImportError:
+    MICROPYTHON = False
     import asyncio
     uid_hex = 'andy_is_unique'
 
@@ -81,24 +86,38 @@ def http_to_ws_url(http_url):
 
 import builtins
 
+if not MICROPYTHON:
+    print_queue = asyncio.Queue()
+
+    async def ws_sender(ws):
+        while True:
+            message = await print_queue.get()
+            data = {"type": "PRINTF",
+                    "uid": uid_hex,
+                    "message": message.strip()}
+            await ws.send(json.dumps(data))
+
 # print function that also sends to websocket if available
-# def ws_print(*args, **kwargs):
-#     original_print(*args, **kwargs)
+def ws_print(*args, **kwargs):
+    original_print(*args, **kwargs)
 
-#     global ws
-#     if ws and getattr(ws, 'open', True):
-#         sep = kwargs.get("sep", " ")
-#         end = kwargs.get("end", "\n")
-#         message = sep.join(str(arg) for arg in args) + end
+    global ws
+    if ws and getattr(ws, 'open', True):
+        sep = kwargs.get("sep", " ")
+        end = kwargs.get("end", "\n")
+        message = sep.join(str(arg) for arg in args) + end
 
-#         data = {"type": "PRINTF",
-#                 "uid": uid_hex,
-#                 "message": message.strip()}
-#         ws.send(json.dumps(data))
+        if MICROPYTHON:
+            data = {"type": "PRINTF",
+                    "uid": uid_hex,
+                    "message": message.strip()}
+            ws.send_sync(json.dumps(data))
+        else:            
+            print_queue.put_nowait(message)
 
 # Override the built-in print function
-# original_print = builtins.print
-# builtins.print = ws_print
+original_print = builtins.print
+builtins.print = ws_print
 
 def get_manifest():
     with open('manifest.json') as f:
@@ -124,6 +143,8 @@ async def websocket_client(ws_connection):
                 "version": manifest["version"],
                 "local_ips": local_ips}
         await ws.send(json.dumps(data))  # announce as device
+        if not MICROPYTHON:
+            asyncio.create_task(ws_sender(ws))
         print("Connected!")
 
         ota_trust()
