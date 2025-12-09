@@ -49,6 +49,22 @@ try:
     def reset():
         machine.reset()
 
+    local_ips = []
+
+    def connect_network(nic_setup):
+        print('Trying to connect using:', nic_setup)
+        nic = network.WIZNET5K()
+        nic.active(True)
+        nic.ifconfig(nic_setup)
+
+        while not nic.isconnected():
+            pass
+
+        ifconfig = nic.ifconfig()
+
+        global local_ips
+        local_ips.append(ifconfig[0])
+
 except:
     import requests
     os_path_sep = os.path.sep
@@ -58,22 +74,23 @@ except:
         os.chdir(root_dir)
         os.execv(sys.executable, [sys.executable] + sys.argv)
 
+    local_ips = []
+
+    def connect_network(nic_setup):
+        # On a PC, the network is already connected, so nothing to
+        # do in that regard. But we still need to populate local_ips
+        import socket
+
+        hostname = socket.gethostname()
+        global local_ips
+        local_ips = socket.gethostbyname_ex(hostname)[2]
+
 def path_exists(path):
     try:
         os.stat(path)
         return True
     except OSError:
         return False
-
-def connect_network(nic_setup):
-    nic = network.WIZNET5K()
-    nic.active(True)
-    nic.ifconfig(nic_setup)
-
-    while not nic.isconnected():
-        pass
-
-    print("Ethernet connected:", nic.ifconfig())
 
 root_dir = os.getcwd()
 
@@ -208,10 +225,8 @@ def check_for_version_update():
     successful_server_url = None
     while not checked:
         for nic_setup, server_url in network_configs:
-            try:
-                connect_network(nic_setup)
-            except Exception as e:
-                print("Network connection failed:", e)
+            connect_network(nic_setup)
+            print('Connected. Local ips:', local_ips)
 
             try:
                 check_for_updates(server_url)
