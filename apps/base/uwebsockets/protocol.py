@@ -185,26 +185,14 @@ class Websocket:
 
         # Track when we sent the ping
         if self.heartbeat_enabled:
-            try:
-                self.pending_ping_time = time.time()
-            except AttributeError:
-                try:
-                    self.pending_ping_time = time.ticks_ms() / 1000.0
-                except AttributeError:
-                    self.pending_ping_time = time.time()
+            self.pending_ping_time = time.time()
     
     def check_heartbeat_timeout(self):
         """Check if heartbeat has timed out. Returns True if timeout, False otherwise."""
         if not self.heartbeat_enabled:
             return False
         
-        try:
-            current_time = time.time()
-        except AttributeError:
-            try:
-                current_time = time.ticks_ms() / 1000.0
-            except AttributeError:
-                current_time = time.time()
+        current_time = time.time()
         
         # If we sent a ping and haven't received a pong within timeout
         if self.pending_ping_time is not None:
@@ -276,14 +264,7 @@ class Websocket:
                 if __debug__: LOGGER.debug("Received PONG")
                 # Update heartbeat tracking
                 if self.heartbeat_enabled:
-                    try:
-                        self.last_pong_time = time.time()
-                    except AttributeError:
-                        # MicroPython may use ticks_ms
-                        try:
-                            self.last_pong_time = time.ticks_ms() / 1000.0
-                        except AttributeError:
-                            self.last_pong_time = time.time()
+                    self.last_pong_time = time.time()
                     self.pending_ping_time = None
                 # Ignore this frame, keep waiting for a data frame
                 continue
