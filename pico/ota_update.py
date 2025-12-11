@@ -63,7 +63,7 @@ try:
         ifconfig = nic.ifconfig()
 
         global local_ips
-        local_ips.append(ifconfig[0])
+        local_ips = [ifconfig[0]]
 
 except:
     import requests
@@ -208,7 +208,7 @@ def check_for_updates(home_url):
             local_manifest = json.load(f)
         local_version = local_manifest.get("version")
         needs_update = (new_version != local_version)
-    except FileNotFoundError:
+    except:
         local_version = 'unknown'
         needs_update = True    
 
