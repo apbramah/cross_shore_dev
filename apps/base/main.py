@@ -1,5 +1,4 @@
 from udp_con import *
-from uwebsockets.protocol import ConnectionClosed
 
 import json
 try:
@@ -7,7 +6,8 @@ try:
     import uasyncio as asyncio
     import machine
     import ubinascii
-    
+    from uwebsockets.protocol import ConnectionClosed
+
     # Get the unique ID as bytes
     uid_bytes = machine.unique_id()
 
