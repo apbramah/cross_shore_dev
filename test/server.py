@@ -195,7 +195,7 @@ async def http_handler(request):
 
 async def websocket_upgrade_handler(request):
     """Handle WebSocket upgrade requests"""
-    ws = web.WebSocketResponse()
+    ws = web.WebSocketResponse(heartbeat=2)
     peer = request.transport.get_extra_info("peername")
     ip_address, port = peer[:2]
     await ws.prepare(request)
