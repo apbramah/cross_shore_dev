@@ -218,15 +218,23 @@ def check_for_updates(home_url):
     else:
         print("No update required. Current version:", local_version)
 
+current_nic_setup = None
+
 def check_for_version_update():
     network_configs = registry_get('network_configs', [('dhcp', 'http://192.168.60.91:80')])
+
+    global current_nic_setup
 
     checked = False
     successful_server_url = None
     while not checked:
         for nic_setup, server_url in network_configs:
-            connect_network(nic_setup)
+
+            if current_nic_setup != nic_setup:
+                current_nic_setup = None
+                connect_network(nic_setup)
             print('Connected. Local ips:', local_ips)
+            current_nic_setup = nic_setup
 
             try:
                 check_for_updates(server_url)
