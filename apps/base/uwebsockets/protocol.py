@@ -7,6 +7,10 @@ import ure as re
 import ustruct as struct
 import urandom as random
 import usocket as socket
+try:
+    import utime as time
+except ImportError:
+    import time
 from ucollections import namedtuple
 
 LOGGER = logging.getLogger(__name__)
@@ -72,6 +76,11 @@ class Websocket:
     def __init__(self, sock):
         self.sock = sock
         self.open = True
+        # Heartbeat tracking
+        self.last_pong_time = None
+        self.pending_ping_time = None
+        self.heartbeat_enabled = False
+        self.heartbeat_timeout = 5.0  # seconds
 
     def __enter__(self):
         return self
@@ -168,6 +177,48 @@ class Websocket:
                          for i, b in enumerate(data))
 
         self.sock.write(data)
+    
+    def ping(self, data=b''):
+        """Send a PING frame"""
+        self.write_frame(OP_PING, data)
+        if __debug__: LOGGER.debug("Sent PING")
+
+        # Track when we sent the ping
+        if self.heartbeat_enabled:
+            try:
+                self.pending_ping_time = time.time()
+            except AttributeError:
+                try:
+                    self.pending_ping_time = time.ticks_ms() / 1000.0
+                except AttributeError:
+                    self.pending_ping_time = time.time()
+    
+    def check_heartbeat_timeout(self):
+        """Check if heartbeat has timed out. Returns True if timeout, False otherwise."""
+        if not self.heartbeat_enabled:
+            return False
+        
+        try:
+            current_time = time.time()
+        except AttributeError:
+            try:
+                current_time = time.ticks_ms() / 1000.0
+            except AttributeError:
+                current_time = time.time()
+        
+        # If we sent a ping and haven't received a pong within timeout
+        if self.pending_ping_time is not None:
+            elapsed = current_time - self.pending_ping_time
+            if elapsed > self.heartbeat_timeout:
+                return True
+        
+        # If we never received a pong and we've been waiting too long
+        if self.last_pong_time is None and self.pending_ping_time is not None:
+            elapsed = current_time - self.pending_ping_time
+            if elapsed > self.heartbeat_timeout:
+                return True
+        
+        return False
 
     def recv(self):
         """
@@ -179,11 +230,22 @@ class Websocket:
         frames.
         """
         assert self.open
+        
+        # Check heartbeat timeout before receiving
+        if self.check_heartbeat_timeout():
+            LOGGER.debug("Heartbeat timeout detected")
+            self._close()
+            raise ConnectionClosed("Heartbeat timeout")
 
         while self.open:
             try:
                 fin, opcode, data = self.read_frame()
             except NoDataException:
+                # Check heartbeat timeout when no data available
+                if self.check_heartbeat_timeout():
+                    LOGGER.debug("Heartbeat timeout detected (no data)")
+                    self._close()
+                    raise ConnectionClosed("Heartbeat timeout")
                 return ''
             except ValueError:
                 LOGGER.debug("Failed to read frame. Socket dead.")
@@ -194,19 +256,42 @@ class Websocket:
                 raise NotImplementedError()
 
             if opcode == OP_TEXT:
+                # Check heartbeat before returning data
+                if self.check_heartbeat_timeout():
+                    LOGGER.debug("Heartbeat timeout detected (after frame)")
+                    self._close()
+                    raise ConnectionClosed("Heartbeat timeout")
                 return data.decode('utf-8')
             elif opcode == OP_BYTES:
+                # Check heartbeat before returning data
+                if self.check_heartbeat_timeout():
+                    LOGGER.debug("Heartbeat timeout detected (after frame)")
+                    self._close()
+                    raise ConnectionClosed("Heartbeat timeout")
                 return data
             elif opcode == OP_CLOSE:
                 self._close()
                 return
             elif opcode == OP_PONG:
+                if __debug__: LOGGER.debug("Received PONG")
+                # Update heartbeat tracking
+                if self.heartbeat_enabled:
+                    try:
+                        self.last_pong_time = time.time()
+                    except AttributeError:
+                        # MicroPython may use ticks_ms
+                        try:
+                            self.last_pong_time = time.ticks_ms() / 1000.0
+                        except AttributeError:
+                            self.last_pong_time = time.time()
+                    self.pending_ping_time = None
                 # Ignore this frame, keep waiting for a data frame
                 continue
             elif opcode == OP_PING:
                 # We need to send a pong frame
-                if __debug__: LOGGER.debug("Sending PONG")
+                if __debug__: LOGGER.debug("Received PING")
                 self.write_frame(OP_PONG, data)
+                if __debug__: LOGGER.debug("Sent PONG")
                 # And then wait to receive
                 continue
             elif opcode == OP_CONT:

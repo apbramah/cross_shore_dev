@@ -1,4 +1,5 @@
 from udp_con import *
+from uwebsockets.protocol import ConnectionClosed
 
 import json
 try:
@@ -14,22 +15,75 @@ try:
     uid_hex = ubinascii.hexlify(uid_bytes).decode()
     
     class MicroPythonWebSocket:
-        def __init__(self, websocket):
+        def __init__(self, websocket, heartbeat_interval=30.0, heartbeat_timeout=5.0):
             self.websocket = websocket
+            self.heartbeat_interval = heartbeat_interval
+            self.heartbeat_task = None
+            self.running = True
+            
+            # Enable heartbeat tracking on underlying websocket
+            self.websocket.heartbeat_enabled = True
+            self.websocket.heartbeat_timeout = heartbeat_timeout
+
+        async def _heartbeat_loop(self):
+            """Periodically send PING messages"""
+            while self.running:
+                try:
+                    await asyncio.sleep(self.heartbeat_interval)
+                    if self.running and self.websocket.open:
+                        try:
+                            self.websocket.ping()
+                        except Exception as e:
+                            print(f"Error sending PING: {e}")
+                            break
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    print(f"Error in heartbeat loop: {e}")
+                    break
+
+        def start_heartbeat(self):
+            """Start the heartbeat task"""
+            if self.heartbeat_task is None:
+                self.heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+
+        def stop_heartbeat(self):
+            """Stop the heartbeat task"""
+            self.running = False
+            if self.heartbeat_task:
+                self.heartbeat_task.cancel()
+                try:
+                    # Note: can't await in synchronous method, task will be cleaned up
+                    pass
+                except:
+                    pass
 
         async def recv(self):
             while True:
-                msg = self.websocket.recv()
-                if msg != "":
-                    return msg
-                else:
-                    await asyncio.sleep(0)
+                try:
+                    msg = self.websocket.recv()
+                    if msg != "":
+                        return msg
+                    else:
+                        await asyncio.sleep(0)
+                except ConnectionClosed as e:
+                    # Re-raise ConnectionClosed exceptions (includes heartbeat timeout)
+                    raise
+                except Exception as e:
+                    # Handle other exceptions
+                    if "Heartbeat timeout" in str(e):
+                        raise ConnectionClosed("Heartbeat timeout")
+                    raise
 
         async def send(self, data):
             self.websocket.send(data)
 
         def send_sync(self, data):
             self.websocket.send(data)
+
+        def close(self):
+            self.stop_heartbeat()
+            self.websocket.close()
         
     async def upgrade_http_to_websocket(http_url):
         """Upgrade an HTTP connection to WebSocket"""
@@ -37,7 +91,9 @@ try:
         ws_url = http_to_ws_url(http_url) + '/ws'
         ws = uwebsockets.client.connect(ws_url)
         ws.sock.setblocking(False)
-        return MicroPythonWebSocket(ws)
+        ws_wrapper = MicroPythonWebSocket(ws, heartbeat_interval=4.0, heartbeat_timeout=1.0)
+        ws_wrapper.start_heartbeat()
+        return ws_wrapper
 
 except ImportError:
     MICROPYTHON = False
@@ -116,8 +172,8 @@ def ws_print(*args, **kwargs):
             print_queue.put_nowait(message)
 
 # Override the built-in print function
-original_print = builtins.print
-builtins.print = ws_print
+# original_print = builtins.print
+# builtins.print = ws_print
 
 def get_manifest():
     with open('manifest.json') as f:
@@ -229,6 +285,8 @@ async def websocket_client(ws_connection):
                 print("Error processing message:", e)
 
     except Exception as e:
+        ws.close()
+        ws = None
         print("WebSocket error:", e)
     finally:
         if ws:
