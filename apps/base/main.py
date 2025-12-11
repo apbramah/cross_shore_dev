@@ -284,10 +284,16 @@ async def websocket_client(ws_connection):
             except Exception as e:
                 print("Error processing message:", e)
 
+    except ConnectionClosed as e:
+        ws.close()
+        ws = None
+        print("WebSocket connection closed:", e)
+        raise  # Re-raise to trigger reconnection
     except Exception as e:
         ws.close()
         ws = None
         print("WebSocket error:", e)
+        raise  # Re-raise to trigger reconnection
     finally:
         if ws:
             ws.close()
@@ -295,16 +301,9 @@ async def websocket_client(ws_connection):
 
 async def websocket(server_url):
     """Upgrade the HTTP connection to WebSocket using the provided server_url"""
-    while True:
-        try:
-            print("Upgrading HTTP connection to WebSocket...")
-            ws_connection = await upgrade_http_to_websocket(server_url)
-            
-            await websocket_client(ws_connection)
-        except Exception as e:
-            print("WebSocket connection error:", e)
-        print("Reconnecting in 1 seconds...")
-        await asyncio.sleep(1)
+    print("Upgrading HTTP connection to WebSocket...")
+    ws_connection = await upgrade_http_to_websocket(server_url)
+    await websocket_client(ws_connection)
 
 async def as_main(server_url):
     tasks = [websocket(server_url)]
