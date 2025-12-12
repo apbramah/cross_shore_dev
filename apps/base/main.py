@@ -129,6 +129,7 @@ def ota_trust():
         ota.trust()
 
 ws = None
+current_server_url = None  # Store server URL for UDP discovery
 
 def http_to_ws_url(http_url):
     """Convert HTTP URL to WebSocket URL for upgrading the connection"""
@@ -180,10 +181,12 @@ def get_manifest():
         manifest = json.load(f)
     return manifest
 
-async def websocket_client(ws_connection):
+async def websocket_client(ws_connection, server_url=None):
     """Handle WebSocket client logic with an upgraded connection"""
-    global ws
+    global ws, current_server_url
     ws = ws_connection
+    if server_url:
+        current_server_url = server_url
     try:
         device_name = ota.registry_get('name', 'unknown')
         app_path = ota.registry_get('app_path', 'apps/base')
@@ -225,6 +228,46 @@ async def websocket_client(ws_connection):
                     new_network_configs = my_dict.get("network_configs")
                     if new_network_configs is not None:
                         ota.registry_set('network_configs', new_network_configs)
+                elif my_dict["type"] == "UDP_DISCOVER_REQUEST":
+                    # Handle UDP discovery request - send UDP packet to server
+                    discovery_id = my_dict.get("discovery_id")
+                    server_port = int(my_dict.get("server_port", 8888))
+                    
+                    async def send_discovery_packet():
+                        try:
+                            # Get server IP from current_server_url
+                            if current_server_url:
+                                # Parse server URL (e.g., "http://192.168.60.91:80")
+                                import re
+                                match = re.match(r'https?://([^:/]+)', current_server_url)
+                                if match:
+                                    server_ip = match.group(1)
+                                    
+                                    # Create UDP socket and send discovery packet
+                                    # Format: "DISCOVER:<discovery_id>:<uid>"
+                                    discovery_data = f"DISCOVER:{discovery_id}:{uid_hex}".encode('utf-8')
+                                    
+                                    if MICROPYTHON:
+                                        import usocket as socket
+                                    else:
+                                        import socket
+                                    
+                                    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                                    sock.sendto(discovery_data, (server_ip, server_port))
+                                    sock.close()
+                                    
+                                    print(f"Sent UDP discovery packet to {server_ip}:{server_port} for {discovery_id}")
+                                    
+                                    # Send confirmation back to server
+                                    response = {
+                                        "type": "UDP_DISCOVER_RESPONSE",
+                                        "discovery_id": discovery_id
+                                    }
+                                    await ws.send(json.dumps(response))
+                        except Exception as e:
+                            print(f"Error sending UDP discovery packet: {e}")
+                    
+                    asyncio.create_task(send_discovery_packet())
                 elif my_dict["type"] == "UDP_CONNECTION_REQUEST":
                     # Handle UDP connection request - perform hole-punching
                     peer_uid = my_dict.get("peer_uid")
@@ -303,7 +346,7 @@ async def websocket(server_url):
     """Upgrade the HTTP connection to WebSocket using the provided server_url"""
     print("Upgrading HTTP connection to WebSocket...")
     ws_connection = await upgrade_http_to_websocket(server_url)
-    await websocket_client(ws_connection)
+    await websocket_client(ws_connection, server_url)
 
 async def as_main(server_url):
     tasks = [websocket(server_url)]
