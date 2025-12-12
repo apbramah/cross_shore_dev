@@ -379,6 +379,8 @@ async def perform_udp_hole_punch(peer_ip, peer_port, peer_uid, existing_socket=N
                         success = True
                         print(f"Received response from expected peer reflexive address:", addr)
                         peer_addr = addr
+                else:
+                    # We use a message that isn't a hole-punch or response to imply that the hole-punching is complete
                     break
             except Exception as e:
                 pass
