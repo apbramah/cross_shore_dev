@@ -358,11 +358,15 @@ async def perform_udp_hole_punch(peer_ip, peer_port, peer_uid, existing_socket=N
             # Try to receive a response
             try:
                 data, addr = sock.recvfrom(1024)
-                print(f"Received response from {addr}: {data.decode('utf-8')}")
                 if addr == peer_addr:
                     print(f"Received response from {addr}: {data.decode('utf-8')}")
                     success = True
                     break
+                else:
+                    print(f"Received response from {addr} but it's not the peer : {data.decode('utf-8')}")
+                    test_data = f"HOLE_PUNCH_RESPONSE{i}".encode('utf-8')
+                    sock.sendto(test_data, addr)
+                    print(f"Sent hole-punch packet {i} to:", addr)
             except Exception as e:
                 pass
         
