@@ -15,6 +15,8 @@ from ucollections import namedtuple
 
 LOGGER = logging.getLogger(__name__)
 
+DEBUG = False
+
 # Opcodes
 OP_CONT = const(0x0)
 OP_TEXT = const(0x1)
@@ -125,7 +127,7 @@ class Websocket:
             data = self.sock.read(length)
         except MemoryError:
             # We can't receive this many bytes, close the socket
-            if __debug__: LOGGER.debug("Frame of length %s too big. Closing",
+            if DEBUG: LOGGER.debug("Frame of length %s too big. Closing",
                                        length)
             self.close(code=CLOSE_TOO_BIG)
             return True, OP_CLOSE, None
@@ -181,7 +183,7 @@ class Websocket:
     def ping(self, data=b''):
         """Send a PING frame"""
         self.write_frame(OP_PING, data)
-        if __debug__: LOGGER.debug("Sent PING")
+        if DEBUG: LOGGER.debug("Sent PING")
 
         # Track when we sent the ping
         if self.heartbeat_enabled:
@@ -261,7 +263,7 @@ class Websocket:
                 self._close()
                 return
             elif opcode == OP_PONG:
-                if __debug__: LOGGER.debug("Received PONG")
+                if DEBUG: LOGGER.debug("Received PONG")
                 # Update heartbeat tracking
                 if self.heartbeat_enabled:
                     self.last_pong_time = time.time()
@@ -270,9 +272,9 @@ class Websocket:
                 continue
             elif opcode == OP_PING:
                 # We need to send a pong frame
-                if __debug__: LOGGER.debug("Received PING")
+                if DEBUG: LOGGER.debug("Received PING")
                 self.write_frame(OP_PONG, data)
-                if __debug__: LOGGER.debug("Sent PONG")
+                if DEBUG: LOGGER.debug("Sent PONG")
                 # And then wait to receive
                 continue
             elif opcode == OP_CONT:
@@ -307,6 +309,6 @@ class Websocket:
         self._close()
 
     def _close(self):
-        if __debug__: LOGGER.debug("Connection closed")
+        if DEBUG: LOGGER.debug("Connection closed")
         self.open = False
         self.sock.close()
