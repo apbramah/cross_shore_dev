@@ -349,7 +349,7 @@ async def perform_udp_hole_punch(peer_ip, peer_port, peer_uid, existing_socket=N
         # Send multiple packets to punch through NAT
         success = False
         for i in range(100):
-            test_data = f"HOLE_PUNCH_{i}".encode('utf-8')
+            test_data = f"HOLE_PUNCH:{peer_ip}:{peer_port}".encode('utf-8')
             sock.sendto(test_data, peer_addr)
             print(f"Sent hole-punch packet {i} to {peer_ip}:{peer_port}")
             
@@ -358,15 +358,22 @@ async def perform_udp_hole_punch(peer_ip, peer_port, peer_uid, existing_socket=N
             # Try to receive a response
             try:
                 data, addr = sock.recvfrom(1024)
-                if addr == peer_addr:
-                    print(f"Received response from {addr}: {data.decode('utf-8')}")
-                    test_data = f"HOLE_PUNCH_RESPONSE:{addr[0]}:{addr[1]}".encode('utf-8')
-                    sock.sendto(test_data, peer_addr)
-                else:
-                    print(f"Received response from {addr} but it's not the peer : {data.decode('utf-8')}")
-                    test_data = f"HOLE_PUNCH_RESPONSE:{addr[0]}:{addr[1]}".encode('utf-8')
-                    sock.sendto(test_data, addr)
-                    print(f"Sent hole-punch packet {i} to:", addr)
+                response = data.decode('utf-8').split(':')
+                if len(response) == 3:
+                    print(f"Received message from {addr}: {data.decode('utf-8')}")
+                    if response[0] == 'HOLE_PUNCH':
+                        if addr == peer_addr:
+                            print(f"Received punch from expected server reflexive address:", addr)
+                            test_data = f"HOLE_PUNCH_RESPONSE:{addr[0]}:{addr[1]}".encode('utf-8')
+                            sock.sendto(test_data, peer_addr)
+                        else:
+                            print(f"Received punch from unexpected address: {addr}")
+                            test_data = f"HOLE_PUNCH_RESPONSE:{addr[0]}:{addr[1]}".encode('utf-8')
+                            sock.sendto(test_data, addr)
+                    elif response[0] == 'HOLE_PUNCH_RESPONSE':
+                        success = True
+                        peer_addr = (response[1], int(response[2]))
+                        break
             except Exception as e:
                 pass
         
