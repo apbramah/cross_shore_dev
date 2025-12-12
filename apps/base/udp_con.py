@@ -355,25 +355,31 @@ async def perform_udp_hole_punch(peer_ip, peer_port, peer_uid, existing_socket=N
             
             await asyncio.sleep(0.001)
             
+            peer_prflx_addr = None
             # Try to receive a response
             try:
                 data, addr = sock.recvfrom(1024)
-                response = data.decode('utf-8').split(':')
-                if len(response) == 3:
-                    print(f"Received message from {addr}: {data.decode('utf-8')}")
-                    if response[0] == 'HOLE_PUNCH':
-                        if addr == peer_addr:
-                            print(f"Received punch from expected server reflexive address:", addr)
-                            test_data = f"HOLE_PUNCH_RESPONSE:{addr[0]}:{addr[1]}".encode('utf-8')
-                            sock.sendto(test_data, peer_addr)
-                        else:
-                            print(f"Received punch from unexpected address: {addr}")
-                            test_data = f"HOLE_PUNCH_RESPONSE:{addr[0]}:{addr[1]}".encode('utf-8')
-                            sock.sendto(test_data, addr)
-                    elif response[0] == 'HOLE_PUNCH_RESPONSE':
+                response = data.decode('utf-8')
+                print(f"Received message from {addr}: {response}")
+                if response == 'HOLE_PUNCH':
+                    if addr == peer_addr:
+                        print(f"Received punch from expected server reflexive address:", addr)
+                        test_data = f"HOLE_PUNCH_RESPONSE".encode('utf-8')
+                        sock.sendto(test_data, peer_addr)
+                    else:
+                        print(f"Received punch from unexpected address: {addr}")
+                        test_data = f"HOLE_PUNCH_RESPONSE".encode('utf-8')
+                        sock.sendto(test_data, addr)
+                        peer_prflx_addr = addr
+                elif response == 'HOLE_PUNCH_RESPONSE':
+                    if addr == peer_addr:
                         success = True
-                        peer_addr = (response[1], int(response[2]))
-                        break
+                        print(f"Received response from expected server reflexive address:", addr)
+                    elif addr == peer_prflx_addr:
+                        success = True
+                        print(f"Received response from expected peer reflexive address:", addr)
+                        peer_addr = addr
+                    break
             except Exception as e:
                 pass
         
