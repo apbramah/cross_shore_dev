@@ -25,6 +25,7 @@ class UDPConnection:
     def __init__(self, sock, peer_addr, peer_uid):
         self.sock = sock
         self.peer_addr = peer_addr  # (ip, port)
+        print(f"Peer address: {peer_addr}")
         self.peer_uid = peer_uid
         self.channels = {}  # channel_id -> DataChannel
         self.next_channel_id = 1
