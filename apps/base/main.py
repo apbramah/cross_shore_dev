@@ -98,7 +98,7 @@ try:
 except ImportError:
     MICROPYTHON = False
     import asyncio
-    uid_hex = 'andy_is_unique'
+    uid_hex = 'andyunique'
 
     class CPythonWebSocket:
         def __init__(self, websocket):
@@ -130,6 +130,7 @@ def ota_trust():
 
 ws = None
 current_server_url = None  # Store server URL for UDP discovery
+pending_udp_sockets = {}  # Store sockets between discovery and hole-punching: discovery_id -> socket
 
 def http_to_ws_url(http_url):
     """Convert HTTP URL to WebSocket URL for upgrading the connection"""
@@ -243,7 +244,7 @@ async def websocket_client(ws_connection, server_url=None):
                                 if match:
                                     server_ip = match.group(1)
                                     
-                                    # Create UDP socket and send discovery packet
+                                    # Create UDP socket (DO NOT CLOSE - will be reused for hole-punching)
                                     # Format: "DISCOVER:<discovery_id>:<uid>"
                                     discovery_data = f"DISCOVER:{discovery_id}:{uid_hex}".encode('utf-8')
                                     
@@ -252,11 +253,20 @@ async def websocket_client(ws_connection, server_url=None):
                                     else:
                                         import socket
                                     
+                                    # Create and bind socket (same port that will be used for hole-punching)
                                     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                                    sock.sendto(discovery_data, (server_ip, server_port))
-                                    sock.close()
+                                    try:
+                                        sock.bind(('0.0.0.0', 8888))  # Bind to same port as hole-punching
+                                    except OSError:
+                                        sock.bind(('0.0.0.0', 0))  # Use any available port if 8888 is taken
                                     
-                                    print(f"Sent UDP discovery packet to {server_ip}:{server_port} for {discovery_id}")
+                                    # Send discovery packet
+                                    sock.sendto(discovery_data, (server_ip, server_port))
+                                    
+                                    # Store socket for later use in hole-punching (keyed by discovery_id)
+                                    pending_udp_sockets[discovery_id] = sock
+                                    
+                                    print(f"Sent UDP discovery packet to {server_ip}:{server_port} for {discovery_id}, socket stored")
                                     
                                     # Send confirmation back to server
                                     response = {
@@ -278,8 +288,29 @@ async def websocket_client(ws_connection, server_url=None):
                     
                     # Perform hole-punching in a task so it doesn't block
                     async def do_hole_punch():
+                        # Find the socket that was created during discovery
+                        # Parse discovery_id format: "from_uid_to_uid" - find which one matches this peer_uid
+                        sock = None
+                        discovery_id_to_remove = None
+                        
+                        for discovery_id, stored_sock in pending_udp_sockets.items():
+                            # discovery_id format is "from_uid_to_uid"
+                            parts = discovery_id.split('_', 1)
+                            if len(parts) == 2:
+                                from_uid = parts[0]
+                                to_uid = parts[1]
+                                # Check if peer_uid matches either side (and we're the other side)
+                                if (from_uid == peer_uid and to_uid == uid_hex) or (to_uid == peer_uid and from_uid == uid_hex):
+                                    sock = stored_sock
+                                    discovery_id_to_remove = discovery_id
+                                    break
+                        
+                        if discovery_id_to_remove:
+                            del pending_udp_sockets[discovery_id_to_remove]
+                            print(f"Retrieved stored socket for {peer_uid}")
+                        
                         connection, success, message = await perform_udp_hole_punch(
-                            peer_ip, peer_port, peer_uid
+                            peer_ip, peer_port, peer_uid, existing_socket=sock
                         )
                         
                         if success and connection:
