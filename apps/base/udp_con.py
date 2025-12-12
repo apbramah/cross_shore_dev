@@ -356,6 +356,7 @@ async def perform_udp_hole_punch(peer_ip, peer_port, peer_uid, existing_socket=N
             await asyncio.sleep(0.001)
             
             peer_prflx_addr = None
+            addr_to_use = None
             # Try to receive a response
             try:
                 data, addr = sock.recvfrom(1024)
@@ -374,9 +375,11 @@ async def perform_udp_hole_punch(peer_ip, peer_port, peer_uid, existing_socket=N
                 elif response == 'HOLE_PUNCH_RESPONSE':
                     if addr == peer_addr:
                         success = True
+                        addr_to_use = addr
                         print(f"Received response from expected server reflexive address:", addr)
                     elif addr == peer_prflx_addr:
                         success = True
+                        addr_to_use = addr
                         print(f"Received response from expected peer reflexive address:", addr)
                         peer_addr = addr
                 else:
@@ -387,7 +390,7 @@ async def perform_udp_hole_punch(peer_ip, peer_port, peer_uid, existing_socket=N
         
         if success:
             # Create UDPConnection object
-            connection = UDPConnection(sock, peer_addr, peer_uid)
+            connection = UDPConnection(sock, addr_to_use, peer_uid)
             udp_connections[peer_uid] = connection
             await connection.start()
             
