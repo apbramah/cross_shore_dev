@@ -353,7 +353,7 @@ async def perform_udp_hole_punch(peer_ip, peer_port, peer_uid, existing_socket=N
             sock.sendto(test_data, peer_addr)
             print(f"Sent hole-punch packet {i} to {peer_ip}:{peer_port}")
             
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.001)
             
             # Try to receive a response
             try:
