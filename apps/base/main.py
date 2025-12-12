@@ -322,9 +322,11 @@ async def websocket_client(ws_connection, server_url=None):
                             
                             # Set up message handlers (optional)
                             async def on_reliable_message(data):
-                                print(f"Reliable channel received: {data}")
+                                pass
+                                # print(f"Reliable channel received: {data}")
                             async def on_unreliable_message(data):
-                                print(f"Unreliable channel received: {data}")
+                                pass
+                                # print(f"Unreliable channel received: {data}")
                             
                             reliable_channel.on_message = on_reliable_message
                             unreliable_channel.on_message = on_unreliable_message
@@ -333,7 +335,7 @@ async def websocket_client(ws_connection, server_url=None):
 
                             async def occasional_send(channel, my_string):
                                 while True:
-                                    print('sending', my_string)
+                                    # print('sending', my_string)
                                     await channel.send(my_string.encode('utf-8'))
                                     await asyncio.sleep(1)
 
