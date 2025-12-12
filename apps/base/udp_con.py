@@ -324,7 +324,7 @@ class ReliableDataChannel(DataChannel):
             except asyncio.CancelledError:
                 pass
 
-async def perform_udp_hole_punch(peer_ip, peer_port, peer_uid, local_port=8889):
+async def perform_udp_hole_punch(peer_ip, peer_port, peer_uid, local_port=8888):
     """
     Perform UDP hole-punching to establish a connection with a peer.
     Returns: (UDPConnection or None, success: bool, message: str)
