@@ -349,7 +349,7 @@ async def perform_udp_hole_punch(peer_ip, peer_port, peer_uid, existing_socket=N
         # Send multiple packets to punch through NAT
         success = False
         for i in range(100):
-            test_data = f"HOLE_PUNCH:{peer_ip}:{peer_port}".encode('utf-8')
+            test_data = f"HOLE_PUNCH".encode('utf-8')
             sock.sendto(test_data, peer_addr)
             print(f"Sent hole-punch packet {i} to {peer_ip}:{peer_port}")
             
