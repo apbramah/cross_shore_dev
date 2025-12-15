@@ -477,6 +477,9 @@ async def websocket_client(ws_connection, server_url=None):
                             print(f"Candidates: {candidates}")
                             print(f"Answer candidates: {answer_candidates}")
 
+                            print(f"Pending UDP connections: {pending_udp_connections}")
+                            print(f"From uid: {from_uid}")
+                            print(f"Sock: {sock}")
                             global pending_udp_connections
                             # Store socket and candidates for candidate pair evaluation
                             pending_udp_connections[from_uid] = {
