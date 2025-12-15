@@ -364,13 +364,12 @@ async def perform_udp_hole_punch(peer_ip, peer_port, peer_uid, existing_socket=N
                 response = data.decode('utf-8')
                 print(f"Received message from {addr}: {response}")
                 test_data = f"HOLE_PUNCH_RESPONSE".encode('utf-8')
+                sock.sendto(test_data, addr)
                 if response == 'HOLE_PUNCH':
                     if addr == peer_addr:
                         print(f"Received punch from expected server reflexive address:", addr)
-                        sock.sendto(test_data, peer_addr)
                     else:
                         print(f"Received punch from unexpected address: {addr}")
-                        sock.sendto(test_data, addr)
                         peer_prflx_addr = addr
                 elif response == 'HOLE_PUNCH_RESPONSE':
                     if addr == peer_addr:
