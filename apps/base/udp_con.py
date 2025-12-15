@@ -109,6 +109,8 @@ class UDPConnection:
                 
                 # Decode packet
                 result = self._decode_packet(data)
+
+                print('result', result)
                 if result is None:
                     continue
                 
@@ -223,7 +225,7 @@ class ReliableDataChannel(DataChannel):
     def __init__(self, connection, channel_id):
         super().__init__(connection, channel_id)
         # Use fixed-size arrays for MicroPython compatibility
-        self.window_size = 32  # Power of 2 for efficient modulo
+        self.window_size = 8  # Power of 2 for efficient modulo
         self.pending_packets = [None] * self.window_size  # Array of (data, timestamp, retransmit_count) or None
         self.pending_window_start = None  # First seq_num in pending window
         self.received_packets = [None] * self.window_size  # Array of payload or None
