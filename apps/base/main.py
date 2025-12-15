@@ -452,7 +452,7 @@ async def websocket_client(ws_connection, server_url=None):
                     candidates = my_dict.get("candidates", [])
                     print(f"OFFER received from {from_uid} with {len(candidates)} candidates")
                     
-                    async def handle_offer():
+                    async def handle_offer(from_uid, candidates):
                         try:
                             if MICROPYTHON:
                                 import usocket as socket
@@ -586,7 +586,7 @@ async def websocket_client(ws_connection, server_url=None):
                                 }
                                 await ws.send(json.dumps(result_msg))
                     
-                    asyncio.create_task(handle_offer())
+                    asyncio.create_task(handle_offer(from_uid, candidates))
                     
                 elif my_dict["type"] == "ANSWER":
                     # from_head receives this - establish connection (server side)
