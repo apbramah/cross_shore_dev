@@ -564,9 +564,11 @@ async def websocket_client(ws_connection, server_url=None):
                                     await asyncio.sleep(1)
                             
                             print("Starting occasional_send (client)")
-                            asyncio.create_task(occasional_send(unreliable_channel, uid_hex + 'unrel'))
-                            asyncio.create_task(occasional_send(reliable_channel, uid_hex + 'rel'))
+                            task1 = asyncio.create_task(occasional_send(unreliable_channel, uid_hex + 'unrel'))
+                            task2 = asyncio.create_task(occasional_send(reliable_channel, uid_hex + 'rel'))
                             
+                            await asyncio.sleep(0)
+
                             # Clean up pending connection
                             del pending_udp_connections[from_uid]
                             
@@ -675,9 +677,11 @@ async def websocket_client(ws_connection, server_url=None):
                                     await asyncio.sleep(1)
                             
                             print("Starting occasional_send (server)")
-                            asyncio.create_task(occasional_send(unreliable_channel, uid_hex + 'unrel'))
-                            asyncio.create_task(occasional_send(reliable_channel, uid_hex + 'rel'))
+                            task1 = asyncio.create_task(occasional_send(unreliable_channel, uid_hex + 'unrel'))
+                            task2 = asyncio.create_task(occasional_send(reliable_channel, uid_hex + 'rel'))
                             
+                            await asyncio.sleep(0)
+
                             # Clean up pending connection
                             del pending_udp_connections[from_uid]
                             
