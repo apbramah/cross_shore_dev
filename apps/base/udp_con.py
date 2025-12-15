@@ -11,8 +11,9 @@ except ImportError:
     MICROPYTHON = False
     
 # Packet format (binary):
-# [flags:1 byte][channel_id:2 bytes][seq_num:4 bytes][data:variable]
+# [DATA_MAGIC:4 bytes][flags:1 byte][channel_id:2 bytes][seq_num:4 bytes][data:variable]
 # Flags: bit 0 = ACK, bits 1-7 reserved
+DATA_MAGIC = b'UDPD'  # Magic header to identify valid packets
 FLAG_ACK = 0x01
 
 udp_connections = {}  # Track UDP connections: peer_uid -> UDPConnection
@@ -52,15 +53,22 @@ class UDPConnection:
         """Encode a packet for transmission"""
         # Pack: flags (1 byte), channel_id (2 bytes), seq_num (4 bytes), data
         header = struct.pack('!BHI', flags, channel_id, seq_num)
-        return header + data
+        return DATA_MAGIC + header + data
     
     def _decode_packet(self, packet):
         """Decode a received packet"""
-        if len(packet) < 7:  # Minimum header size
+        # Check for DATA_MAGIC header
+        if len(packet) < len(DATA_MAGIC) + 7:  # Minimum size: magic + header
             return None
         
-        flags, channel_id, seq_num = struct.unpack('!BHI', packet[:7])
-        data = packet[7:]
+        # Verify magic header
+        if packet[:len(DATA_MAGIC)] != DATA_MAGIC:
+            return None
+        
+        # Strip magic header and decode
+        payload = packet[len(DATA_MAGIC):]
+        flags, channel_id, seq_num = struct.unpack('!BHI', payload[:7])
+        data = payload[7:]
         return flags, channel_id, seq_num, data
     
     def _send_raw(self, packet):
