@@ -119,13 +119,13 @@ async def websocket_handler(ws, ip_address, port):
                             print(f"to_head {to_uid} not found for OFFER message")
                     elif msg_data["type"] == "ANSWER":
                         # Forward ANSWER message from to_head to from_head
-                        from_uid = msg_data.get("from_uid")
-                        from_head = uid_to_head.get(from_uid)
-                        if from_head:
-                            await from_head.send_str(message)
-                            print(f"Forwarded ANSWER message to from_head {from_uid}")
+                        to_uid = msg_data.get("to_uid")
+                        to_head = uid_to_head.get(to_uid)
+                        if to_head:
+                            await to_head.send_str(message)
+                            print(f"Forwarded ANSWER message to to_head {to_uid}")
                         else:
-                            print(f"from_head {from_uid} not found for ANSWER message")
+                            print(f"to_head {to_uid} not found for ANSWER message")
                     for ctrl in controllers:
                         print("Server: Forwarding", message, "to browser")
                         await ctrl.send_str(message)
