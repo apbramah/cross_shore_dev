@@ -376,10 +376,10 @@ async def perform_udp_hole_punch(peer_ip, peer_port, peer_uid, existing_socket=N
                         success = True
                         addr_to_use = addr
                         print(f"Received response from expected server reflexive address:", addr_to_use)
-                    elif addr == peer_prflx_addr:
+                    else:
                         success = True
                         addr_to_use = addr
-                        print(f"Received response from expected peer reflexive address:", addr_to_use)
+                        print(f"Received response from unexpected peer reflexive address:", addr_to_use)
             except Exception as e:
                 pass
         
