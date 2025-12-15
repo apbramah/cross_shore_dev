@@ -186,11 +186,11 @@ def get_manifest():
         manifest = json.load(f)
     return manifest
 
-async def evaluate_candidate_pairs(sock, local_candidates, remote_candidates):
+async def evaluate_candidate_pairs(sock, local_candidates, remote_candidates, peer_uid):
     """
     Evaluate candidate pairs using ICE-like connectivity checks.
-    Returns: (successful_candidate_pair, peer_addr) or (None, None) on failure
-    A candidate pair is (local_candidate, remote_candidate)
+    If successful, creates and returns a fully-formed UDPConnection with reliable and unreliable channels.
+    Returns: UDPConnection instance or None on failure
     """
     if MICROPYTHON:
         import usocket as socket_module
@@ -354,13 +354,39 @@ async def evaluate_candidate_pairs(sock, local_candidates, remote_candidates):
     except:
         pass
     
-    if successful_pair:
+    if successful_pair and peer_addr:
         print(f"Successful candidate pair found: {successful_pair[0]} <-> {successful_pair[1]}")
         print(f"Using peer address: {peer_addr}")
-        return successful_pair, peer_addr
+        
+        # Create fully-formed UDPConnection
+        connection = UDPConnection(sock, peer_addr, peer_uid)
+        await connection.start()
+        
+        # Create reliable channel
+        reliable_channel = connection.create_channel('reliable')
+        await reliable_channel.start()
+        
+        # Create unreliable channel
+        unreliable_channel = connection.create_channel('unreliable')
+        
+        # Store channel references as attributes for easy access
+        connection.reliable_channel = reliable_channel
+        connection.unreliable_channel = unreliable_channel
+        
+        # Set up default message handlers
+        async def on_reliable_message(data):
+            print(f"Reliable channel received: {data}")
+        async def on_unreliable_message(data):
+            print(f"Unreliable channel received: {data}")
+        
+        reliable_channel.on_message = on_reliable_message
+        unreliable_channel.on_message = on_unreliable_message
+        
+        print(f"Created UDP connection with channels for {peer_uid}")
+        return connection
     else:
         print("No successful candidate pair found")
-        return None, None
+        return None
 
 async def websocket_client(ws_connection, server_url=None):
     """Handle WebSocket client logic with an upgraded connection"""
@@ -516,11 +542,11 @@ async def websocket_client(ws_connection, server_url=None):
                                 return
                             
                             print(f"Client: Evaluating candidate pairs for connection to {from_uid}")
-                            successful_pair, peer_addr = await evaluate_candidate_pairs(
-                                sock, answer_candidates, candidates
+                            connection = await evaluate_candidate_pairs(
+                                sock, answer_candidates, candidates, from_uid
                             )
                             
-                            if not successful_pair or not peer_addr:
+                            if connection is None:
                                 print("Client: Failed to establish connection via candidate pair evaluation")
                                 del pending_udp_connections[from_uid]
                                 result_msg = {
@@ -533,29 +559,14 @@ async def websocket_client(ws_connection, server_url=None):
                                 await ws.send(json.dumps(result_msg))
                                 return
                             
-                            print(f"Client: Successful candidate pair found, establishing connection to {peer_addr}")
+                            print(f"Client: Connection established successfully")
                             
-                            # Create UDPConnection (client side) using successful pair
-                            connection = UDPConnection(sock, peer_addr, from_uid)
+                            # Store the connection
                             udp_connections[from_uid] = connection
-                            await connection.start()
                             
-                            # Create channels
-                            reliable_channel = connection.create_channel('reliable')
-                            await reliable_channel.start()
-                            
-                            unreliable_channel = connection.create_channel('unreliable')
-                            
-                            # Set up message handlers
-                            async def on_reliable_message(data):
-                                print(f"Reliable channel received: {data}")
-                            async def on_unreliable_message(data):
-                                print(f"Unreliable channel received: {data}")
-                            
-                            reliable_channel.on_message = on_reliable_message
-                            unreliable_channel.on_message = on_unreliable_message
-                            
-                            print(f"Created UDP connection with channels for {from_uid} (client side)")
+                            # Access channels from connection
+                            reliable_channel = connection.reliable_channel
+                            unreliable_channel = connection.unreliable_channel
                             
                             async def occasional_send(channel, my_string):
                                 while True:
@@ -629,11 +640,11 @@ async def websocket_client(ws_connection, server_url=None):
                                 return
                             
                             print(f"Server: Evaluating candidate pairs for connection to {from_uid}")
-                            successful_pair, peer_addr = await evaluate_candidate_pairs(
-                                sock, local_candidates, candidates
+                            connection = await evaluate_candidate_pairs(
+                                sock, local_candidates, candidates, from_uid
                             )
                             
-                            if not successful_pair or not peer_addr:
+                            if connection is None:
                                 print("Server: Failed to establish connection via candidate pair evaluation")
                                 del pending_udp_connections[from_uid]
                                 result_msg = {
@@ -646,29 +657,14 @@ async def websocket_client(ws_connection, server_url=None):
                                 await ws.send(json.dumps(result_msg))
                                 return
                             
-                            print(f"Server: Successful candidate pair found, establishing connection to {peer_addr}")
+                            print(f"Server: Connection established successfully")
                             
-                            # Create UDPConnection (server side) using successful pair
-                            connection = UDPConnection(sock, peer_addr, from_uid)
+                            # Store the connection
                             udp_connections[from_uid] = connection
-                            await connection.start()
                             
-                            # Create channels
-                            reliable_channel = connection.create_channel('reliable')
-                            await reliable_channel.start()
-                            
-                            unreliable_channel = connection.create_channel('unreliable')
-                            
-                            # Set up message handlers
-                            async def on_reliable_message(data):
-                                print(f"Reliable channel received: {data}")
-                            async def on_unreliable_message(data):
-                                print(f"Unreliable channel received: {data}")
-                            
-                            reliable_channel.on_message = on_reliable_message
-                            unreliable_channel.on_message = on_unreliable_message
-                            
-                            print(f"Created UDP connection with channels for {from_uid} (server side)")
+                            # Access channels from connection
+                            reliable_channel = connection.reliable_channel
+                            unreliable_channel = connection.unreliable_channel
                             
                             async def occasional_send(channel, my_string):
                                 while True:
