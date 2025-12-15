@@ -465,6 +465,7 @@ async def websocket_client(ws_connection, server_url=None):
                             
                             # Gather host candidates from local_ips
                             local_ips = ota.get_local_ips()
+                            print(f"Local IPs: {local_ips}")
                             answer_candidates = []
                             for ip in local_ips:
                                 answer_candidates.append({
@@ -473,6 +474,9 @@ async def websocket_client(ws_connection, server_url=None):
                                     "port": 8888
                                 })
                             
+                            print(f"Candidates: {candidates}")
+                            print(f"Answer candidates: {answer_candidates}")
+
                             # Store socket and candidates for candidate pair evaluation
                             pending_udp_connections[from_uid] = {
                                 "socket": sock,
@@ -481,6 +485,8 @@ async def websocket_client(ws_connection, server_url=None):
                                 "remote_candidates": candidates
                             }
                             
+                            print(f"Pending UDP connections: {pending_udp_connections}")
+
                             # Send ANSWER message via WebSocket
                             answer_msg = {
                                 "type": "ANSWER",
@@ -488,6 +494,7 @@ async def websocket_client(ws_connection, server_url=None):
                                 "to_uid": from_uid,
                                 "candidates": answer_candidates
                             }
+                            print(f"Answer message: {answer_msg}")
                             await ws.send(json.dumps(answer_msg))
                             print(f"Sent ANSWER to {from_uid} with {len(answer_candidates)} candidates")
                             
