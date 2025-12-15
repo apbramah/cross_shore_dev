@@ -412,14 +412,7 @@ async def websocket_client(ws_connection, server_url=None):
                             
                             # Create and bind UDP socket (from_head acts as server)
                             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                            try:
-                                sock.bind(('0.0.0.0', 8888))
-                            except OSError:
-                                sock.bind(('0.0.0.0', 0))
-                            
-                            # Get the actual bound port
-                            bound_addr = sock.getsockname()
-                            bound_port = bound_addr[1]
+                            sock.bind(('0.0.0.0', 8888))
                             
                             # Gather host candidates from local_ips
                             local_ips = ota.get_local_ips()
@@ -428,7 +421,7 @@ async def websocket_client(ws_connection, server_url=None):
                                 candidates.append({
                                     "type": "host",
                                     "address": ip,
-                                    "port": bound_port
+                                    "port": 8888
                                 })
                             
                             # Store socket and local candidates for later use when ANSWER arrives
@@ -468,14 +461,7 @@ async def websocket_client(ws_connection, server_url=None):
                             
                             # Create and bind UDP socket (to_head acts as client)
                             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                            try:
-                                sock.bind(('0.0.0.0', 8888))
-                            except OSError:
-                                sock.bind(('0.0.0.0', 0))
-                            
-                            # Get the actual bound port
-                            bound_addr = sock.getsockname()
-                            bound_port = bound_addr[1]
+                            sock.bind(('0.0.0.0', 8888))
                             
                             # Gather host candidates from local_ips
                             local_ips = ota.get_local_ips()
@@ -484,7 +470,7 @@ async def websocket_client(ws_connection, server_url=None):
                                 answer_candidates.append({
                                     "type": "host",
                                     "address": ip,
-                                    "port": bound_port
+                                    "port": 8888
                                 })
                             
                             # Store socket and candidates for candidate pair evaluation
