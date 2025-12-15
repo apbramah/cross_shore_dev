@@ -217,7 +217,7 @@ async def evaluate_candidate_pairs(sock, local_candidates, remote_candidates):
     max_evaluation_rounds = 10  # Prevent infinite loops
     round_num = 0
     
-    while round_num < max_evaluation_rounds and not successful_pair:
+    while round_num < max_evaluation_rounds:
         round_num += 1
         print(f"Candidate pair evaluation round {round_num}")
         
@@ -258,7 +258,7 @@ async def evaluate_candidate_pairs(sock, local_candidates, remote_candidates):
         check_interval = 0.05  # Check every 50ms
         start_time = time_module.time()
         
-        while (time_module.time() - start_time) < timeout_duration and not successful_pair:
+        while (time_module.time() - start_time) < timeout_duration:
             try:
                 if MICROPYTHON:
                     # MicroPython: use timeout-based approach (socket already non-blocking)
