@@ -204,6 +204,8 @@ async def evaluate_candidate_pairs(sock, local_candidates, remote_candidates, pe
     successful_pair = None
     peer_addr = None
     response_addresses = set()  # Track addresses we've responded to (keep responding to these)
+    early_data_packet = None  # Store DATA_MAGIC packet if received early
+    early_data_addr = None  # Store address of early DATA_MAGIC packet
     
     # Remember original socket blocking state
     original_blocking = sock.getblocking() if hasattr(sock, 'getblocking') else True
@@ -216,8 +218,9 @@ async def evaluate_candidate_pairs(sock, local_candidates, remote_candidates, pe
     
     max_evaluation_rounds = 10  # Evaluate all pairs for this many rounds
     round_num = 0
+    early_exit = False  # Flag to exit early when DATA_MAGIC is received
     
-    while round_num < max_evaluation_rounds:
+    while round_num < max_evaluation_rounds and not early_exit:
         round_num += 1
         print(f"Candidate pair evaluation round {round_num}")
         
@@ -292,6 +295,23 @@ async def evaluate_candidate_pairs(sock, local_candidates, remote_candidates, pe
                     except asyncio.TimeoutError:
                         continue
                 
+                # Check if this is a DATA_MAGIC packet - if so, connection is established!
+                if data.startswith(DATA_MAGIC):
+                    print(f"Received DATA_MAGIC packet from {addr}, connection established!")
+                    # Store the packet to process later after creating the connection
+                    early_data_packet = data
+                    early_data_addr = addr
+                    # Determine peer_addr - use the address the packet came from
+                    peer_addr = addr
+                    # Try to find the matching candidate pair if possible
+                    for check_addr, (local_cand, remote_cand) in checks_sent.items():
+                        if addr == check_addr:
+                            successful_pair = (local_cand, remote_cand)
+                            break
+                    # Exit evaluation loop early - connection is established
+                    early_exit = True
+                    break
+                
                 # Check if this is a response to one of our connectivity checks
                 if data.startswith(STUN_RESPONSE_MAGIC) or data.startswith(STUN_CHECK_MAGIC):
                     # This is a connectivity check response or check from peer
@@ -354,8 +374,12 @@ async def evaluate_candidate_pairs(sock, local_candidates, remote_candidates, pe
     except:
         pass
     
-    if successful_pair and peer_addr:
-        print(f"Successful candidate pair found: {successful_pair[0]} <-> {successful_pair[1]}")
+    # Create connection if we have peer_addr (either from successful pair or early DATA_MAGIC)
+    if peer_addr:
+        if successful_pair:
+            print(f"Successful candidate pair found: {successful_pair[0]} <-> {successful_pair[1]}")
+        elif early_data_packet:
+            print(f"Connection established via early DATA_MAGIC packet from {peer_addr}")
         print(f"Using peer address: {peer_addr}")
         
         # Create fully-formed UDPConnection
@@ -381,6 +405,11 @@ async def evaluate_candidate_pairs(sock, local_candidates, remote_candidates, pe
         
         reliable_channel.on_message = on_reliable_message
         unreliable_channel.on_message = on_unreliable_message
+        
+        # Process early DATA_MAGIC packet if we received one
+        if early_data_packet and early_data_addr:
+            print(f"Processing early DATA_MAGIC packet received during evaluation")
+            await connection.process_packet(early_data_packet, early_data_addr)
         
         print(f"Created UDP connection with channels for {peer_uid}")
         return connection

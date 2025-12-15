@@ -133,6 +133,30 @@ class UDPConnection:
                 print(f"Error in receiver loop: {e}")
                 await asyncio.sleep(0.1)
     
+    async def process_packet(self, data, addr):
+        """
+        Process a packet that was already received (e.g., during candidate evaluation).
+        Verifies the packet is from the expected peer and routes it to the appropriate channel.
+        """
+        # Verify packet is from expected peer
+        if addr != self.peer_addr:
+            return False
+        
+        # Decode packet
+        result = self._decode_packet(data)
+        if result is None:
+            return False
+        
+        flags, channel_id, seq_num, payload = result
+        
+        # Route to appropriate channel
+        if channel_id in self.channels:
+            channel = self.channels[channel_id]
+            await channel._handle_packet(flags, seq_num, payload)
+            return True
+        
+        return False
+    
     async def start(self):
         """Start the connection and receiver loop"""
         if self.running:
