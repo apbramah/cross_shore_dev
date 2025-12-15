@@ -201,9 +201,9 @@ async def evaluate_candidate_pairs(sock, local_candidates, remote_candidates):
     
     # All remote candidates we know about (including discovered prflx ones)
     all_remote_candidates = remote_candidates.copy()
-    evaluated_pairs = set()  # Track pairs we've already evaluated
     successful_pair = None
     peer_addr = None
+    response_addresses = set()  # Track addresses we've responded to (keep responding to these)
     
     # Remember original socket blocking state
     original_blocking = sock.getblocking() if hasattr(sock, 'getblocking') else True
@@ -214,7 +214,7 @@ async def evaluate_candidate_pairs(sock, local_candidates, remote_candidates):
     except:
         pass  # Some socket implementations might not support setblocking
     
-    max_evaluation_rounds = 10  # Prevent infinite loops
+    max_evaluation_rounds = 10  # Evaluate all pairs for this many rounds
     round_num = 0
     
     while round_num < max_evaluation_rounds:
@@ -222,24 +222,19 @@ async def evaluate_candidate_pairs(sock, local_candidates, remote_candidates):
         print(f"Candidate pair evaluation round {round_num}")
         
         # Form candidate pairs from local socket and all remote candidates
-        # For now, we use the single socket for all local candidates
-        new_pairs = []
+        # Evaluate ALL pairs in every round
+        all_pairs = []
         for local_cand in local_candidates:
             for remote_cand in all_remote_candidates:
-                # Create a hashable representation of the pair
-                pair_key = (local_cand["address"], local_cand["port"], 
-                           remote_cand["address"], remote_cand["port"])
-                if pair_key not in evaluated_pairs:
-                    new_pairs.append((local_cand, remote_cand))
-                    evaluated_pairs.add(pair_key)
+                all_pairs.append((local_cand, remote_cand))
         
-        if not new_pairs:
-            print("No new candidate pairs to evaluate")
+        if not all_pairs:
+            print("No candidate pairs to evaluate")
             break
         
-        # Evaluate pairs by sending connectivity checks
+        # Evaluate pairs by sending connectivity checks (send to all pairs in every round)
         checks_sent = {}
-        for local_cand, remote_cand in new_pairs:
+        for local_cand, remote_cand in all_pairs:
             remote_addr = (remote_cand["address"], remote_cand["port"])
             try:
                 # Send connectivity check
@@ -253,13 +248,28 @@ async def evaluate_candidate_pairs(sock, local_candidates, remote_candidates):
             except Exception as e:
                 print(f"Error sending connectivity check to {remote_addr}: {e}")
         
-        # Wait for responses
+        # Wait for responses and continue sending responses to known addresses
         timeout_duration = 0.5  # 500ms timeout per round
         check_interval = 0.05  # Check every 50ms
         start_time = time_module.time()
+        last_response_send_time = {}  # Track when we last sent a response to each address
         
         while (time_module.time() - start_time) < timeout_duration:
             try:
+                # Continue sending responses to addresses we've responded to before
+                # Send responses periodically (every ~100ms) to maintain connectivity
+                current_time = time_module.time()
+                for resp_addr in list(response_addresses):
+                    last_send = last_response_send_time.get(resp_addr, 0)
+                    if current_time - last_send >= 0.1:  # Send every 100ms
+                        try:
+                            # Send a response to maintain connectivity
+                            response_packet = STUN_RESPONSE_MAGIC + b"KEEPALIVE"
+                            sock.sendto(response_packet, resp_addr)
+                            last_response_send_time[resp_addr] = current_time
+                        except Exception as e:
+                            print(f"Error sending keepalive response to {resp_addr}: {e}")
+                
                 if MICROPYTHON:
                     # MicroPython: use timeout-based approach (socket already non-blocking)
                     try:
@@ -323,11 +333,12 @@ async def evaluate_candidate_pairs(sock, local_candidates, remote_candidates):
                             print(f"Added new prflx candidate: {prflx_candidate}")
                             # Will form new pairs in next round
                     
-                    # If it's a check from peer, respond
+                    # If it's a check from peer, respond (and mark this address for continued responses)
                     if data.startswith(STUN_CHECK_MAGIC):
                         response_packet = STUN_RESPONSE_MAGIC + data[len(STUN_CHECK_MAGIC):]
                         try:
                             sock.sendto(response_packet, addr)
+                            response_addresses.add(addr)  # Mark for continued responses
                             print(f"Sent connectivity check response to {addr}")
                         except Exception as e:
                             print(f"Error sending response to {addr}: {e}")
