@@ -222,11 +222,61 @@ class ReliableDataChannel(DataChannel):
     """
     def __init__(self, connection, channel_id):
         super().__init__(connection, channel_id)
-        self.pending_packets = {}  # seq_num -> (data, timestamp, retransmit_count)
-        self.received_packets = {}  # seq_num -> data (for out-of-order)
+        # Use fixed-size arrays for MicroPython compatibility
+        self.window_size = 32  # Power of 2 for efficient modulo
+        self.pending_packets = [None] * self.window_size  # Array of (data, timestamp, retransmit_count) or None
+        self.pending_window_start = None  # First seq_num in pending window
+        self.received_packets = [None] * self.window_size  # Array of payload or None
+        self.received_window_start = None  # First seq_num in received window
         self.ack_timeout = 0.5  # Seconds before retransmit
         self.max_retransmits = 5
         self._retransmit_task = None
+    
+    def _pending_seq_to_index(self, seq_num):
+        """Convert sequence number to pending_packets array index"""
+        if self.pending_window_start is None:
+            return 0  # First packet, will initialize window
+        return (seq_num - self.pending_window_start) & (self.window_size - 1)
+    
+    def _received_seq_to_index(self, seq_num):
+        """Convert sequence number to received_packets array index"""
+        if self.received_window_start is None:
+            return 0  # First packet, will initialize window
+        return (seq_num - self.received_window_start) & (self.window_size - 1)
+    
+    def _slide_pending_window(self, new_start):
+        """Slide the pending window forward, clearing old entries"""
+        old_start = self.pending_window_start
+        if old_start is None:
+            self.pending_window_start = new_start
+            return
+        
+        # Clear entries that are now outside the window
+        for i in range(self.window_size):
+            seq_num = old_start + i
+            if seq_num < new_start:
+                # This entry is now outside the window
+                index = (seq_num - old_start) & (self.window_size - 1)
+                self.pending_packets[index] = None
+        
+        self.pending_window_start = new_start
+    
+    def _slide_received_window(self, new_start):
+        """Slide the received window forward, clearing old entries"""
+        old_start = self.received_window_start
+        if old_start is None:
+            self.received_window_start = new_start
+            return
+        
+        # Clear entries that are now outside the window
+        for i in range(self.window_size):
+            seq_num = old_start + i
+            if seq_num < new_start:
+                # This entry is now outside the window
+                index = (seq_num - old_start) & (self.window_size - 1)
+                self.received_packets[index] = None
+        
+        self.received_window_start = new_start
         
     async def send(self, data):
         """Send data reliably with retransmission"""
@@ -236,8 +286,19 @@ class ReliableDataChannel(DataChannel):
         seq_num = self.next_seq_out
         self.next_seq_out = (self.next_seq_out + 1) & 0xFFFFFFFF
         
+        # Initialize window if this is the first packet
+        if self.pending_window_start is None:
+            self.pending_window_start = seq_num
+        
+        # Check if we need to slide the window forward
+        if seq_num - self.pending_window_start >= self.window_size:
+            # Slide window forward to make room
+            new_start = seq_num - self.window_size + 1
+            self._slide_pending_window(new_start)
+        
         # Store packet for retransmission
-        self.pending_packets[seq_num] = (data, time.time(), 0)
+        index = self._pending_seq_to_index(seq_num)
+        self.pending_packets[index] = (data, time.time(), 0)
         
         # Send initial packet
         packet = self.connection._encode_packet(self.channel_id, seq_num, data)
@@ -253,8 +314,12 @@ class ReliableDataChannel(DataChannel):
         # Check if this is an ACK
         if flags & FLAG_ACK:
             # Remove acknowledged packet from pending
-            if seq_num in self.pending_packets:
-                del self.pending_packets[seq_num]
+            if self.pending_window_start is not None:
+                # Check if seq_num is within the current window
+                if self.pending_window_start <= seq_num < self.pending_window_start + self.window_size:
+                    index = self._pending_seq_to_index(seq_num)
+                    if self.pending_packets[index] is not None:
+                        self.pending_packets[index] = None
             return
         
         # Send ACK for received packet
@@ -263,18 +328,44 @@ class ReliableDataChannel(DataChannel):
         )
         self.connection._send_raw(ack_packet)
         
-        # Handle data packet
-        if seq_num < self.next_seq_in:
-            # Old/duplicate packet - already processed
+        # Initialize window if this is the first packet
+        if self.received_window_start is None:
+            self.received_window_start = seq_num
+        elif seq_num < self.received_window_start:
+            # Packet is too old (before window start), ignore
             return
         
+        # Check if we need to slide the window forward to include this packet
+        if seq_num - self.received_window_start >= self.window_size:
+            # Slide window forward to make room for this packet
+            new_start = seq_num - self.window_size + 1
+            self._slide_received_window(new_start)
+        
         # Store packet (may be out of order)
-        self.received_packets[seq_num] = payload
+        index = self._received_seq_to_index(seq_num)
+        self.received_packets[index] = payload
         
         # Deliver in-order packets
-        while self.next_seq_in in self.received_packets:
-            data = self.received_packets.pop(self.next_seq_in)
+        while True:
+            if self.received_window_start is None:
+                break
+            
+            # Check if we have the next expected packet
+            expected_index = self._received_seq_to_index(self.next_seq_in)
+            data = self.received_packets[expected_index]
+            
+            if data is None:
+                # Missing packet, can't deliver more
+                break
+            
+            # Deliver this packet
+            self.received_packets[expected_index] = None
             self.next_seq_in = (self.next_seq_in + 1) & 0xFFFFFFFF
+            
+            # Slide window forward if we've consumed the first entry
+            if self.next_seq_in >= self.received_window_start + self.window_size:
+                new_start = self.received_window_start + 1
+                self._slide_received_window(new_start)
             
             # Notify application
             if hasattr(self, 'on_message'):
@@ -290,20 +381,31 @@ class ReliableDataChannel(DataChannel):
                 current_time = time.time()
                 to_retransmit = []
                 
-                for seq_num, (data, timestamp, retransmit_count) in self.pending_packets.items():
-                    if current_time - timestamp > self.ack_timeout:
-                        if retransmit_count < self.max_retransmits:
-                            to_retransmit.append((seq_num, data, retransmit_count))
-                        else:
-                            # Max retransmits reached - give up
-                            print(f"Max retransmits reached for seq {seq_num}, dropping")
-                            del self.pending_packets[seq_num]
+                if self.pending_window_start is not None:
+                    # Iterate through the window
+                    for i in range(self.window_size):
+                        seq_num = self.pending_window_start + i
+                        index = i
+                        entry = self.pending_packets[index]
+                        
+                        if entry is None:
+                            continue
+                        
+                        data, timestamp, retransmit_count = entry
+                        
+                        if current_time - timestamp > self.ack_timeout:
+                            if retransmit_count < self.max_retransmits:
+                                to_retransmit.append((seq_num, data, retransmit_count, index))
+                            else:
+                                # Max retransmits reached - give up
+                                print(f"Max retransmits reached for seq {seq_num}, dropping")
+                                self.pending_packets[index] = None
                 
                 # Retransmit packets
-                for seq_num, data, retransmit_count in to_retransmit:
+                for seq_num, data, retransmit_count, index in to_retransmit:
                     packet = self.connection._encode_packet(self.channel_id, seq_num, data)
                     self.connection._send_raw(packet)
-                    self.pending_packets[seq_num] = (data, current_time, retransmit_count + 1)
+                    self.pending_packets[index] = (data, current_time, retransmit_count + 1)
                 
                 await asyncio.sleep(0.1)  # Check every 100ms
                 
