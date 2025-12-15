@@ -278,6 +278,23 @@ class ReliableDataChannel(DataChannel):
             return 0  # First packet, will initialize window
         return (seq_num - self.received_window_start) & (self.window_size - 1)
     
+    def _slide_pending_window(self, new_start):
+        """Slide the pending window forward, clearing old entries"""
+        old_start = self.pending_window_start
+        if old_start is None:
+            self.pending_window_start = new_start
+            return
+        
+        # Clear entries that are now outside the window
+        for i in range(self.window_size):
+            seq_num = old_start + i
+            if seq_num < new_start:
+                # This entry is now outside the window
+                index = (seq_num - old_start) & (self.window_size - 1)
+                self.pending_packets[index] = None
+        
+        self.pending_window_start = new_start
+    
     def _slide_received_window(self, new_start):
         """Slide the received window forward, clearing old entries"""
         old_start = self.received_window_start
@@ -307,13 +324,11 @@ class ReliableDataChannel(DataChannel):
         if self.pending_window_start is None:
             self.pending_window_start = seq_num
         
-        # Check if the window would overflow - if so, close the connection
-        # This indicates reliable messages have failed to be delivered
+        # Check if we need to slide the window forward
         if seq_num - self.pending_window_start >= self.window_size:
-            print(f"Pending window overflow: seq_num={seq_num}, window_start={self.pending_window_start}, closing connection")
-            self.closed = True
-            await self.connection.close()
-            return False
+            # Slide window forward to make room
+            new_start = seq_num - self.window_size + 1
+            self._slide_pending_window(new_start)
         
         # Store packet for retransmission
         index = self._pending_seq_to_index(seq_num)
