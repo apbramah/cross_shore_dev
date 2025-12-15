@@ -424,6 +424,12 @@ async def websocket_client(ws_connection, server_url=None):
                                     "port": 8888
                                 })
                             
+                            candidates.append({
+                                "type": "srflx",
+                                "address": "13.41.236.93",
+                                "port": 8888
+                            })
+                            
                             # Store socket and local candidates for later use when ANSWER arrives
                             pending_udp_connections[to_uid] = {
                                 "socket": sock,
