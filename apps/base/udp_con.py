@@ -25,7 +25,6 @@ class UDPConnection:
     def __init__(self, sock, peer_addr, peer_uid):
         self.sock = sock
         self.peer_addr = peer_addr  # (ip, port)
-        print(f"Peer address: {peer_addr}")
         self.peer_uid = peer_uid
         self.channels = {}  # channel_id -> DataChannel
         self.next_channel_id = 1
@@ -44,7 +43,6 @@ class UDPConnection:
         if channel_type == 'reliable':
             channel = ReliableDataChannel(self, channel_id)
         else:
-            print(self, channel_id)
             channel = UnreliableDataChannel(self, channel_id)
         
         self.channels[channel_id] = channel
@@ -176,7 +174,6 @@ class UnreliableDataChannel(DataChannel):
     """
     def __init__(self, connection, channel_id):
         super().__init__(connection, channel_id)
-        print('hey this is me creating an object')
         
     async def send(self, data):
         """Send data unreliably"""
@@ -324,86 +321,3 @@ class ReliableDataChannel(DataChannel):
                 await self._retransmit_task
             except asyncio.CancelledError:
                 pass
-
-async def perform_udp_hole_punch(peer_ip, peer_port, peer_uid, existing_socket=None):
-    """
-    Perform UDP hole-punching to establish a connection with a peer.
-    existing_socket: Optional pre-existing socket to reuse (must already be bound).
-    Returns: (UDPConnection or None, success: bool, message: str)
-    """
-    sock = existing_socket  # Use provided socket if available
-    try:
-        peer_port = int(peer_port)
-        
-        
-        peer_addr = (peer_ip, peer_port)
-        
-        # Set socket timeout (works for both new and existing sockets)
-        try:
-            sock.settimeout(0.1)
-        except AttributeError:
-            # Some socket implementations might not support settimeout
-            pass
-        
-        print(f"Starting UDP hole-punching to {peer_ip}:{peer_port}")
-        
-        # Send multiple packets to punch through NAT
-        success = False
-        addr_to_use = None
-        test_data = f"HOLE_PUNCH".encode('utf-8')
-        for i in range(100):
-            sock.sendto(test_data, peer_addr)
-            print(f"Sent hole-punch packet {i} to {peer_ip}:{peer_port}")
-            
-            await asyncio.sleep(0.001)
-            
-            peer_prflx_addr = None
-            # Try to receive a response
-            try:
-                data, addr = sock.recvfrom(1024)
-                response = data.decode('utf-8')
-                print(f"Received message from {addr}: {response}")
-                test_data = f"HOLE_PUNCH_RESPONSE".encode('utf-8')
-                sock.sendto(test_data, addr)
-                if response == 'HOLE_PUNCH':
-                    if addr == peer_addr:
-                        print(f"Received punch from expected server reflexive address:", addr)
-                    else:
-                        print(f"Received punch from unexpected address: {addr}")
-                        peer_prflx_addr = addr
-                elif response == 'HOLE_PUNCH_RESPONSE':
-                    if addr == peer_addr:
-                        success = True
-                        addr_to_use = addr
-                        print(f"Received response from expected server reflexive address:", addr_to_use)
-                    else:
-                        success = True
-                        addr_to_use = addr
-                        print(f"Received response from unexpected peer reflexive address:", addr_to_use)
-            except Exception as e:
-                pass
-        
-        if success:
-            # Create UDPConnection object
-            print(f"Using address: {addr_to_use}")
-            connection = UDPConnection(sock, addr_to_use, peer_uid)
-            udp_connections[peer_uid] = connection
-            await connection.start()
-            
-            return (connection, True, f"UDP connection established with {peer_uid}")
-        else:
-            # Only close socket if we created it (not if it was passed in)
-            if existing_socket is None:
-                sock.close()
-            return (None, False, f"Hole-punching did not receive confirmation from {peer_ip}:{peer_port}")
-        
-    except Exception as e:
-        error_msg = f"UDP hole-punching failed: {str(e)}"
-        print(error_msg)
-        # Only close socket if we created it (not if it was passed in)
-        if existing_socket is None:
-            try:
-                sock.close()
-            except:
-                pass
-        return (None, False, error_msg)
