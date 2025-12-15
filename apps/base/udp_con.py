@@ -76,6 +76,8 @@ class UDPConnection:
         """Main receiver loop - demultiplexes packets to channels"""
         if not MICROPYTHON:
             loop = asyncio.get_running_loop()
+            # Set socket to non-blocking for asyncio
+            self.sock.setblocking(False)
 
         while self.running:
             try:
@@ -90,11 +92,15 @@ class UDPConnection:
                     finally:
                         self.sock.setblocking(True)
                 else:
-                    self.sock.settimeout(0.25)
+                    # CPython: use asyncio sock_recvfrom with non-blocking socket
                     try:
-                        data, addr = await loop.sock_recvfrom(self.sock, 2048)
-                    except socket.timeout:
-                        print('timeout')
+                        # sock_recvfrom will yield control to event loop
+                        data, addr = await asyncio.wait_for(
+                            loop.sock_recvfrom(self.sock, 2048),
+                            timeout=0.25
+                        )
+                    except asyncio.TimeoutError:
+                        # Timeout - continue loop to allow other tasks to run
                         continue
                 
                 # Verify packet is from expected peer
