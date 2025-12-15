@@ -130,7 +130,11 @@ def ota_trust():
 
 ws = None
 current_server_url = None  # Store server URL for UDP discovery
-pending_udp_sockets = {}  # Store sockets between discovery and hole-punching: discovery_id -> socket
+pending_udp_connections = {}  # Store pending UDP connection info: peer_uid -> {socket, is_server, local_candidates}
+
+# Candidate pair evaluation constants
+STUN_CHECK_MAGIC = b"STUN_CHECK"
+STUN_RESPONSE_MAGIC = b"STUN_RESPONSE"
 
 def http_to_ws_url(http_url):
     """Convert HTTP URL to WebSocket URL for upgrading the connection"""
@@ -182,6 +186,171 @@ def get_manifest():
         manifest = json.load(f)
     return manifest
 
+async def evaluate_candidate_pairs(sock, local_candidates, remote_candidates):
+    """
+    Evaluate candidate pairs using ICE-like connectivity checks.
+    Returns: (successful_candidate_pair, peer_addr) or (None, None) on failure
+    A candidate pair is (local_candidate, remote_candidate)
+    """
+    if MICROPYTHON:
+        import usocket as socket_module
+        import utime as time_module
+    else:
+        import socket as socket_module
+        import time as time_module
+    
+    # All remote candidates we know about (including discovered prflx ones)
+    all_remote_candidates = remote_candidates.copy()
+    evaluated_pairs = set()  # Track pairs we've already evaluated
+    successful_pair = None
+    peer_addr = None
+    
+    # Remember original socket blocking state
+    original_blocking = sock.getblocking() if hasattr(sock, 'getblocking') else True
+    
+    # Set socket to non-blocking for async receive
+    try:
+        sock.setblocking(False)
+    except:
+        pass  # Some socket implementations might not support setblocking
+    
+    max_evaluation_rounds = 10  # Prevent infinite loops
+    round_num = 0
+    
+    while round_num < max_evaluation_rounds and not successful_pair:
+        round_num += 1
+        print(f"Candidate pair evaluation round {round_num}")
+        
+        # Form candidate pairs from local socket and all remote candidates
+        # For now, we use the single socket for all local candidates
+        new_pairs = []
+        for local_cand in local_candidates:
+            for remote_cand in all_remote_candidates:
+                # Create a hashable representation of the pair
+                pair_key = (local_cand["address"], local_cand["port"], 
+                           remote_cand["address"], remote_cand["port"])
+                if pair_key not in evaluated_pairs:
+                    new_pairs.append((local_cand, remote_cand))
+                    evaluated_pairs.add(pair_key)
+        
+        if not new_pairs:
+            print("No new candidate pairs to evaluate")
+            break
+        
+        # Evaluate pairs by sending connectivity checks
+        checks_sent = {}
+        for local_cand, remote_cand in new_pairs:
+            remote_addr = (remote_cand["address"], remote_cand["port"])
+            try:
+                # Send connectivity check
+                check_packet = STUN_CHECK_MAGIC + json.dumps({
+                    "local": local_cand,
+                    "remote": remote_cand
+                }).encode('utf-8')
+                sock.sendto(check_packet, remote_addr)
+                checks_sent[remote_addr] = (local_cand, remote_cand)
+                print(f"Sent connectivity check to {remote_addr}")
+            except Exception as e:
+                print(f"Error sending connectivity check to {remote_addr}: {e}")
+        
+        # Wait for responses
+        timeout_duration = 0.5  # 500ms timeout per round
+        check_interval = 0.05  # Check every 50ms
+        start_time = time_module.time()
+        
+        while (time_module.time() - start_time) < timeout_duration and not successful_pair:
+            try:
+                if MICROPYTHON:
+                    # MicroPython: use timeout-based approach (socket already non-blocking)
+                    try:
+                        data, addr = sock.recvfrom(2048)
+                    except OSError:
+                        # No data available, sleep and continue
+                        await asyncio.sleep(check_interval)
+                        continue
+                else:
+                    # CPython: use asyncio sock_recvfrom
+                    loop = asyncio.get_event_loop()
+                    remaining_time = timeout_duration - (time_module.time() - start_time)
+                    if remaining_time <= 0:
+                        break
+                    try:
+                        data, addr = await asyncio.wait_for(
+                            loop.sock_recvfrom(sock, 2048),
+                            timeout=min(check_interval, remaining_time)
+                        )
+                    except asyncio.TimeoutError:
+                        continue
+                
+                # Check if this is a response to one of our connectivity checks
+                if data.startswith(STUN_RESPONSE_MAGIC) or data.startswith(STUN_CHECK_MAGIC):
+                    # This is a connectivity check response or check from peer
+                    
+                    # Check if response is from an expected address
+                    expected_addr = None
+                    expected_pair = None
+                    for check_addr, (local_cand, remote_cand) in checks_sent.items():
+                        if addr == check_addr:
+                            expected_addr = check_addr
+                            expected_pair = (local_cand, remote_cand)
+                            break
+                    
+                    if expected_addr:
+                        # Response from expected address - pair is successful!
+                        print(f"Received response from expected address {addr}, pair successful!")
+                        successful_pair = expected_pair
+                        peer_addr = addr
+                        break
+                    else:
+                        # Response from unexpected address - discover prflx candidate
+                        print(f"Received response from unexpected address {addr}, creating prflx candidate")
+                        prflx_candidate = {
+                            "type": "prflx",
+                            "address": addr[0],
+                            "port": addr[1]
+                        }
+                        
+                        # Check if we already know about this candidate
+                        already_known = False
+                        for known_cand in all_remote_candidates:
+                            if (known_cand["address"] == prflx_candidate["address"] and
+                                known_cand["port"] == prflx_candidate["port"]):
+                                already_known = True
+                                break
+                        
+                        if not already_known:
+                            all_remote_candidates.append(prflx_candidate)
+                            print(f"Added new prflx candidate: {prflx_candidate}")
+                            # Will form new pairs in next round
+                    
+                    # If it's a check from peer, respond
+                    if data.startswith(STUN_CHECK_MAGIC):
+                        response_packet = STUN_RESPONSE_MAGIC + data[len(STUN_CHECK_MAGIC):]
+                        try:
+                            sock.sendto(response_packet, addr)
+                            print(f"Sent connectivity check response to {addr}")
+                        except Exception as e:
+                            print(f"Error sending response to {addr}: {e}")
+                
+            except Exception as e:
+                print(f"Error receiving during candidate evaluation: {e}")
+                await asyncio.sleep(check_interval)
+                continue
+    
+    # Restore original socket blocking state
+    try:
+        sock.setblocking(original_blocking)
+    except:
+        pass
+    
+    if successful_pair:
+        print(f"Successful candidate pair found: {successful_pair[0]} <-> {successful_pair[1]}")
+        print(f"Using peer address: {peer_addr}")
+        return successful_pair, peer_addr
+    else:
+        print("No successful candidate pair found")
+        return None, None
+
 async def websocket_client(ws_connection, server_url=None):
     """Handle WebSocket client logic with an upgraded connection"""
     global ws, current_server_url
@@ -229,98 +398,150 @@ async def websocket_client(ws_connection, server_url=None):
                     new_network_configs = my_dict.get("network_configs")
                     if new_network_configs is not None:
                         ota.registry_set('network_configs', new_network_configs)
-                elif my_dict["type"] == "UDP_DISCOVER_REQUEST":
-                    # Handle UDP discovery request - send UDP packet to server
-                    discovery_id = my_dict.get("discovery_id")
-                    server_port = int(my_dict.get("server_port", 8888))
+                elif my_dict["type"] == "INITIATE_UDP_CONNECTION":
+                    # from_head receives this - act as UDP server
+                    to_uid = my_dict.get("to_uid")
+                    print(f"INITIATE_UDP_CONNECTION: acting as server for connection to {to_uid}")
                     
-                    async def send_discovery_packet():
+                    async def handle_initiate():
                         try:
-                            # Get server IP from current_server_url
-                            if current_server_url:
-                                # Parse server URL (e.g., "http://192.168.60.91:80")
-                                import re
-                                match = re.match(r'https?://([^:/]+)', current_server_url)
-                                if match:
-                                    server_ip = match.group(1)
-                                    
-                                    # Create UDP socket (DO NOT CLOSE - will be reused for hole-punching)
-                                    # Format: "DISCOVER:<discovery_id>:<uid>"
-                                    discovery_data = f"DISCOVER:{discovery_id}:{uid_hex}".encode('utf-8')
-                                    
-                                    if MICROPYTHON:
-                                        import usocket as socket
-                                    else:
-                                        import socket
-                                    
-                                    # Create and bind socket (same port that will be used for hole-punching)
-                                    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                                    try:
-                                        sock.bind(('0.0.0.0', 8888))  # Bind to same port as hole-punching
-                                    except OSError:
-                                        sock.bind(('0.0.0.0', 0))  # Use any available port if 8888 is taken
-                                    
-                                    # Send discovery packet
-                                    sock.sendto(discovery_data, (server_ip, server_port))
-                                    
-                                    # Store socket for later use in hole-punching (keyed by discovery_id)
-                                    pending_udp_sockets[discovery_id] = sock
-                                    
-                                    print(f"Sent UDP discovery packet to {server_ip}:{server_port} for {discovery_id}, socket stored")
-                                    
-                                    # Send confirmation back to server
-                                    response = {
-                                        "type": "UDP_DISCOVER_RESPONSE",
-                                        "discovery_id": discovery_id
-                                    }
-                                    await ws.send(json.dumps(response))
+                            if MICROPYTHON:
+                                import usocket as socket
+                            else:
+                                import socket
+                            
+                            # Create and bind UDP socket (from_head acts as server)
+                            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                            try:
+                                sock.bind(('0.0.0.0', 8888))
+                            except OSError:
+                                sock.bind(('0.0.0.0', 0))
+                            
+                            # Get the actual bound port
+                            bound_addr = sock.getsockname()
+                            bound_port = bound_addr[1]
+                            
+                            # Gather host candidates from local_ips
+                            local_ips = ota.get_local_ips()
+                            candidates = []
+                            for ip in local_ips:
+                                candidates.append({
+                                    "type": "host",
+                                    "address": ip,
+                                    "port": bound_port
+                                })
+                            
+                            # Store socket and local candidates for later use when ANSWER arrives
+                            pending_udp_connections[to_uid] = {
+                                "socket": sock,
+                                "is_server": True,
+                                "local_candidates": candidates
+                            }
+                            
+                            # Send OFFER message via WebSocket
+                            offer_msg = {
+                                "type": "OFFER",
+                                "to_uid": to_uid,
+                                "from_uid": uid_hex,
+                                "candidates": candidates
+                            }
+                            await ws.send(json.dumps(offer_msg))
+                            print(f"Sent OFFER to {to_uid} with {len(candidates)} candidates")
+                            
                         except Exception as e:
-                            print(f"Error sending UDP discovery packet: {e}")
+                            print(f"Error handling INITIATE_UDP_CONNECTION: {e}")
                     
-                    asyncio.create_task(send_discovery_packet())
-                elif my_dict["type"] == "UDP_CONNECTION_REQUEST":
-                    # Handle UDP connection request - perform hole-punching
-                    peer_uid = my_dict.get("peer_uid")
-                    peer_ip = my_dict.get("peer_ip")
-                    peer_port = int(my_dict.get("peer_port", 8889))
+                    asyncio.create_task(handle_initiate())
                     
-                    print(f"UDP connection request: connecting to {peer_uid} at {peer_ip}:{peer_port}")
+                elif my_dict["type"] == "OFFER":
+                    # to_head receives this - act as UDP client
+                    from_uid = my_dict.get("from_uid")
+                    candidates = my_dict.get("candidates", [])
+                    print(f"OFFER received from {from_uid} with {len(candidates)} candidates")
                     
-                    # Perform hole-punching in a task so it doesn't block
-                    async def do_hole_punch():
-                        # Find the socket that was created during discovery
-                        # Parse discovery_id format: "from_uid_to_uid" - find which one matches this peer_uid
-                        sock = None
-                        discovery_id_to_remove = None
-                        
-                        for discovery_id, stored_sock in pending_udp_sockets.items():
-                            # discovery_id format is "from_uid_to_uid"
-                            parts = discovery_id.split('_', 1)
-                            if len(parts) == 2:
-                                from_uid = parts[0]
-                                to_uid = parts[1]
-                                # Check if peer_uid matches either side (and we're the other side)
-                                if (from_uid == peer_uid and to_uid == uid_hex) or (to_uid == peer_uid and from_uid == uid_hex):
-                                    sock = stored_sock
-                                    discovery_id_to_remove = discovery_id
-                                    break
-                        
-                        if discovery_id_to_remove:
-                            del pending_udp_sockets[discovery_id_to_remove]
-                            print(f"Retrieved stored socket for {peer_uid}")
-                        
-                        connection, success, message = await perform_udp_hole_punch(
-                            peer_ip, peer_port, peer_uid, existing_socket=sock
-                        )
-                        
-                        if success and connection:
-                            # Example: Create a reliable and unreliable channel
+                    async def handle_offer():
+                        try:
+                            if MICROPYTHON:
+                                import usocket as socket
+                            else:
+                                import socket
+                            
+                            # Create and bind UDP socket (to_head acts as client)
+                            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                            try:
+                                sock.bind(('0.0.0.0', 8888))
+                            except OSError:
+                                sock.bind(('0.0.0.0', 0))
+                            
+                            # Get the actual bound port
+                            bound_addr = sock.getsockname()
+                            bound_port = bound_addr[1]
+                            
+                            # Gather host candidates from local_ips
+                            local_ips = ota.get_local_ips()
+                            answer_candidates = []
+                            for ip in local_ips:
+                                answer_candidates.append({
+                                    "type": "host",
+                                    "address": ip,
+                                    "port": bound_port
+                                })
+                            
+                            # Store socket and candidates for candidate pair evaluation
+                            pending_udp_connections[from_uid] = {
+                                "socket": sock,
+                                "is_server": False,
+                                "local_candidates": answer_candidates,
+                                "remote_candidates": candidates
+                            }
+                            
+                            # Send ANSWER message via WebSocket
+                            answer_msg = {
+                                "type": "ANSWER",
+                                "from_uid": uid_hex,
+                                "to_uid": from_uid,
+                                "candidates": answer_candidates
+                            }
+                            await ws.send(json.dumps(answer_msg))
+                            print(f"Sent ANSWER to {from_uid} with {len(answer_candidates)} candidates")
+                            
+                            # Now evaluate candidate pairs (client side - connect to server)
+                            if not candidates:
+                                print("No peer candidates in OFFER")
+                                return
+                            
+                            print(f"Client: Evaluating candidate pairs for connection to {from_uid}")
+                            successful_pair, peer_addr = await evaluate_candidate_pairs(
+                                sock, answer_candidates, candidates
+                            )
+                            
+                            if not successful_pair or not peer_addr:
+                                print("Client: Failed to establish connection via candidate pair evaluation")
+                                del pending_udp_connections[from_uid]
+                                result_msg = {
+                                    "type": "UDP_CONNECTION_RESULT",
+                                    "uid": uid_hex,
+                                    "peer_uid": from_uid,
+                                    "success": False,
+                                    "message": "Candidate pair evaluation failed"
+                                }
+                                await ws.send(json.dumps(result_msg))
+                                return
+                            
+                            print(f"Client: Successful candidate pair found, establishing connection to {peer_addr}")
+                            
+                            # Create UDPConnection (client side) using successful pair
+                            connection = UDPConnection(sock, peer_addr, from_uid)
+                            udp_connections[from_uid] = connection
+                            await connection.start()
+                            
+                            # Create channels
                             reliable_channel = connection.create_channel('reliable')
                             await reliable_channel.start()
                             
                             unreliable_channel = connection.create_channel('unreliable')
                             
-                            # Set up message handlers (optional)
+                            # Set up message handlers
                             async def on_reliable_message(data):
                                 print(f"Reliable channel received: {data}")
                             async def on_unreliable_message(data):
@@ -329,31 +550,155 @@ async def websocket_client(ws_connection, server_url=None):
                             reliable_channel.on_message = on_reliable_message
                             unreliable_channel.on_message = on_unreliable_message
                             
-                            print(f"Created UDP connection with channels for {peer_uid}")
-
+                            print(f"Created UDP connection with channels for {from_uid} (client side)")
+                            
                             async def occasional_send(channel, my_string):
                                 while True:
                                     print('sending', my_string)
                                     await channel.send(my_string.encode('utf-8'))
                                     await asyncio.sleep(1)
-
-                            print("Starting occasional_send")
+                            
+                            print("Starting occasional_send (client)")
                             asyncio.create_task(occasional_send(unreliable_channel, uid_hex + 'unrel'))
                             asyncio.create_task(occasional_send(reliable_channel, uid_hex + 'rel'))
-                        
-                        # Report result back to server
-                        result_msg = {
-                            "type": "UDP_CONNECTION_RESULT",
-                            "uid": uid_hex,
-                            "peer_uid": peer_uid,
-                            "success": success,
-                            "message": message
-                        }
-                        await ws.send(json.dumps(result_msg))
-                        print(f"UDP connection result sent: {success} - {message}")
+                            
+                            # Clean up pending connection
+                            del pending_udp_connections[from_uid]
+                            
+                            # Report success
+                            result_msg = {
+                                "type": "UDP_CONNECTION_RESULT",
+                                "uid": uid_hex,
+                                "peer_uid": from_uid,
+                                "success": True,
+                                "message": "UDP connection established"
+                            }
+                            await ws.send(json.dumps(result_msg))
+                            
+                        except Exception as e:
+                            print(f"Error handling OFFER: {e}")
+                            # Report failure if we have from_uid
+                            from_uid = my_dict.get("from_uid")
+                            if from_uid:
+                                result_msg = {
+                                    "type": "UDP_CONNECTION_RESULT",
+                                    "uid": uid_hex,
+                                    "peer_uid": from_uid,
+                                    "success": False,
+                                    "message": str(e)
+                                }
+                                await ws.send(json.dumps(result_msg))
                     
-                    # Start hole-punching task
-                    asyncio.create_task(do_hole_punch())
+                    asyncio.create_task(handle_offer())
+                    
+                elif my_dict["type"] == "ANSWER":
+                    # from_head receives this - establish connection (server side)
+                    from_uid = my_dict.get("from_uid")  # This is the to_head's uid (the one who sent ANSWER)
+                    candidates = my_dict.get("candidates", [])
+                    print(f"ANSWER received from {from_uid} with {len(candidates)} candidates")
+                    
+                    async def handle_answer_server():
+                        try:
+                            # Retrieve the stored socket from INITIATE_UDP_CONNECTION (we're the server)
+                            # The peer_uid we stored is the to_uid, which is from_uid in this message
+                            if from_uid not in pending_udp_connections:
+                                print(f"No pending connection found for {from_uid}")
+                                return
+                            
+                            conn_info = pending_udp_connections[from_uid]
+                            if not conn_info.get("is_server"):
+                                print(f"Connection info for {from_uid} is not marked as server, skipping server handler")
+                                return
+                            
+                            sock = conn_info["socket"]
+                            local_candidates = conn_info.get("local_candidates", [])
+                            
+                            if not candidates:
+                                print("No candidates in ANSWER message")
+                                return
+                            
+                            if not local_candidates:
+                                print("No local candidates stored")
+                                return
+                            
+                            print(f"Server: Evaluating candidate pairs for connection to {from_uid}")
+                            successful_pair, peer_addr = await evaluate_candidate_pairs(
+                                sock, local_candidates, candidates
+                            )
+                            
+                            if not successful_pair or not peer_addr:
+                                print("Server: Failed to establish connection via candidate pair evaluation")
+                                del pending_udp_connections[from_uid]
+                                result_msg = {
+                                    "type": "UDP_CONNECTION_RESULT",
+                                    "uid": uid_hex,
+                                    "peer_uid": from_uid,
+                                    "success": False,
+                                    "message": "Candidate pair evaluation failed"
+                                }
+                                await ws.send(json.dumps(result_msg))
+                                return
+                            
+                            print(f"Server: Successful candidate pair found, establishing connection to {peer_addr}")
+                            
+                            # Create UDPConnection (server side) using successful pair
+                            connection = UDPConnection(sock, peer_addr, from_uid)
+                            udp_connections[from_uid] = connection
+                            await connection.start()
+                            
+                            # Create channels
+                            reliable_channel = connection.create_channel('reliable')
+                            await reliable_channel.start()
+                            
+                            unreliable_channel = connection.create_channel('unreliable')
+                            
+                            # Set up message handlers
+                            async def on_reliable_message(data):
+                                print(f"Reliable channel received: {data}")
+                            async def on_unreliable_message(data):
+                                print(f"Unreliable channel received: {data}")
+                            
+                            reliable_channel.on_message = on_reliable_message
+                            unreliable_channel.on_message = on_unreliable_message
+                            
+                            print(f"Created UDP connection with channels for {from_uid} (server side)")
+                            
+                            async def occasional_send(channel, my_string):
+                                while True:
+                                    print('sending', my_string)
+                                    await channel.send(my_string.encode('utf-8'))
+                                    await asyncio.sleep(1)
+                            
+                            print("Starting occasional_send (server)")
+                            asyncio.create_task(occasional_send(unreliable_channel, uid_hex + 'unrel'))
+                            asyncio.create_task(occasional_send(reliable_channel, uid_hex + 'rel'))
+                            
+                            # Clean up pending connection
+                            del pending_udp_connections[from_uid]
+                            
+                            # Report success
+                            result_msg = {
+                                "type": "UDP_CONNECTION_RESULT",
+                                "uid": uid_hex,
+                                "peer_uid": from_uid,
+                                "success": True,
+                                "message": "UDP connection established"
+                            }
+                            await ws.send(json.dumps(result_msg))
+                            
+                        except Exception as e:
+                            print(f"Error handling ANSWER (server side): {e}")
+                            # Report failure
+                            result_msg = {
+                                "type": "UDP_CONNECTION_RESULT",
+                                "uid": uid_hex,
+                                "peer_uid": from_uid,
+                                "success": False,
+                                "message": str(e)
+                            }
+                            await ws.send(json.dumps(result_msg))
+                    
+                    asyncio.create_task(handle_answer_server())
                     
             except Exception as e:
                 print("Error processing message:", e)
