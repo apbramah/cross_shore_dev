@@ -1,4 +1,5 @@
 from udp_con import *
+from stun_query import query_stun_server
 
 import json
 try:
@@ -274,11 +275,9 @@ async def websocket_client(ws_connection, server_url=None):
                                     "port": 8888
                                 })
                             
-                            candidates.append({
-                                "type": "srflx",
-                                "address": "13.41.236.93",
-                                "port": 8888
-                            })
+                            # Query STUN server for srflx candidates
+                            srflx_candidates = await query_stun_server(sock, timeout=0.25)
+                            candidates.extend(srflx_candidates)
                             
                             # Store socket and local candidates for later use when ANSWER arrives
                             pending_udp_connections[to_uid] = {
@@ -328,6 +327,10 @@ async def websocket_client(ws_connection, server_url=None):
                                     "address": ip,
                                     "port": 8888
                                 })
+                            
+                            # Query STUN server for srflx candidates
+                            srflx_candidates = await query_stun_server(sock, timeout=0.25)
+                            answer_candidates.extend(srflx_candidates)
                             
                             global pending_udp_connections
                             # Store socket and candidates for candidate pair evaluation
