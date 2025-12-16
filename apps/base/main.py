@@ -332,7 +332,6 @@ async def websocket_client(ws_connection, server_url=None):
                             srflx_candidates = await query_stun_server(sock, timeout=0.25)
                             answer_candidates.extend(srflx_candidates)
                             
-                            global pending_udp_connections
                             # Store socket and candidates for candidate pair evaluation
                             pending_udp_connections[from_uid] = {
                                 "socket": sock,

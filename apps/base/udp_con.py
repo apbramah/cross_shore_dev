@@ -43,6 +43,8 @@ class UDPConnection:
         self.response_addresses = set()  # Track addresses we've responded to during evaluation
         self.checks_sent = {}  # Track connectivity checks sent during evaluation
         self.last_response_send_time = {}  # Track when we last sent a response to each address
+        self.candidate_no_response_count = {}  # Track rounds without response for each candidate: (address, port) -> count
+        self.candidates_that_responded = set()  # Track candidates that have responded (address, port) tuples
         
     def create_channel(self, channel_type='unreliable'):
         """
@@ -167,6 +169,11 @@ class UDPConnection:
         
         if expected_addr:
             # Response from expected address - pair is successful!
+            # Mark this candidate as having responded
+            self.candidates_that_responded.add(addr)
+            # Reset no-response count for this candidate
+            if addr in self.candidate_no_response_count:
+                del self.candidate_no_response_count[addr]
             # Set peer_addr if not already set
             if self.peer_addr is None:
                 self.peer_addr = addr
@@ -190,6 +197,11 @@ class UDPConnection:
             
             if not already_known:
                 self.all_remote_candidates.append(prflx_candidate)
+                # Mark this prflx candidate as having responded
+                self.candidates_that_responded.add(addr)
+                # Reset no-response count for this candidate
+                if addr in self.candidate_no_response_count:
+                    del self.candidate_no_response_count[addr]
                 print(f"Added new prflx candidate: {prflx_candidate}")
                 # Will form new pairs in next round
         
@@ -208,10 +220,37 @@ class UDPConnection:
         # Socket should already be non-blocking (set by receiver loop)
         round_num = 0
         round_interval = 0.5  # Send checks every 500ms
+        previous_checks_sent = {}  # Track checks sent in previous round
         
         while self.running:
             round_num += 1
             print(f"Candidate pair evaluation round {round_num}")
+            
+            # Update no-response counts for candidates checked in previous round
+            # (skip this on first round when previous_checks_sent is empty)
+            if previous_checks_sent:
+                # Increment count for candidates that were checked but didn't respond
+                for remote_addr in previous_checks_sent.keys():
+                    if remote_addr not in self.candidates_that_responded:
+                        # This candidate was checked but didn't respond
+                        self.candidate_no_response_count[remote_addr] = self.candidate_no_response_count.get(remote_addr, 0) + 1
+                        count = self.candidate_no_response_count[remote_addr]
+                        print(f"Candidate {remote_addr} has {count} rounds without response")
+                        
+                        # Remove candidate if it has exceeded 10 rounds without response
+                        if count >= 10:
+                            print(f"Removing candidate {remote_addr} after {count} rounds without response")
+                            # Remove from all_remote_candidates
+                            self.all_remote_candidates = [
+                                cand for cand in self.all_remote_candidates
+                                if (cand["address"], cand["port"]) != remote_addr
+                            ]
+                            # Clean up tracking
+                            if remote_addr in self.candidate_no_response_count:
+                                del self.candidate_no_response_count[remote_addr]
+            
+            # Reset response tracking for this round
+            self.candidates_that_responded.clear()
             
             # Form candidate pairs from local socket and all remote candidates
             all_pairs = []
@@ -251,6 +290,9 @@ class UDPConnection:
                         self.last_response_send_time[resp_addr] = current_time
                     except Exception as e:
                         print(f"Error sending keepalive response to {resp_addr}: {e}")
+            
+            # Save current round's checks for next iteration
+            previous_checks_sent = self.checks_sent.copy()
             
             # Wait before next round
             await asyncio.sleep(round_interval)
