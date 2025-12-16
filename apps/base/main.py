@@ -357,18 +357,13 @@ async def websocket_client(ws_connection, server_url=None):
                             
                             print(f"Client: Evaluating candidate pairs for connection to {from_uid}")
                             
-                            # Store occasional_send task on connection
-                            connection = None
-                            occasional_send_task = None
-                            
                             async def occasional_send(channel, my_string):
                                 while True:
                                     print('sending', my_string)
                                     await channel.send(my_string.encode('utf-8'))
                                     await asyncio.sleep(1)
                             
-                            async def onOpen():
-                                nonlocal connection, occasional_send_task
+                            async def onOpen(connection):
                                 print("Client: Connection opened (onOpen callback)")
                                 # Store the connection
                                 udp_connections[from_uid] = connection
@@ -391,8 +386,7 @@ async def websocket_client(ws_connection, server_url=None):
                                 }
                                 await ws.send(json.dumps(result_msg))
                             
-                            async def onClose():
-                                nonlocal connection
+                            async def onClose(connection):
                                 print("Client: Connection closed (onClose callback)")
                                 # Kill occasional_send task
                                 if connection and hasattr(connection, '_occasional_send_task') and connection._occasional_send_task:
@@ -412,7 +406,7 @@ async def websocket_client(ws_connection, server_url=None):
                                 }
                                 await ws.send(json.dumps(result_msg))
                             
-                            connection = await evaluate_candidate_pairs(
+                            await evaluate_candidate_pairs(
                                 sock, answer_candidates, candidates, from_uid,
                                 onOpen=onOpen, onClose=onClose
                             )
@@ -457,18 +451,13 @@ async def websocket_client(ws_connection, server_url=None):
                             
                             print(f"Server: Evaluating candidate pairs for connection to {from_uid}")
                             
-                            # Store occasional_send task on connection
-                            connection = None
-                            occasional_send_task = None
-                            
                             async def occasional_send(channel, my_string):
                                 while True:
                                     print('sending', my_string)
                                     await channel.send(my_string.encode('utf-8'))
                                     await asyncio.sleep(1)
                             
-                            async def onOpen():
-                                nonlocal connection, occasional_send_task
+                            async def onOpen(connection):
                                 print("Server: Connection opened (onOpen callback)")
                                 # Store the connection
                                 udp_connections[from_uid] = connection
@@ -491,8 +480,7 @@ async def websocket_client(ws_connection, server_url=None):
                                 }
                                 await ws.send(json.dumps(result_msg))
                             
-                            async def onClose():
-                                nonlocal connection
+                            async def onClose(connection):
                                 print("Server: Connection closed (onClose callback)")
                                 # Kill occasional_send task
                                 if connection and hasattr(connection, '_occasional_send_task') and connection._occasional_send_task:
@@ -512,7 +500,7 @@ async def websocket_client(ws_connection, server_url=None):
                                 }
                                 await ws.send(json.dumps(result_msg))
                             
-                            connection = await evaluate_candidate_pairs(
+                            await evaluate_candidate_pairs(
                                 sock, local_candidates, candidates, from_uid,
                                 onOpen=onOpen, onClose=onClose
                             )

@@ -149,7 +149,7 @@ class UDPConnection:
         self.peer_addr = addr
         if self.onOpen:
             try:
-                await self.onOpen()
+                await self.onOpen(self)
             except Exception as e:
                 print(f"Error in onOpen callback: {e}")
 
@@ -357,7 +357,7 @@ class UDPConnection:
         # Call onClose callback
         if self.onClose:
             try:
-                await self.onClose()
+                await self.onClose(self)
             except Exception as e:
                 print(f"Error in onClose callback: {e}")
         
