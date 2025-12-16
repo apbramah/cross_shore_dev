@@ -67,35 +67,16 @@ async def websocket_handler(ws, ip_address, port):
                 # If message came from browser → send to device
                 if ws in controllers:
                     msg_data = json.loads(message)
-                    if msg_data["type"] == "INITIATE_UDP_CONNECTION":
-                        # Send INITIATE_UDP_CONNECTION directly to from_head only
-                        from_uid = msg_data.get("from_uid")
-                        to_uid = msg_data.get("to_uid")
-                        from_head = uid_to_head.get(from_uid)
-                        
-                        if from_head:
-                            # Forward INITIATE_UDP_CONNECTION to from_head (it acts as UDP server)
-                            await from_head.send_str(json.dumps(msg_data))
-                            print(f"Forwarded INITIATE_UDP_CONNECTION to from_head {from_uid} for connection to {to_uid}")
-                        else:
-                            error_msg = json.dumps({
-                                "type": "UDP_CONNECTION_RESULT",
-                                "uid": from_uid,
-                                "success": False,
-                                "message": "from_head not found"
-                            })
-                            await ws.send_str(error_msg)
-                    else:
-                        uid = msg_data.get("uid")
-                        head = uid_to_head.get(uid)
-                        if head:
-                            await head.send_str(message)
-                            if msg_data["type"] == "SET_NAME":
-                                head.name = msg_data.get("name", "unknown")
-                            elif msg_data["type"] == "SET_APP_PATH":
-                                head.app_path = msg_data.get("app_path", "apps/base")
-                            elif msg_data["type"] == "SET_NETWORK_CONFIGS":
-                                head.network_configs = msg_data.get("network_configs", [])
+                    uid = msg_data.get("uid")
+                    head = uid_to_head.get(uid)
+                    if head:
+                        await head.send_str(message)
+                        if msg_data["type"] == "SET_NAME":
+                            head.name = msg_data.get("name", "unknown")
+                        elif msg_data["type"] == "SET_APP_PATH":
+                            head.app_path = msg_data.get("app_path", "apps/base")
+                        elif msg_data["type"] == "SET_NETWORK_CONFIGS":
+                            head.network_configs = msg_data.get("network_configs", [])
 
                 # If message came from device → broadcast to all browsers
                 elif ws in heads:

@@ -252,7 +252,6 @@ async def websocket_client(ws_connection, server_url=None):
                 elif my_dict["type"] == "INITIATE_UDP_CONNECTION":
                     # from_head receives this - act as UDP server
                     to_uid = my_dict.get("to_uid")
-                    print(f"INITIATE_UDP_CONNECTION: acting as server for connection to {to_uid}")
                     
                     async def handle_initiate():
                         try:

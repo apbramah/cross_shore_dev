@@ -356,16 +356,16 @@
       });
     }
     
-    function initiateUdpConnection(fromUid) {
-      const dropdown = document.getElementById(`udp_target_${fromUid}`);
+    function initiateUdpConnection(uid) {
+      const dropdown = document.getElementById(`udp_target_${uid}`);
       if (!dropdown || !dropdown.value) {
-        appendHeadLog(fromUid, "Please select a head to connect to");
+        appendHeadLog(uid, "Please select a head to connect to");
         return;
       }
       
       const targetUid = dropdown.value;
-      const obj = {type: "INITIATE_UDP_CONNECTION", from_uid: fromUid, to_uid: targetUid};
-      appendHeadLog(fromUid, "Initiating UDP connection to " + targetUid + ": " + JSON.stringify(obj));
+      const obj = {type: "INITIATE_UDP_CONNECTION", uid: uid, to_uid: targetUid};
+      appendHeadLog(uid, "Initiating UDP connection to " + targetUid + ": " + JSON.stringify(obj));
       ws.send(JSON.stringify(obj));
     }
   </script>
