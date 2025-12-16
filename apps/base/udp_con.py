@@ -1,19 +1,24 @@
 import time
+import json
 try:
     import uasyncio as asyncio
     import usocket as socket
     import ustruct as struct
+    import utime as time_module
     MICROPYTHON = True
 except ImportError:
     import asyncio
     import socket
     import struct
+    import time as time_module
     MICROPYTHON = False
     
 # Packet format (binary):
 # [DATA_MAGIC:4 bytes][flags:1 byte][channel_id:2 bytes][seq_num:4 bytes][data:variable]
 # Flags: bit 0 = ACK, bits 1-7 reserved
 DATA_MAGIC = b'UDPD'  # Magic header to identify valid packets
+STUN_CHECK_MAGIC = b"STUN_CHECK"
+STUN_RESPONSE_MAGIC = b"STUN_RESPONSE"
 FLAG_ACK = 0x01
 
 udp_connections = {}  # Track UDP connections: peer_uid -> UDPConnection
@@ -22,15 +27,22 @@ class UDPConnection:
     """
     Manages a UDP connection with multiple datachannels.
     Handles packet demultiplexing and channel management.
+    Also handles candidate pair evaluation for connection establishment.
     """
-    def __init__(self, sock, peer_addr, peer_uid):
+    def __init__(self, sock, local_candidates, remote_candidates, peer_uid):
         self.sock = sock
-        self.peer_addr = peer_addr  # (ip, port)
+        self.local_candidates = local_candidates
+        self.all_remote_candidates = remote_candidates.copy()
         self.peer_uid = peer_uid
+        self.peer_addr = None  # Will be set when we receive a DATA_MAGIC packet or successful STUN response
         self.channels = {}  # channel_id -> DataChannel
         self.next_channel_id = 1
         self.running = False
         self._receiver_task = None
+        self._evaluation_task = None
+        self.response_addresses = set()  # Track addresses we've responded to during evaluation
+        self.checks_sent = {}  # Track connectivity checks sent during evaluation
+        self.last_response_send_time = {}  # Track when we last sent a response to each address
         
     def create_channel(self, channel_type='unreliable'):
         """
@@ -71,17 +83,24 @@ class UDPConnection:
         data = payload[7:]
         return flags, channel_id, seq_num, data
     
-    def _send_raw(self, packet):
+    def _send_raw(self, packet, addr=None):
         """Send a raw packet over the UDP socket"""
         try:
-            self.sock.sendto(packet, self.peer_addr)
+            target_addr = addr if addr is not None else self.peer_addr
+            if target_addr is None:
+                print("Error: Cannot send packet, peer_addr not set")
+                return False
+            self.sock.sendto(packet, target_addr)
             return True
         except Exception as e:
             print(f"Error sending UDP packet: {e}")
             return False
     
     async def _receiver_loop(self):
-        """Main receiver loop - demultiplexes packets to channels"""
+        """
+        Unified receiver loop - handles both STUN packets (for continuous evaluation)
+        and DATA packets (for data channels) simultaneously
+        """
         if not MICROPYTHON:
             loop = asyncio.get_running_loop()
             # Set socket to non-blocking for asyncio
@@ -111,59 +130,159 @@ class UDPConnection:
                         # Timeout - continue loop to allow other tasks to run
                         continue
                 
-                # Verify packet is from expected peer
-                if addr != self.peer_addr:
+                # Handle DATA_MAGIC packets (data channel packets)
+                if data.startswith(DATA_MAGIC):
+                    # Set peer_addr if not already set
+                    if self.peer_addr is None:
+                        self.peer_addr = addr
+                        print(f"Set peer_addr to {addr} from DATA_MAGIC packet")
+                    
+                    # Only process if from the known peer (or first time)
+                    if addr == self.peer_addr:
+                        result = self._decode_packet(data)
+                        if result is not None:
+                            flags, channel_id, seq_num, payload = result
+                            # Route to appropriate channel
+                            if channel_id in self.channels:
+                                channel = self.channels[channel_id]
+                                await channel._handle_packet(flags, seq_num, payload)
                     continue
                 
-                # Decode packet
-                result = self._decode_packet(data)
-
-                print('result', result)
-                if result is None:
-                    continue
-                
-                flags, channel_id, seq_num, payload = result
-                
-                # Route to appropriate channel
-                if channel_id in self.channels:
-                    channel = self.channels[channel_id]
-                    await channel._handle_packet(flags, seq_num, payload)
+                # Handle STUN packets (evaluation packets)
+                if data.startswith(STUN_RESPONSE_MAGIC) or data.startswith(STUN_CHECK_MAGIC):
+                    await self._handle_stun_packet(data, addr)
                     
             except Exception as e:
                 print(f"Error in receiver loop: {e}")
                 await asyncio.sleep(0.1)
     
-    async def process_packet(self, data, addr):
-        """
-        Process a packet that was already received (e.g., during candidate evaluation).
-        Verifies the packet is from the expected peer and routes it to the appropriate channel.
-        """
-        # Verify packet is from expected peer
-        if addr != self.peer_addr:
-            return False
+    async def _handle_stun_packet(self, data, addr):
+        """Handle STUN packets for continuous candidate evaluation"""
+        # Check if response is from an expected address (within our sent checks)
+        expected_addr = None
+        for check_addr in self.checks_sent.keys():
+            if addr == check_addr:
+                expected_addr = check_addr
+                break
         
-        # Decode packet
-        result = self._decode_packet(data)
-        if result is None:
-            return False
+        if expected_addr:
+            # Response from expected address - pair is successful!
+            # Set peer_addr if not already set
+            if self.peer_addr is None:
+                self.peer_addr = addr
+                print(f"Set peer_addr to {addr} from successful STUN response")
+        else:
+            # Response from unexpected address - discover prflx candidate
+            print(f"Received STUN response from unexpected address {addr}, creating prflx candidate")
+            prflx_candidate = {
+                "type": "prflx",
+                "address": addr[0],
+                "port": addr[1]
+            }
+            
+            # Check if we already know about this candidate
+            already_known = False
+            for known_cand in self.all_remote_candidates:
+                if (known_cand["address"] == prflx_candidate["address"] and
+                    known_cand["port"] == prflx_candidate["port"]):
+                    already_known = True
+                    break
+            
+            if not already_known:
+                self.all_remote_candidates.append(prflx_candidate)
+                print(f"Added new prflx candidate: {prflx_candidate}")
+                # Will form new pairs in next round
         
-        flags, channel_id, seq_num, payload = result
+        # If it's a check from peer, respond (and mark this address for continued responses)
+        if data.startswith(STUN_CHECK_MAGIC):
+            response_packet = STUN_RESPONSE_MAGIC + data[len(STUN_CHECK_MAGIC):]
+            try:
+                self.sock.sendto(response_packet, addr)
+                self.response_addresses.add(addr)  # Mark for continued responses
+                print(f"Sent connectivity check response to {addr}")
+            except Exception as e:
+                print(f"Error sending response to {addr}: {e}")
+    
+    async def _evaluation_loop(self):
+        """Continuously perform candidate pair evaluation using ICE-like connectivity checks"""
+        # Socket should already be non-blocking (set by receiver loop)
+        round_num = 0
+        round_interval = 0.5  # Send checks every 500ms
         
-        # Route to appropriate channel
-        if channel_id in self.channels:
-            channel = self.channels[channel_id]
-            await channel._handle_packet(flags, seq_num, payload)
-            return True
-        
-        return False
+        while self.running:
+            round_num += 1
+            print(f"Candidate pair evaluation round {round_num}")
+            
+            # Form candidate pairs from local socket and all remote candidates
+            all_pairs = []
+            for local_cand in self.local_candidates:
+                for remote_cand in self.all_remote_candidates:
+                    all_pairs.append((local_cand, remote_cand))
+            
+            if not all_pairs:
+                print("No candidate pairs to evaluate")
+                await asyncio.sleep(round_interval)
+                continue
+            
+            # Evaluate pairs by sending connectivity checks
+            self.checks_sent = {}
+            for local_cand, remote_cand in all_pairs:
+                remote_addr = (remote_cand["address"], remote_cand["port"])
+                try:
+                    # Send connectivity check
+                    check_packet = STUN_CHECK_MAGIC + json.dumps({
+                        "local": local_cand,
+                        "remote": remote_cand
+                    }).encode('utf-8')
+                    self.sock.sendto(check_packet, remote_addr)
+                    self.checks_sent[remote_addr] = (local_cand, remote_cand)
+                    print(f"Sent connectivity check to {remote_addr}")
+                except Exception as e:
+                    print(f"Error sending connectivity check to {remote_addr}: {e}")
+            
+            # Continue sending keepalive responses to known addresses
+            current_time = time_module.time()
+            for resp_addr in list(self.response_addresses):
+                last_send = self.last_response_send_time.get(resp_addr, 0)
+                if current_time - last_send >= 0.1:  # Send every 100ms
+                    try:
+                        response_packet = STUN_RESPONSE_MAGIC + b"KEEPALIVE"
+                        self.sock.sendto(response_packet, resp_addr)
+                        self.last_response_send_time[resp_addr] = current_time
+                    except Exception as e:
+                        print(f"Error sending keepalive response to {resp_addr}: {e}")
+            
+            # Wait before next round
+            await asyncio.sleep(round_interval)
     
     async def start(self):
-        """Start the connection and receiver loop"""
+        """Start the connection: start receiver loop and continuous evaluation"""
         if self.running:
             return
         
         self.running = True
         self._receiver_task = asyncio.create_task(self._receiver_loop())
+        self._evaluation_task = asyncio.create_task(self._evaluation_loop())
+        
+        # Create reliable channel
+        reliable_channel = self.create_channel('reliable')
+        await reliable_channel.start()
+        
+        # Create unreliable channel
+        unreliable_channel = self.create_channel('unreliable')
+        
+        # Store channel references as attributes for easy access
+        self.reliable_channel = reliable_channel
+        self.unreliable_channel = unreliable_channel
+        
+        # Set up default message handlers
+        async def on_reliable_message(data):
+            print(f"Reliable channel received: {data}")
+        async def on_unreliable_message(data):
+            print(f"Unreliable channel received: {data}")
+        
+        reliable_channel.on_message = on_reliable_message
+        unreliable_channel.on_message = on_unreliable_message
     
     async def close(self):
         """Close the connection and all channels"""
@@ -172,6 +291,12 @@ class UDPConnection:
             self._receiver_task.cancel()
             try:
                 await self._receiver_task
+            except asyncio.CancelledError:
+                pass
+        if self._evaluation_task:
+            self._evaluation_task.cancel()
+            try:
+                await self._evaluation_task
             except asyncio.CancelledError:
                 pass
         

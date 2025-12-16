@@ -132,10 +132,6 @@ ws = None
 current_server_url = None  # Store server URL for UDP discovery
 pending_udp_connections = {}  # Store pending UDP connection info: peer_uid -> {socket, is_server, local_candidates}
 
-# Candidate pair evaluation constants
-STUN_CHECK_MAGIC = b"STUN_CHECK"
-STUN_RESPONSE_MAGIC = b"STUN_RESPONSE"
-
 def http_to_ws_url(http_url):
     """Convert HTTP URL to WebSocket URL for upgrading the connection"""
     if http_url.startswith('http://'):
@@ -192,229 +188,17 @@ async def evaluate_candidate_pairs(sock, local_candidates, remote_candidates, pe
     If successful, creates and returns a fully-formed UDPConnection with reliable and unreliable channels.
     Returns: UDPConnection instance or None on failure
     """
-    if MICROPYTHON:
-        import usocket as socket_module
-        import utime as time_module
-    else:
-        import socket as socket_module
-        import time as time_module
-    
-    # All remote candidates we know about (including discovered prflx ones)
-    all_remote_candidates = remote_candidates.copy()
-    successful_pair = None
-    peer_addr = None
-    response_addresses = set()  # Track addresses we've responded to (keep responding to these)
-    early_data_packet = None  # Store DATA_MAGIC packet if received early
-    early_data_addr = None  # Store address of early DATA_MAGIC packet
-    
-    # Remember original socket blocking state
-    original_blocking = sock.getblocking() if hasattr(sock, 'getblocking') else True
-    
-    # Set socket to non-blocking for async receive
     try:
-        sock.setblocking(False)
-    except:
-        pass  # Some socket implementations might not support setblocking
-    
-    max_evaluation_rounds = 10  # Evaluate all pairs for this many rounds
-    round_num = 0
-    early_exit = False  # Flag to exit early when DATA_MAGIC is received
-    
-    while round_num < max_evaluation_rounds and not early_exit:
-        round_num += 1
-        print(f"Candidate pair evaluation round {round_num}")
+        # Create UDPConnection with candidates - evaluation and channel creation happen inside start()
+        connection = UDPConnection(sock, local_candidates, remote_candidates, peer_uid)
         
-        # Form candidate pairs from local socket and all remote candidates
-        # Evaluate ALL pairs in every round
-        all_pairs = []
-        for local_cand in local_candidates:
-            for remote_cand in all_remote_candidates:
-                all_pairs.append((local_cand, remote_cand))
-        
-        if not all_pairs:
-            print("No candidate pairs to evaluate")
-            break
-        
-        # Evaluate pairs by sending connectivity checks (send to all pairs in every round)
-        checks_sent = {}
-        for local_cand, remote_cand in all_pairs:
-            remote_addr = (remote_cand["address"], remote_cand["port"])
-            try:
-                # Send connectivity check
-                check_packet = STUN_CHECK_MAGIC + json.dumps({
-                    "local": local_cand,
-                    "remote": remote_cand
-                }).encode('utf-8')
-                sock.sendto(check_packet, remote_addr)
-                checks_sent[remote_addr] = (local_cand, remote_cand)
-                print(f"Sent connectivity check to {remote_addr}")
-            except Exception as e:
-                print(f"Error sending connectivity check to {remote_addr}: {e}")
-        
-        # Wait for responses and continue sending responses to known addresses
-        timeout_duration = 0.5  # 500ms timeout per round
-        check_interval = 0.05  # Check every 50ms
-        start_time = time_module.time()
-        last_response_send_time = {}  # Track when we last sent a response to each address
-        
-        while (time_module.time() - start_time) < timeout_duration:
-            try:
-                # Continue sending responses to addresses we've responded to before
-                # Send responses periodically (every ~100ms) to maintain connectivity
-                current_time = time_module.time()
-                for resp_addr in list(response_addresses):
-                    last_send = last_response_send_time.get(resp_addr, 0)
-                    if current_time - last_send >= 0.1:  # Send every 100ms
-                        try:
-                            # Send a response to maintain connectivity
-                            response_packet = STUN_RESPONSE_MAGIC + b"KEEPALIVE"
-                            sock.sendto(response_packet, resp_addr)
-                            last_response_send_time[resp_addr] = current_time
-                        except Exception as e:
-                            print(f"Error sending keepalive response to {resp_addr}: {e}")
-                
-                if MICROPYTHON:
-                    # MicroPython: use timeout-based approach (socket already non-blocking)
-                    try:
-                        data, addr = sock.recvfrom(2048)
-                    except OSError:
-                        # No data available, sleep and continue
-                        await asyncio.sleep(check_interval)
-                        continue
-                else:
-                    # CPython: use asyncio sock_recvfrom
-                    loop = asyncio.get_event_loop()
-                    remaining_time = timeout_duration - (time_module.time() - start_time)
-                    if remaining_time <= 0:
-                        break
-                    try:
-                        data, addr = await asyncio.wait_for(
-                            loop.sock_recvfrom(sock, 2048),
-                            timeout=min(check_interval, remaining_time)
-                        )
-                    except asyncio.TimeoutError:
-                        continue
-                
-                # Check if this is a DATA_MAGIC packet - if so, connection is established!
-                if data.startswith(DATA_MAGIC):
-                    print(f"Received DATA_MAGIC packet from {addr}, connection established!")
-                    # Store the packet to process later after creating the connection
-                    early_data_packet = data
-                    early_data_addr = addr
-                    # Determine peer_addr - use the address the packet came from
-                    peer_addr = addr
-                    # Try to find the matching candidate pair if possible
-                    for check_addr, (local_cand, remote_cand) in checks_sent.items():
-                        if addr == check_addr:
-                            successful_pair = (local_cand, remote_cand)
-                            break
-                    # Exit evaluation loop early - connection is established
-                    early_exit = True
-                    break
-                
-                # Check if this is a response to one of our connectivity checks
-                if data.startswith(STUN_RESPONSE_MAGIC) or data.startswith(STUN_CHECK_MAGIC):
-                    # This is a connectivity check response or check from peer
-                    
-                    # Check if response is from an expected address
-                    expected_addr = None
-                    expected_pair = None
-                    for check_addr, (local_cand, remote_cand) in checks_sent.items():
-                        if addr == check_addr:
-                            expected_addr = check_addr
-                            expected_pair = (local_cand, remote_cand)
-                            break
-                    
-                    if expected_addr:
-                        # Response from expected address - pair is successful!
-                        print(f"Received response from expected address {addr}, pair successful!")
-                        successful_pair = expected_pair
-                        peer_addr = addr
-                        # break
-                    else:
-                        # Response from unexpected address - discover prflx candidate
-                        print(f"Received response from unexpected address {addr}, creating prflx candidate")
-                        prflx_candidate = {
-                            "type": "prflx",
-                            "address": addr[0],
-                            "port": addr[1]
-                        }
-                        
-                        # Check if we already know about this candidate
-                        already_known = False
-                        for known_cand in all_remote_candidates:
-                            if (known_cand["address"] == prflx_candidate["address"] and
-                                known_cand["port"] == prflx_candidate["port"]):
-                                already_known = True
-                                break
-                        
-                        if not already_known:
-                            all_remote_candidates.append(prflx_candidate)
-                            print(f"Added new prflx candidate: {prflx_candidate}")
-                            # Will form new pairs in next round
-                    
-                    # If it's a check from peer, respond (and mark this address for continued responses)
-                    if data.startswith(STUN_CHECK_MAGIC):
-                        response_packet = STUN_RESPONSE_MAGIC + data[len(STUN_CHECK_MAGIC):]
-                        try:
-                            sock.sendto(response_packet, addr)
-                            response_addresses.add(addr)  # Mark for continued responses
-                            print(f"Sent connectivity check response to {addr}")
-                        except Exception as e:
-                            print(f"Error sending response to {addr}: {e}")
-                
-            except Exception as e:
-                print(f"Error receiving during candidate evaluation: {e}")
-                await asyncio.sleep(check_interval)
-                continue
-    
-    # Restore original socket blocking state
-    try:
-        sock.setblocking(original_blocking)
-    except:
-        pass
-    
-    # Create connection if we have peer_addr (either from successful pair or early DATA_MAGIC)
-    if peer_addr:
-        if successful_pair:
-            print(f"Successful candidate pair found: {successful_pair[0]} <-> {successful_pair[1]}")
-        elif early_data_packet:
-            print(f"Connection established via early DATA_MAGIC packet from {peer_addr}")
-        print(f"Using peer address: {peer_addr}")
-        
-        # Create fully-formed UDPConnection
-        connection = UDPConnection(sock, peer_addr, peer_uid)
+        # Start the connection (performs evaluation and creates channels internally)
         await connection.start()
-        
-        # Create reliable channel
-        reliable_channel = connection.create_channel('reliable')
-        await reliable_channel.start()
-        
-        # Create unreliable channel
-        unreliable_channel = connection.create_channel('unreliable')
-        
-        # Store channel references as attributes for easy access
-        connection.reliable_channel = reliable_channel
-        connection.unreliable_channel = unreliable_channel
-        
-        # Set up default message handlers
-        async def on_reliable_message(data):
-            print(f"Reliable channel received: {data}")
-        async def on_unreliable_message(data):
-            print(f"Unreliable channel received: {data}")
-        
-        reliable_channel.on_message = on_reliable_message
-        unreliable_channel.on_message = on_unreliable_message
-        
-        # Process early DATA_MAGIC packet if we received one
-        if early_data_packet and early_data_addr:
-            print(f"Processing early DATA_MAGIC packet received during evaluation")
-            await connection.process_packet(early_data_packet, early_data_addr)
         
         print(f"Created UDP connection with channels for {peer_uid}")
         return connection
-    else:
-        print("No successful candidate pair found")
+    except Exception as e:
+        print(f"Failed to create UDP connection: {e}")
         return None
 
 async def websocket_client(ws_connection, server_url=None):
