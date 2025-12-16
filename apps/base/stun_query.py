@@ -131,6 +131,8 @@ async def query_stun_server(sock, timeout=0.25):
         try:
             if MICROPYTHON:
                 sock.setblocking(True)
+            print(f"Sending STUN request to {STUN_SERVER_HOST}:{STUN_SERVER_PORT}")
+            print(request)
             sock.sendto(request, (STUN_SERVER_HOST, STUN_SERVER_PORT))
         except Exception as e:
             print(f"Error sending STUN request: {e}")
