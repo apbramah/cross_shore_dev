@@ -417,35 +417,11 @@ async def websocket_client(ws_connection, server_url=None):
                                 onOpen=onOpen, onClose=onClose
                             )
                             
-                            if connection is None:
-                                print("Client: Failed to establish connection via candidate pair evaluation")
-                                del pending_udp_connections[from_uid]
-                                result_msg = {
-                                    "type": "UDP_CONNECTION_RESULT",
-                                    "uid": uid_hex,
-                                    "peer_uid": from_uid,
-                                    "success": False,
-                                    "message": "Candidate pair evaluation failed"
-                                }
-                                await ws.send(json.dumps(result_msg))
-                                return
-
                             # Clean up pending connection
                             del pending_udp_connections[from_uid]
                             
                         except Exception as e:
                             print(f"Error handling OFFER: {e}")
-                            # Report failure if we have from_uid
-                            from_uid = my_dict.get("from_uid")
-                            if from_uid:
-                                result_msg = {
-                                    "type": "UDP_CONNECTION_RESULT",
-                                    "uid": uid_hex,
-                                    "peer_uid": from_uid,
-                                    "success": False,
-                                    "message": str(e)
-                                }
-                                await ws.send(json.dumps(result_msg))
                     
                     asyncio.create_task(handle_offer(from_uid, candidates))
                     
@@ -540,34 +516,11 @@ async def websocket_client(ws_connection, server_url=None):
                                 sock, local_candidates, candidates, from_uid,
                                 onOpen=onOpen, onClose=onClose
                             )
-                            
-                            if connection is None:
-                                print("Server: Failed to establish connection via candidate pair evaluation")
-                                del pending_udp_connections[from_uid]
-                                result_msg = {
-                                    "type": "UDP_CONNECTION_RESULT",
-                                    "uid": uid_hex,
-                                    "peer_uid": from_uid,
-                                    "success": False,
-                                    "message": "Candidate pair evaluation failed"
-                                }
-                                await ws.send(json.dumps(result_msg))
-                                return
-
-                            # Clean up pending connection
+                                                        # Clean up pending connection
                             del pending_udp_connections[from_uid]
                             
                         except Exception as e:
                             print(f"Error handling ANSWER (server side): {e}")
-                            # Report failure
-                            result_msg = {
-                                "type": "UDP_CONNECTION_RESULT",
-                                "uid": uid_hex,
-                                "peer_uid": from_uid,
-                                "success": False,
-                                "message": str(e)
-                            }
-                            await ws.send(json.dumps(result_msg))
                     
                     asyncio.create_task(handle_answer_server())
                     
