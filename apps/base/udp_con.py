@@ -29,11 +29,13 @@ class UDPConnection:
     Handles packet demultiplexing and channel management.
     Also handles candidate pair evaluation for connection establishment.
     """
-    def __init__(self, sock, local_candidates, remote_candidates, peer_uid, onOpen=None, onClose=None):
+    def __init__(self, sock, local_candidates, remote_candidates, peer_uid, local_uid, ws, onOpen=None, onClose=None):
         self.sock = sock
         self.local_candidates = local_candidates
         self.all_remote_candidates = remote_candidates.copy()
         self.peer_uid = peer_uid
+        self.local_uid = local_uid
+        self.ws = ws  # WebSocket connection for sending messages
         self.peer_addr = None  # Will be set when we receive a DATA_MAGIC packet or successful STUN response
         self.channels = {}  # channel_id -> DataChannel
         self.next_channel_id = 1
@@ -152,6 +154,15 @@ class UDPConnection:
                 await self.onOpen(self)
             except Exception as e:
                 print(f"Error in onOpen callback: {e}")
+        
+        result_msg = {
+            "type": "UDP_CONNECTION_RESULT",
+            "uid": self.local_uid,
+            "peer_uid": self.peer_uid,
+            "success": True,
+            "message": "UDP connection established"
+        }
+        await self.ws.send(json.dumps(result_msg))
 
     async def _handle_data_packet(self, data, addr):
         # Set peer_addr if not already set
@@ -366,6 +377,14 @@ class UDPConnection:
         except:
             pass
 
+        result_msg = {
+            "type": "UDP_CONNECTION_RESULT",
+            "uid": self.local_uid,
+            "peer_uid": self.peer_uid,
+            "success": False,
+            "message": "UDP connection closed"
+        }
+        await self.ws.send(json.dumps(result_msg))
 
 class DataChannel:
     """Base class for datachannels"""

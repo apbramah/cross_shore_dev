@@ -183,15 +183,14 @@ def get_manifest():
         manifest = json.load(f)
     return manifest
 
-async def evaluate_candidate_pairs(sock, local_candidates, remote_candidates, peer_uid, onOpen=None, onClose=None):
+async def evaluate_candidate_pairs(sock, local_candidates, remote_candidates, peer_uid, local_uid, ws=None, onOpen=None, onClose=None):
     """
     Evaluate candidate pairs using ICE-like connectivity checks.
     If successful, creates and returns a fully-formed UDPConnection with reliable and unreliable channels.
     Returns: UDPConnection instance or None on failure
     """
     try:
-        # Create UDPConnection with candidates - evaluation and channel creation happen inside start()
-        connection = UDPConnection(sock, local_candidates, remote_candidates, peer_uid, onOpen=onOpen, onClose=onClose)
+        connection = UDPConnection(sock, local_candidates, remote_candidates, peer_uid, local_uid, ws, onOpen=onOpen, onClose=onClose)
         
         # Start the connection (performs evaluation and creates channels internally)
         await connection.start()
@@ -375,16 +374,6 @@ async def websocket_client(ws_connection, server_url=None):
                                 print("Starting occasional_send (client)")
                                 occasional_send_task = asyncio.create_task(occasional_send(reliable_channel, uid_hex + 'rel'))
                                 connection._occasional_send_task = occasional_send_task
-                                
-                                # Report success
-                                result_msg = {
-                                    "type": "UDP_CONNECTION_RESULT",
-                                    "uid": uid_hex,
-                                    "peer_uid": from_uid,
-                                    "success": True,
-                                    "message": "UDP connection established"
-                                }
-                                await ws.send(json.dumps(result_msg))
                             
                             async def onClose(connection):
                                 print("Client: Connection closed (onClose callback)")
@@ -395,19 +384,9 @@ async def websocket_client(ws_connection, server_url=None):
                                         await connection._occasional_send_task
                                     except asyncio.CancelledError:
                                         pass
-                                
-                                # Report closed
-                                result_msg = {
-                                    "type": "UDP_CONNECTION_RESULT",
-                                    "uid": uid_hex,
-                                    "peer_uid": from_uid,
-                                    "success": False,
-                                    "message": "UDP connection closed"
-                                }
-                                await ws.send(json.dumps(result_msg))
                             
                             await evaluate_candidate_pairs(
-                                sock, answer_candidates, candidates, from_uid,
+                                sock, answer_candidates, candidates, from_uid, uid_hex, ws,
                                 onOpen=onOpen, onClose=onClose
                             )
                             
@@ -469,16 +448,6 @@ async def websocket_client(ws_connection, server_url=None):
                                 print("Starting occasional_send (server)")
                                 occasional_send_task = asyncio.create_task(occasional_send(reliable_channel, uid_hex + 'rel'))
                                 connection._occasional_send_task = occasional_send_task
-                                
-                                # Report success
-                                result_msg = {
-                                    "type": "UDP_CONNECTION_RESULT",
-                                    "uid": uid_hex,
-                                    "peer_uid": from_uid,
-                                    "success": True,
-                                    "message": "UDP connection established"
-                                }
-                                await ws.send(json.dumps(result_msg))
                             
                             async def onClose(connection):
                                 print("Server: Connection closed (onClose callback)")
@@ -489,19 +458,9 @@ async def websocket_client(ws_connection, server_url=None):
                                         await connection._occasional_send_task
                                     except asyncio.CancelledError:
                                         pass
-                                
-                                # Report closed
-                                result_msg = {
-                                    "type": "UDP_CONNECTION_RESULT",
-                                    "uid": uid_hex,
-                                    "peer_uid": from_uid,
-                                    "success": False,
-                                    "message": "UDP connection closed"
-                                }
-                                await ws.send(json.dumps(result_msg))
                             
                             await evaluate_candidate_pairs(
-                                sock, local_candidates, candidates, from_uid,
+                                sock, local_candidates, candidates, from_uid, uid_hex, ws,
                                 onOpen=onOpen, onClose=onClose
                             )
                                                         # Clean up pending connection
