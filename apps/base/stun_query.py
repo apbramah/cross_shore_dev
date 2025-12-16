@@ -105,8 +105,8 @@ def parse_stun_response(data, expected_transaction_id):
                 # XOR decode with magic cookie (port uses high 16 bits, address uses full 32 bits)
                 port = xor_port ^ (STUN_MAGIC_COOKIE >> 16)
                 address_int = xor_address ^ STUN_MAGIC_COOKIE
-                # Convert to IP string
-                address = socket.inet_ntoa(struct.pack('!I', address_int))
+                # Convert to IP string (equivalent to socket.inet_ntoa)
+                address = ".".join(str((address_int >> shift) & 0xFF) for shift in (24, 16, 8, 0))
                 return (address, port)
         
         # Move to next attribute (pad to 4-byte boundary)
