@@ -116,13 +116,6 @@ async def query_stun_server(sock, timeout=0.25):
     srflx_candidates = []
     
     try:
-        # Get local port for srflx candidate
-        try:
-            local_port = sock.getsockname()[1]
-        except Exception as e:
-            print(f"Could not determine local port for STUN query: {e}")
-            return srflx_candidates
-        
         # Create STUN Binding Request
         request, transaction_id = create_stun_binding_request()
         
@@ -167,9 +160,9 @@ async def query_stun_server(sock, timeout=0.25):
                             srflx_candidates.append({
                                 "type": "srflx",
                                 "address": srflx_address,
-                                "port": local_port  # Use local port, not the mapped port (ICE convention)
+                                "port": srflx_port
                             })
-                            print(f"STUN query successful: srflx candidate {srflx_address}:{local_port}")
+                            print(f"STUN query successful: srflx candidate {srflx_address}:{srflx_port}")
                         else:
                             print("STUN response parsing failed")
                 except OSError as e:
@@ -206,9 +199,9 @@ async def query_stun_server(sock, timeout=0.25):
                         srflx_candidates.append({
                             "type": "srflx",
                             "address": srflx_address,
-                            "port": local_port  # Use local port, not the mapped port (ICE convention)
+                            "port": srflx_port
                         })
-                        print(f"STUN query successful: srflx candidate {srflx_address}:{local_port}")
+                        print(f"STUN query successful: srflx candidate {srflx_address}:{srflx_port}")
                     else:
                         print("STUN response parsing failed")
                 except asyncio.TimeoutError:
