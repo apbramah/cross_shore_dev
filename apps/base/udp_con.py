@@ -91,6 +91,7 @@ class UDPConnection:
 
             if addr == None:
                 print("Error: Cannot send packet, addr not set")
+                return
 
             self.sock.sendto(packet, addr)
         except Exception as e:
