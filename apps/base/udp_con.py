@@ -156,7 +156,7 @@ class UDPConnection:
     async def _handle_data_packet(self, data, addr):
         # Set peer_addr if not already set
         if self.peer_addr is None:
-            self._open(addr)
+            await self._open(addr)
         
         # Only process if from the known peer (or first time)
         if addr == self.peer_addr:
@@ -186,7 +186,7 @@ class UDPConnection:
                 del self.candidate_no_response_count[addr]
             # Set peer_addr if not already set
             if self.peer_addr is None:
-                self._open(addr)
+                await self._open(addr)
         else:
             # Response from unexpected address - discover prflx candidate
             print(f"Received STUN response from unexpected address {addr}, creating prflx candidate")
