@@ -47,6 +47,17 @@ class UDPConnection:
         self.candidates_that_responded = set()  # Track candidates that have responded (address, port) tuples
         self.onOpen = onOpen  # Callback called when peer_addr is set
         self.onClose = onClose  # Callback called when connection closes
+    
+    @classmethod
+    async def create(cls, sock, local_candidates, remote_candidates, peer_uid, local_uid, ws, onOpen=None, onClose=None):
+        """
+        Create and start a UDPConnection.
+        This is an async classmethod that creates the connection and starts it automatically.
+        """
+        connection = cls(sock, local_candidates, remote_candidates, peer_uid, local_uid, ws, onOpen=onOpen, onClose=onClose)
+        await connection.start()
+        print(f"Created UDP connection with channels for {peer_uid}")
+        return connection
         
     def create_channel(self, channel_type='unreliable'):
         """

@@ -185,23 +185,12 @@ def get_manifest():
         manifest = json.load(f)
     return manifest
 
-async def evaluate_candidate_pairs(sock, local_candidates, remote_candidates, peer_uid, local_uid, ws=None, onOpen=None, onClose=None):
-    """
-    Evaluate candidate pairs using ICE-like connectivity checks.
-    If successful, creates and returns a fully-formed UDPConnection with reliable and unreliable channels.
-    Returns: UDPConnection instance or None on failure
-    """
-    try:
-        connection = UDPConnection(sock, local_candidates, remote_candidates, peer_uid, local_uid, ws, onOpen=onOpen, onClose=onClose)
-        
-        # Start the connection (performs evaluation and creates channels internally)
-        await connection.start()
-        
-        print(f"Created UDP connection with channels for {peer_uid}")
-        return connection
-    except Exception as e:
-        print(f"Failed to create UDP connection: {e}")
-        return None
+
+async def occasional_send(channel, my_string):
+    while True:
+        print('sending', my_string)
+        await channel.send(my_string.encode('utf-8'))
+        await asyncio.sleep(1)
 
 async def websocket_client(ws_connection, server_url=None):
     """Handle WebSocket client logic with an upgraded connection"""
@@ -337,19 +326,6 @@ async def websocket_client(ws_connection, server_url=None):
                         await ws.send(json.dumps(answer_msg))
                         print(f"Sent ANSWER to {from_uid} with {len(answer_candidates)} candidates")
                         
-                        # Now evaluate candidate pairs (client side - connect to server)
-                        if not candidates:
-                            print("No peer candidates in OFFER")
-                            return
-                        
-                        print(f"Client: Evaluating candidate pairs for connection to {from_uid}")
-                        
-                        async def occasional_send(channel, my_string):
-                            while True:
-                                print('sending', my_string)
-                                await channel.send(my_string.encode('utf-8'))
-                                await asyncio.sleep(1)
-                        
                         async def onOpen(connection):
                             print("Client: Connection opened (onOpen callback)")
                             # Store the connection
@@ -373,7 +349,7 @@ async def websocket_client(ws_connection, server_url=None):
                                 except asyncio.CancelledError:
                                     pass
                         
-                        await evaluate_candidate_pairs(
+                        connection = await UDPConnection.create(
                             sock, answer_candidates, candidates, from_uid, uid_hex, ws,
                             onOpen=onOpen, onClose=onClose
                         )
@@ -405,22 +381,6 @@ async def websocket_client(ws_connection, server_url=None):
                         sock = conn_info["socket"]
                         local_candidates = conn_info.get("local_candidates", [])
                         
-                        if not candidates:
-                            print("No candidates in ANSWER message")
-                            return
-                        
-                        if not local_candidates:
-                            print("No local candidates stored")
-                            return
-                        
-                        print(f"Server: Evaluating candidate pairs for connection to {from_uid}")
-                        
-                        async def occasional_send(channel, my_string):
-                            while True:
-                                print('sending', my_string)
-                                await channel.send(my_string.encode('utf-8'))
-                                await asyncio.sleep(1)
-                        
                         async def onOpen(connection):
                             print("Server: Connection opened (onOpen callback)")
                             # Store the connection
@@ -444,7 +404,7 @@ async def websocket_client(ws_connection, server_url=None):
                                 except asyncio.CancelledError:
                                     pass
                         
-                        await evaluate_candidate_pairs(
+                        connection = await UDPConnection.create(
                             sock, local_candidates, candidates, from_uid, uid_hex, ws,
                             onOpen=onOpen, onClose=onClose
                         )
