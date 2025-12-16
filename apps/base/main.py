@@ -183,7 +183,7 @@ def get_manifest():
         manifest = json.load(f)
     return manifest
 
-async def evaluate_candidate_pairs(sock, local_candidates, remote_candidates, peer_uid):
+async def evaluate_candidate_pairs(sock, local_candidates, remote_candidates, peer_uid, onOpen=None, onClose=None):
     """
     Evaluate candidate pairs using ICE-like connectivity checks.
     If successful, creates and returns a fully-formed UDPConnection with reliable and unreliable channels.
@@ -191,7 +191,7 @@ async def evaluate_candidate_pairs(sock, local_candidates, remote_candidates, pe
     """
     try:
         # Create UDPConnection with candidates - evaluation and channel creation happen inside start()
-        connection = UDPConnection(sock, local_candidates, remote_candidates, peer_uid)
+        connection = UDPConnection(sock, local_candidates, remote_candidates, peer_uid, onOpen=onOpen, onClose=onClose)
         
         # Start the connection (performs evaluation and creates channels internally)
         await connection.start()
@@ -357,8 +357,65 @@ async def websocket_client(ws_connection, server_url=None):
                                 return
                             
                             print(f"Client: Evaluating candidate pairs for connection to {from_uid}")
+                            
+                            # Store occasional_send task on connection
+                            connection = None
+                            occasional_send_task = None
+                            
+                            async def occasional_send(channel, my_string):
+                                while True:
+                                    print('sending', my_string)
+                                    await channel.send(my_string.encode('utf-8'))
+                                    await asyncio.sleep(1)
+                            
+                            async def onOpen():
+                                nonlocal connection, occasional_send_task
+                                print("Client: Connection opened (onOpen callback)")
+                                # Store the connection
+                                udp_connections[from_uid] = connection
+                                
+                                # Access channels from connection
+                                reliable_channel = connection.reliable_channel
+                                
+                                # Start occasional_send task
+                                print("Starting occasional_send (client)")
+                                occasional_send_task = asyncio.create_task(occasional_send(reliable_channel, uid_hex + 'rel'))
+                                connection._occasional_send_task = occasional_send_task
+                                
+                                # Report success
+                                result_msg = {
+                                    "type": "UDP_CONNECTION_RESULT",
+                                    "uid": uid_hex,
+                                    "peer_uid": from_uid,
+                                    "success": True,
+                                    "message": "UDP connection established"
+                                }
+                                await ws.send(json.dumps(result_msg))
+                            
+                            async def onClose():
+                                nonlocal connection
+                                print("Client: Connection closed (onClose callback)")
+                                # Kill occasional_send task
+                                if connection and hasattr(connection, '_occasional_send_task') and connection._occasional_send_task:
+                                    connection._occasional_send_task.cancel()
+                                    try:
+                                        await connection._occasional_send_task
+                                    except asyncio.CancelledError:
+                                        pass
+                                
+                                # Report closed
+                                result_msg = {
+                                    "type": "UDP_CONNECTION_RESULT",
+                                    "uid": uid_hex,
+                                    "peer_uid": from_uid,
+                                    "success": False,
+                                    "message": "UDP connection closed"
+                                }
+                                await ws.send(json.dumps(result_msg))
+                            
                             connection = await evaluate_candidate_pairs(
-                                sock, answer_candidates, candidates, from_uid
+                                sock, answer_candidates, candidates, from_uid,
+                                onOpen=onOpen, onClose=onClose
                             )
                             
                             if connection is None:
@@ -373,40 +430,9 @@ async def websocket_client(ws_connection, server_url=None):
                                 }
                                 await ws.send(json.dumps(result_msg))
                                 return
-                            
-                            print(f"Client: Connection established successfully")
-                            
-                            # Store the connection
-                            udp_connections[from_uid] = connection
-                            
-                            # Access channels from connection
-                            reliable_channel = connection.reliable_channel
-                            unreliable_channel = connection.unreliable_channel
-                            
-                            async def occasional_send(channel, my_string):
-                                while True:
-                                    print('sending', my_string)
-                                    await channel.send(my_string.encode('utf-8'))
-                                    await asyncio.sleep(1)
-                            
-                            print("Starting occasional_send (client)")
-                            # task1 = asyncio.create_task(occasional_send(unreliable_channel, uid_hex + 'unrel'))
-                            task2 = asyncio.create_task(occasional_send(reliable_channel, uid_hex + 'rel'))
-                            
-                            await asyncio.sleep(0)
 
                             # Clean up pending connection
                             del pending_udp_connections[from_uid]
-                            
-                            # Report success
-                            result_msg = {
-                                "type": "UDP_CONNECTION_RESULT",
-                                "uid": uid_hex,
-                                "peer_uid": from_uid,
-                                "success": True,
-                                "message": "UDP connection established"
-                            }
-                            await ws.send(json.dumps(result_msg))
                             
                         except Exception as e:
                             print(f"Error handling OFFER: {e}")
@@ -455,8 +481,65 @@ async def websocket_client(ws_connection, server_url=None):
                                 return
                             
                             print(f"Server: Evaluating candidate pairs for connection to {from_uid}")
+                            
+                            # Store occasional_send task on connection
+                            connection = None
+                            occasional_send_task = None
+                            
+                            async def occasional_send(channel, my_string):
+                                while True:
+                                    print('sending', my_string)
+                                    await channel.send(my_string.encode('utf-8'))
+                                    await asyncio.sleep(1)
+                            
+                            async def onOpen():
+                                nonlocal connection, occasional_send_task
+                                print("Server: Connection opened (onOpen callback)")
+                                # Store the connection
+                                udp_connections[from_uid] = connection
+                                
+                                # Access channels from connection
+                                reliable_channel = connection.reliable_channel
+                                
+                                # Start occasional_send task
+                                print("Starting occasional_send (server)")
+                                occasional_send_task = asyncio.create_task(occasional_send(reliable_channel, uid_hex + 'rel'))
+                                connection._occasional_send_task = occasional_send_task
+                                
+                                # Report success
+                                result_msg = {
+                                    "type": "UDP_CONNECTION_RESULT",
+                                    "uid": uid_hex,
+                                    "peer_uid": from_uid,
+                                    "success": True,
+                                    "message": "UDP connection established"
+                                }
+                                await ws.send(json.dumps(result_msg))
+                            
+                            async def onClose():
+                                nonlocal connection
+                                print("Server: Connection closed (onClose callback)")
+                                # Kill occasional_send task
+                                if connection and hasattr(connection, '_occasional_send_task') and connection._occasional_send_task:
+                                    connection._occasional_send_task.cancel()
+                                    try:
+                                        await connection._occasional_send_task
+                                    except asyncio.CancelledError:
+                                        pass
+                                
+                                # Report closed
+                                result_msg = {
+                                    "type": "UDP_CONNECTION_RESULT",
+                                    "uid": uid_hex,
+                                    "peer_uid": from_uid,
+                                    "success": False,
+                                    "message": "UDP connection closed"
+                                }
+                                await ws.send(json.dumps(result_msg))
+                            
                             connection = await evaluate_candidate_pairs(
-                                sock, local_candidates, candidates, from_uid
+                                sock, local_candidates, candidates, from_uid,
+                                onOpen=onOpen, onClose=onClose
                             )
                             
                             if connection is None:
@@ -471,40 +554,9 @@ async def websocket_client(ws_connection, server_url=None):
                                 }
                                 await ws.send(json.dumps(result_msg))
                                 return
-                            
-                            print(f"Server: Connection established successfully")
-                            
-                            # Store the connection
-                            udp_connections[from_uid] = connection
-                            
-                            # Access channels from connection
-                            reliable_channel = connection.reliable_channel
-                            unreliable_channel = connection.unreliable_channel
-                            
-                            async def occasional_send(channel, my_string):
-                                while True:
-                                    print('sending', my_string)
-                                    await channel.send(my_string.encode('utf-8'))
-                                    await asyncio.sleep(1)
-                            
-                            print("Starting occasional_send (server)")
-                            # task1 = asyncio.create_task(occasional_send(unreliable_channel, uid_hex + 'unrel'))
-                            task2 = asyncio.create_task(occasional_send(reliable_channel, uid_hex + 'rel'))
-                            
-                            await asyncio.sleep(0)
 
                             # Clean up pending connection
                             del pending_udp_connections[from_uid]
-                            
-                            # Report success
-                            result_msg = {
-                                "type": "UDP_CONNECTION_RESULT",
-                                "uid": uid_hex,
-                                "peer_uid": from_uid,
-                                "success": True,
-                                "message": "UDP connection established"
-                            }
-                            await ws.send(json.dumps(result_msg))
                             
                         except Exception as e:
                             print(f"Error handling ANSWER (server side): {e}")

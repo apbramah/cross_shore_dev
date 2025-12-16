@@ -29,7 +29,7 @@ class UDPConnection:
     Handles packet demultiplexing and channel management.
     Also handles candidate pair evaluation for connection establishment.
     """
-    def __init__(self, sock, local_candidates, remote_candidates, peer_uid):
+    def __init__(self, sock, local_candidates, remote_candidates, peer_uid, onOpen=None, onClose=None):
         self.sock = sock
         self.local_candidates = local_candidates
         self.all_remote_candidates = remote_candidates.copy()
@@ -45,6 +45,8 @@ class UDPConnection:
         self.last_response_send_time = {}  # Track when we last sent a response to each address
         self.candidate_no_response_count = {}  # Track rounds without response for each candidate: (address, port) -> count
         self.candidates_that_responded = set()  # Track candidates that have responded (address, port) tuples
+        self.onOpen = onOpen  # Callback called when peer_addr is set
+        self.onClose = onClose  # Callback called when connection closes
         
     def create_channel(self, channel_type='unreliable'):
         """
@@ -142,11 +144,19 @@ class UDPConnection:
                 print(f"Error in receiver loop: {e}")
                 await asyncio.sleep(0.1)
     
+
+    async def _open(self, addr):
+        self.peer_addr = addr
+        if self.onOpen:
+            try:
+                await self.onOpen()
+            except Exception as e:
+                print(f"Error in onOpen callback: {e}")
+
     async def _handle_data_packet(self, data, addr):
         # Set peer_addr if not already set
         if self.peer_addr is None:
-            self.peer_addr = addr
-            print(f"Set peer_addr to {addr} from DATA_MAGIC packet")
+            self._open(addr)
         
         # Only process if from the known peer (or first time)
         if addr == self.peer_addr:
@@ -176,8 +186,7 @@ class UDPConnection:
                 del self.candidate_no_response_count[addr]
             # Set peer_addr if not already set
             if self.peer_addr is None:
-                self.peer_addr = addr
-                print(f"Set peer_addr to {addr} from successful STUN response")
+                self._open(addr)
         else:
             # Response from unexpected address - discover prflx candidate
             print(f"Received STUN response from unexpected address {addr}, creating prflx candidate")
@@ -344,6 +353,13 @@ class UDPConnection:
         
         for channel in self.channels.values():
             await channel.close()
+        
+        # Call onClose callback
+        if self.onClose:
+            try:
+                await self.onClose()
+            except Exception as e:
+                print(f"Error in onClose callback: {e}")
         
         try:
             self.sock.close()
