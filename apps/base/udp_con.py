@@ -2,13 +2,11 @@ import time
 import json
 try:
     import uasyncio as asyncio
-    import usocket as socket
     import ustruct as struct
     import utime as time_module
     MICROPYTHON = True
 except ImportError:
     import asyncio
-    import socket
     import struct
     import time as time_module
     MICROPYTHON = False
