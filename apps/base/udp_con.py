@@ -86,15 +86,15 @@ class UDPConnection:
     def _send_raw(self, packet, addr=None):
         """Send a raw packet over the UDP socket"""
         try:
-            target_addr = addr if addr is not None else self.peer_addr
-            if target_addr is None:
-                print("Error: Cannot send packet, peer_addr not set")
-                return False
-            self.sock.sendto(packet, target_addr)
-            return True
+            if addr == None:
+                addr = self.peer_addr
+
+            if addr == None:
+                print("Error: Cannot send packet, addr not set")
+
+            self.sock.sendto(packet, addr)
         except Exception as e:
             print(f"Error sending UDP packet: {e}")
-            return False
     
     async def _receiver_loop(self):
         """
@@ -130,32 +130,31 @@ class UDPConnection:
                         # Timeout - continue loop to allow other tasks to run
                         continue
                 
-                # Handle DATA_MAGIC packets (data channel packets)
                 if data.startswith(DATA_MAGIC):
-                    # Set peer_addr if not already set
-                    if self.peer_addr is None:
-                        self.peer_addr = addr
-                        print(f"Set peer_addr to {addr} from DATA_MAGIC packet")
-                    
-                    # Only process if from the known peer (or first time)
-                    if addr == self.peer_addr:
-                        result = self._decode_packet(data)
-                        if result is not None:
-                            flags, channel_id, seq_num, payload = result
-                            # Route to appropriate channel
-                            if channel_id in self.channels:
-                                channel = self.channels[channel_id]
-                                await channel._handle_packet(flags, seq_num, payload)
-                    continue
-                
-                # Handle STUN packets (evaluation packets)
-                if data.startswith(STUN_RESPONSE_MAGIC) or data.startswith(STUN_CHECK_MAGIC):
+                    await self._handle_data_packet(data, addr)
+                elif data.startswith(STUN_RESPONSE_MAGIC) or data.startswith(STUN_CHECK_MAGIC):
                     await self._handle_stun_packet(data, addr)
                     
             except Exception as e:
                 print(f"Error in receiver loop: {e}")
                 await asyncio.sleep(0.1)
     
+    async def _handle_data_packet(self, data, addr):
+        # Set peer_addr if not already set
+        if self.peer_addr is None:
+            self.peer_addr = addr
+            print(f"Set peer_addr to {addr} from DATA_MAGIC packet")
+        
+        # Only process if from the known peer (or first time)
+        if addr == self.peer_addr:
+            result = self._decode_packet(data)
+            if result is not None:
+                flags, channel_id, seq_num, payload = result
+                # Route to appropriate channel
+                if channel_id in self.channels:
+                    channel = self.channels[channel_id]
+                    await channel._handle_packet(flags, seq_num, payload)
+
     async def _handle_stun_packet(self, data, addr):
         """Handle STUN packets for continuous candidate evaluation"""
         # Check if response is from an expected address (within our sent checks)
@@ -197,7 +196,7 @@ class UDPConnection:
         if data.startswith(STUN_CHECK_MAGIC):
             response_packet = STUN_RESPONSE_MAGIC + data[len(STUN_CHECK_MAGIC):]
             try:
-                self.sock.sendto(response_packet, addr)
+                self._send_raw(response_packet, addr)
                 self.response_addresses.add(addr)  # Mark for continued responses
                 print(f"Sent connectivity check response to {addr}")
             except Exception as e:
@@ -234,7 +233,7 @@ class UDPConnection:
                         "local": local_cand,
                         "remote": remote_cand
                     }).encode('utf-8')
-                    self.sock.sendto(check_packet, remote_addr)
+                    self._send_raw(check_packet, remote_addr)
                     self.checks_sent[remote_addr] = (local_cand, remote_cand)
                     print(f"Sent connectivity check to {remote_addr}")
                 except Exception as e:
@@ -247,7 +246,7 @@ class UDPConnection:
                 if current_time - last_send >= 0.1:  # Send every 100ms
                     try:
                         response_packet = STUN_RESPONSE_MAGIC + b"KEEPALIVE"
-                        self.sock.sendto(response_packet, resp_addr)
+                        self._send_raw(response_packet, resp_addr)
                         self.last_response_send_time[resp_addr] = current_time
                     except Exception as e:
                         print(f"Error sending keepalive response to {resp_addr}: {e}")
@@ -348,11 +347,8 @@ class UnreliableDataChannel(DataChannel):
         seq_num = self.next_seq_out
         self.next_seq_out = (self.next_seq_out + 1) & 0xFFFFFFFF
         
-        try:
-            packet = self.connection._encode_packet(self.channel_id, seq_num, data)
-        except Exception as e:
-            print("encode didn't go well", e)
-        return self.connection._send_raw(packet)
+        packet = self.connection._encode_packet(self.channel_id, seq_num, data)
+        self.connection._send_raw(packet)
     
     async def _handle_packet(self, flags, seq_num, payload):
         """Handle incoming unreliable packet"""
