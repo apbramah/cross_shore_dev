@@ -28,6 +28,20 @@ STUN_SERVER_PORT = 19302
 # STUN Magic Cookie (RFC 5389)
 STUN_MAGIC_COOKIE = 0x2112A442
 
+stun_addr = None
+
+def get_stun_addr():
+    global stun_addr
+
+    # Apparently, DNS resolution is expensive on Pico, so we cache the address.
+    if not stun_addr:
+        try:
+            stun_addr = socket.getaddrinfo(STUN_SERVER_HOST, STUN_SERVER_PORT)[0][-1]
+        except Exception as e:
+            print(f"Error resolving STUN address: {e}")
+
+    return stun_addr
+
 def create_stun_binding_request():
     """Create a STUN Binding Request message"""
     # Message Type: Binding Request (0x0001)
@@ -131,9 +145,7 @@ async def query_stun_server(sock, timeout=0.25):
         try:
             if MICROPYTHON:
                 sock.setblocking(True)
-            print(f"Sending STUN request to {STUN_SERVER_HOST}:{STUN_SERVER_PORT}")
-            print(request)
-            sock.sendto(request, (STUN_SERVER_HOST, STUN_SERVER_PORT))
+            sock.sendto(request, get_stun_addr())
         except Exception as e:
             print(f"Error sending STUN request: {e}")
             # Restore socket state
