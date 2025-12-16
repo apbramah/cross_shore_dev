@@ -84,11 +84,6 @@ async def websocket_handler(ws, ip_address, port):
                     msg_data = json.loads(message)
                     if msg_data["type"] == "CURRENT_MODE":
                         head.mode = msg_data["mode"]
-                    elif msg_data["type"] == "UDP_CONNECTION_RESULT":
-                        # Forward UDP connection results to browsers
-                        for ctrl in controllers:
-                            await ctrl.send_str(message)
-                        print(f"UDP connection result from {msg_data.get('uid')}: {msg_data.get('success')}")
                     elif msg_data["type"] == "OFFER":
                         # Forward OFFER message from from_head to to_head
                         to_uid = msg_data.get("to_uid")
