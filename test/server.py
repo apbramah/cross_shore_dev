@@ -3,8 +3,6 @@ from aiohttp import web, WSMsgType
 import json
 import os
 import sys
-import socket
-import struct
 
 heads = set()
 controllers = set()
@@ -64,7 +62,7 @@ async def websocket_handler(ws, ip_address, port):
         async for msg in ws:
             if msg.type == WSMsgType.TEXT:
                 message = msg.data
-                # If message came from browser → send to device
+                # Message came from a browser
                 if ws in controllers:
                     msg_data = json.loads(message)
                     uid = msg_data.get("uid")
@@ -78,33 +76,24 @@ async def websocket_handler(ws, ip_address, port):
                         elif msg_data["type"] == "SET_NETWORK_CONFIGS":
                             head.network_configs = msg_data.get("network_configs", [])
 
-                # If message came from device → broadcast to all browsers
+                # Message came from a head
                 elif ws in heads:
                     head = ws
                     msg_data = json.loads(message)
-                    if msg_data["type"] == "CURRENT_MODE":
-                        head.mode = msg_data["mode"]
-                    elif msg_data["type"] == "OFFER":
-                        # Forward OFFER message from from_head to to_head
-                        to_uid = msg_data.get("to_uid")
+                    to_uid = msg_data.get("to_uid")
+                    if to_uid:
+                        # Message is for a particular head
                         to_head = uid_to_head.get(to_uid)
                         if to_head:
                             await to_head.send_str(message)
-                            print(f"Forwarded OFFER message to to_head {to_uid}")
-                        else:
-                            print(f"to_head {to_uid} not found for OFFER message")
-                    elif msg_data["type"] == "ANSWER":
-                        # Forward ANSWER message from to_head to from_head
-                        to_uid = msg_data.get("to_uid")
-                        to_head = uid_to_head.get(to_uid)
-                        if to_head:
-                            await to_head.send_str(message)
-                            print(f"Forwarded ANSWER message to to_head {to_uid}")
-                        else:
-                            print(f"to_head {to_uid} not found for ANSWER message")
-                    for ctrl in controllers:
-                        print("Server: Forwarding", message, "to browser")
-                        await ctrl.send_str(message)
+                            print(f"Forward {message} to to_head {to_uid}")
+                    else:
+                        # Message is for browsers
+                        if msg_data["type"] == "CURRENT_MODE":
+                            head.mode = msg_data["mode"]
+                        for ctrl in controllers:
+                            print("Server: Forwarding", message, "to browser")
+                            await ctrl.send_str(message)
             elif msg.type == WSMsgType.ERROR:
                 print('WebSocket connection closed with exception %s' % ws.exception())
                 break
