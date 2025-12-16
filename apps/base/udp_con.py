@@ -259,9 +259,9 @@ class UDPConnection:
                     all_pairs.append((local_cand, remote_cand))
             
             if not all_pairs:
-                print("No candidate pairs to evaluate")
-                await asyncio.sleep(round_interval)
-                continue
+                print("No candidate pairs to evaluate - closing connection")
+                await self.close()
+                return
             
             # Evaluate pairs by sending connectivity checks
             self.checks_sent = {}
