@@ -1,124 +1,35 @@
 from udp_con import UDPConnection
 
 import json
-try:
-    MICROPYTHON = True
-    import uasyncio as asyncio
-    import machine
-    import ubinascii
-    from uwebsockets.protocol import ConnectionClosed
+import threading
+import socket
+import time
 
-    # Get the unique ID as bytes
-    uid_bytes = machine.unique_id()
+import asyncio
+uid_hex = 'andyunique'
 
-    # Convert to hex string
-    uid_hex = ubinascii.hexlify(uid_bytes).decode()
-    
-    class MicroPythonWebSocket:
-        def __init__(self, websocket, heartbeat_interval=30.0, heartbeat_timeout=5.0):
-            self.websocket = websocket
-            self.heartbeat_interval = heartbeat_interval
-            self.heartbeat_task = None
-            self.running = True
-            
-            # Enable heartbeat tracking on underlying websocket
-            self.websocket.heartbeat_enabled = True
-            self.websocket.heartbeat_timeout = heartbeat_timeout
+import tkinter as tk
+from tkinter import ttk
 
-        async def _heartbeat_loop(self):
-            """Periodically send PING messages"""
-            while self.running:
-                try:
-                    await asyncio.sleep(self.heartbeat_interval)
-                    if self.running and self.websocket.open:
-                        try:
-                            self.websocket.ping()
-                        except Exception as e:
-                            print(f"Error sending PING: {e}")
-                            break
-                except asyncio.CancelledError:
-                    break
-                except Exception as e:
-                    print(f"Error in heartbeat loop: {e}")
-                    break
+class CPythonWebSocket:
+    def __init__(self, websocket):
+        self.websocket = websocket
 
-        def start_heartbeat(self):
-            """Start the heartbeat task"""
-            if self.heartbeat_task is None:
-                self.heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+    async def recv(self):
+        return await self.websocket.recv()
 
-        def stop_heartbeat(self):
-            """Stop the heartbeat task"""
-            self.running = False
-            if self.heartbeat_task:
-                self.heartbeat_task.cancel()
-                try:
-                    # Note: can't await in synchronous method, task will be cleaned up
-                    pass
-                except:
-                    pass
+    async def send(self, data):
+        await self.websocket.send(data)
 
-        async def recv(self):
-            while True:
-                try:
-                    msg = self.websocket.recv()
-                    if msg != "":
-                        return msg
-                    else:
-                        await asyncio.sleep(0)
-                except ConnectionClosed as e:
-                    # Re-raise ConnectionClosed exceptions (includes heartbeat timeout)
-                    raise
-                except Exception as e:
-                    # Handle other exceptions
-                    if "Heartbeat timeout" in str(e):
-                        raise ConnectionClosed("Heartbeat timeout")
-                    raise
+    async def close(self):
+        await self.websocket.close()
 
-        async def send(self, data):
-            self.websocket.send(data)
-
-        # def send_sync(self, data):
-        #     self.websocket.send(data)
-
-        async def close(self):
-            self.stop_heartbeat()
-            self.websocket.close()
-        
-    async def upgrade_http_to_websocket(http_url):
-        """Upgrade an HTTP connection to WebSocket"""
-        import uwebsockets.client
-        ws_url = http_to_ws_url(http_url) + '/ws'
-        ws = uwebsockets.client.connect(ws_url)
-        ws.sock.setblocking(False)
-        ws_wrapper = MicroPythonWebSocket(ws, heartbeat_interval=4.0, heartbeat_timeout=1.0)
-        ws_wrapper.start_heartbeat()
-        return ws_wrapper
-
-except ImportError:
-    MICROPYTHON = False
-    import asyncio
-    uid_hex = 'andyunique'
-
-    class CPythonWebSocket:
-        def __init__(self, websocket):
-            self.websocket = websocket
-
-        async def recv(self):
-            return await self.websocket.recv()
-
-        async def send(self, data):
-            await self.websocket.send(data)
-
-        async def close(self):
-            await self.websocket.close()
-    
-    async def upgrade_http_to_websocket(http_url):
-        """Upgrade an HTTP connection to WebSocket"""
-        import websockets
-        ws_url = http_to_ws_url(http_url) + '/ws'
-        ws = await websockets.connect(ws_url)
-        return CPythonWebSocket(ws)
+async def upgrade_http_to_websocket(http_url):
+    """Upgrade an HTTP connection to WebSocket"""
+    import websockets
+    ws_url = http_to_ws_url(http_url) + '/ws'
+    ws = await websockets.connect(ws_url)
+    return CPythonWebSocket(ws)
 
 ota_present = False
 try:
@@ -130,6 +41,156 @@ except Exception as e:
 def ota_trust():
     if ota_present:
         ota.trust()
+
+# GUI Configuration (from head_controller_relative.py)
+UDP_IP = "192.168.60.87"  # Change this to your target IP
+UDP_PORT = 8890
+
+map_zoom = lambda value: (value + 0)
+map_iris = lambda value: (value + 512) >> 4
+map_focus = lambda value: (value + 512) >> 4
+map_pitch = lambda value: int(value * 0.2)
+
+def send_udp_message(values):
+    # Pack values into a UDP message
+    values = values.copy()  # Don't modify the original
+    values[1] = map_pitch(values[1])
+    values[3] = map_zoom(values[3])
+    values[4] = map_focus(values[4])
+    values[5] = map_iris(values[5])
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.bind(('', UDP_PORT))  # Bind to the specified source port
+    sock.sendto(bytes([0xDE, 0xFD, (values[3] >> 8) & 0xFF, values[3] & 0xFF,
+                       (values[4] >> 8) & 0xFF, values[4] & 0xFF,
+                       (values[5] >> 8) & 0xFF, values[5] & 0xFF,
+                       (values[0] >> 8) & 0xFF, values[0] & 0xFF,
+                       (values[1] >> 8) & 0xFF, values[1] & 0xFF,
+                       (values[2] >> 8) & 0xFF, values[2] & 0xFF,
+                       0x00, 0x00]), (UDP_IP, UDP_PORT))
+    sock.close()
+
+def run_gui():
+    """Run the tkinter GUI in a separate thread"""
+    root = tk.Tk()
+    root.title("EX Head Controller Relative")
+    
+    sliders = []
+    
+    # Labels for sliders
+    slider_names = ["Yaw", "Pitch", "Roll", "Zoom", "Focus", "Iris"]
+    
+    # Create and place sliders
+    for name in slider_names:
+        frame = ttk.Frame(root)
+        frame.pack(fill=tk.BOTH, expand=True)
+        
+        label = ttk.Label(frame, text=name)
+        label.pack(side=tk.TOP, pady=5)
+        
+        slider = ttk.Scale(frame, from_=-512, to=512, orient=tk.HORIZONTAL, length=200)
+        slider.set(0)
+        value_var = tk.IntVar(value=0)  # Variable to hold the current value
+    
+        # Live value label
+        value_label = ttk.Label(frame, textvariable=value_var)
+        value_label.pack(side=tk.RIGHT, padx=5)
+    
+        # Entry box to type value
+        entry = ttk.Entry(frame, width=5)
+        entry.pack(side=tk.RIGHT, padx=5)
+        entry.insert(0, "0")
+    
+        def on_slider_move(event, var=value_var, e=entry):
+            val = int(float(event.widget.get()))
+            var.set(val)
+            e.delete(0, tk.END)
+            e.insert(0, str(val))
+    
+        def on_entry_change(event, s=slider, var=value_var):
+            try:
+                val = int(event.widget.get())
+                s.set(val)
+                var.set(val)
+            except ValueError:
+                pass  # ignore non-integer input
+    
+        slider.config(command=lambda val, var=value_var, e=entry: on_slider_move(val, var, e))
+        entry.bind("<Return>", on_entry_change)
+        slider.pack(side=tk.TOP)
+        sliders.append(slider)
+    
+    buttons = []
+    
+    def set_slider_values(values):
+        for slider, value in zip(sliders, values):
+            slider.set(value)
+    
+    class ButtonWithLongPress(ttk.Button):
+        def __init__(self, master=None, **kwargs):
+            super().__init__(master, **kwargs)
+            self.bind("<ButtonPress>", self.on_press)
+            self.bind("<ButtonRelease>", self.on_release)
+            self.long_press_duration = 1000  # Duration for long press in milliseconds
+            self.press_time = None
+            self.stored_values = [0] * 6  # Initialize with default slider values
+    
+        def on_press(self, event):
+            self.press_time = time.time()
+            self.after(self.long_press_duration, self.check_long_press)
+    
+        def on_release(self, event):
+            if self.press_time:
+                elapsed = time.time() - self.press_time
+                if elapsed < self.long_press_duration / 1000:
+                    # Short press detected
+                    set_slider_values(self.stored_values)
+                self.press_time = None
+    
+        def check_long_press(self):
+            if self.press_time and (time.time() - self.press_time) >= self.long_press_duration / 1000:
+                # Long press detected
+                self.stored_values = [int(slider.get()) for slider in sliders]
+                print(f"Stored values for button {self['text']}: {self.stored_values}")
+                self.press_time = None
+    
+    # Create and place buttons
+    for i in range(4):
+        button = ButtonWithLongPress(root, text=f"Position {i + 1}")
+        button.pack(side=tk.LEFT, padx=5, pady=5)
+        buttons.append(button)
+    
+    # Sequencer function to press buttons with a 2s delay
+    sequencer_enabled = False
+    
+    def press_buttons_sequentially(index=0):
+        if sequencer_enabled:
+            buttons[index].event_generate("<ButtonPress>")
+            buttons[index].event_generate("<ButtonRelease>")
+            next_index = (index + 1) % len(buttons)
+            root.after(2000, press_buttons_sequentially, next_index)
+    
+    def toggle_sequencer():
+        nonlocal sequencer_enabled
+        sequencer_enabled = not sequencer_enabled
+        if sequencer_enabled:
+            sequencer_button.config(text="Disable Sequencer")
+            press_buttons_sequentially()
+        else:
+            sequencer_button.config(text="Enable Sequencer")
+    
+    # Create the sequencer toggle button
+    sequencer_button = ttk.Button(root, text="Enable Sequencer", command=toggle_sequencer)
+    sequencer_button.pack(side=tk.BOTTOM, pady=10)
+    
+    def update_values():
+        values = [int(slider.get()) for slider in sliders]
+        send_udp_message(values)
+        root.after(50, update_values)  # Schedule the next update after 50ms
+    
+    # Start the update loop
+    update_values()
+    
+    root.mainloop()
 
 ws = None
 current_server_url = None  # Store server URL for UDP discovery
@@ -376,8 +437,26 @@ async def websocket(server_url):
     ws_connection = await upgrade_http_to_websocket(server_url)
     await websocket_client(ws_connection, server_url)
 
+async def run_gui_task():
+    """Run the GUI in a separate thread as an asyncio task"""
+    
+    # Run GUI in a thread (tkinter mainloop is blocking)
+    def gui_thread():
+        try:
+            run_gui()
+        except Exception as e:
+            print(f"GUI error: {e}")
+    
+    thread = threading.Thread(target=gui_thread, daemon=True)
+    thread.start()
+    
+    # Wait for the thread to complete (which it won't until the app closes)
+    # This keeps the task alive
+    while thread.is_alive():
+        await asyncio.sleep(1)
+
 async def as_main(server_url):
-    tasks = [websocket(server_url)]
+    tasks = [run_gui_task(), websocket(server_url)]
 
     # Run all tasks concurrently
     await asyncio.gather(*tasks)
