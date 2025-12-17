@@ -1,15 +1,19 @@
 import time
 import json
 try:
+    import usocket as socket
     import uasyncio as asyncio
     import ustruct as struct
     import utime as time_module
     MICROPYTHON = True
 except ImportError:
+    import socket
     import asyncio
     import struct
     import time as time_module
     MICROPYTHON = False
+
+from stun_query import query_stun_server
     
 # Packet format (binary):
 # [DATA_MAGIC:4 bytes][flags:1 byte][channel_id:2 bytes][seq_num:4 bytes][data:variable]
@@ -18,8 +22,6 @@ DATA_MAGIC = b'UDPD'  # Magic header to identify valid packets
 STUN_CHECK_MAGIC = b"STUN_CHECK"
 STUN_RESPONSE_MAGIC = b"STUN_RESPONSE"
 FLAG_ACK = 0x01
-
-udp_connections = {}  # Track UDP connections: peer_uid -> UDPConnection
 
 class UDPConnection:
     """
@@ -58,7 +60,33 @@ class UDPConnection:
         await connection.start()
         print(f"Created UDP connection with channels for {peer_uid}")
         return connection
+
+    @classmethod
+    async def gather_candidates(cls, local_ips):
+        """
+        Create a UDP socket, bind it, gather host candidates from local IPs,
+        query STUN server for srflx candidates, and return both the socket and candidates.
+        Returns: (sock, candidates) tuple
+        """
+        # Create and bind UDP socket
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.bind(('0.0.0.0', 8888))
         
+        # Gather host candidates from local_ips
+        candidates = []
+        for ip in local_ips:
+            candidates.append({
+                "type": "host",
+                "address": ip,
+                "port": 8888
+            })
+        
+        # Query STUN server for srflx candidates
+        srflx_candidates = await query_stun_server(sock, timeout=0.25)
+        candidates.extend(srflx_candidates)
+        
+        return sock, candidates
+
     def create_channel(self, channel_type='unreliable'):
         """
         Create a new datachannel.

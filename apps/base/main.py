@@ -1,10 +1,8 @@
-from udp_con import *
-from stun_query import query_stun_server
+from udp_con import UDPConnection
 
 import json
 try:
     MICROPYTHON = True
-    import usocket as socket
     import uasyncio as asyncio
     import machine
     import ubinascii
@@ -80,10 +78,10 @@ try:
         async def send(self, data):
             self.websocket.send(data)
 
-        def send_sync(self, data):
-            self.websocket.send(data)
+        # def send_sync(self, data):
+        #     self.websocket.send(data)
 
-        def close(self):
+        async def close(self):
             self.stop_heartbeat()
             self.websocket.close()
         
@@ -99,7 +97,6 @@ try:
 
 except ImportError:
     MICROPYTHON = False
-    import socket
     import asyncio
     uid_hex = 'andyunique'
 
@@ -112,6 +109,9 @@ except ImportError:
 
         async def send(self, data):
             await self.websocket.send(data)
+
+        async def close(self):
+            await self.websocket.close()
     
     async def upgrade_http_to_websocket(http_url):
         """Upgrade an HTTP connection to WebSocket"""
@@ -145,36 +145,36 @@ def http_to_ws_url(http_url):
         # If it's already a WebSocket URL, return as is
         return http_url
 
-import builtins
+# import builtins
 
-if not MICROPYTHON:
-    print_queue = asyncio.Queue()
+# if not MICROPYTHON:
+#     print_queue = asyncio.Queue()
 
-    async def ws_sender(ws):
-        while True:
-            message = await print_queue.get()
-            data = {"type": "PRINTF",
-                    "uid": uid_hex,
-                    "message": message.strip()}
-            await ws.send(json.dumps(data))
+#     async def ws_sender(ws):
+#         while True:
+#             message = await print_queue.get()
+#             data = {"type": "PRINTF",
+#                     "uid": uid_hex,
+#                     "message": message.strip()}
+#             await ws.send(json.dumps(data))
 
 # print function that also sends to websocket if available
-def ws_print(*args, **kwargs):
-    original_print(*args, **kwargs)
+# def ws_print(*args, **kwargs):
+#     original_print(*args, **kwargs)
 
-    global ws
-    if ws and getattr(ws, 'open', True):
-        sep = kwargs.get("sep", " ")
-        end = kwargs.get("end", "\n")
-        message = sep.join(str(arg) for arg in args) + end
+#     global ws
+#     if ws and getattr(ws, 'open', True):
+#         sep = kwargs.get("sep", " ")
+#         end = kwargs.get("end", "\n")
+#         message = sep.join(str(arg) for arg in args) + end
 
-        if MICROPYTHON:
-            data = {"type": "PRINTF",
-                    "uid": uid_hex,
-                    "message": message.strip()}
-            ws.send_sync(json.dumps(data))
-        else:            
-            print_queue.put_nowait(message)
+#         if MICROPYTHON:
+#             data = {"type": "PRINTF",
+#                     "uid": uid_hex,
+#                     "message": message.strip()}
+#             ws.send_sync(json.dumps(data))
+#         else:            
+#             print_queue.put_nowait(message)
 
 # Override the built-in print function
 # original_print = builtins.print
@@ -185,13 +185,32 @@ def get_manifest():
         manifest = json.load(f)
     return manifest
 
-
 async def occasional_send(channel, my_string):
     while True:
         print('sending', my_string)
         await channel.send(my_string.encode('utf-8'))
         await asyncio.sleep(1)
 
+async def onOpen(connection):
+    print("Connection opened (onOpen callback)")
+    
+    # Access channels from connection
+    reliable_channel = connection.reliable_channel
+    
+    # Start occasional_send task
+    occasional_send_task = asyncio.create_task(occasional_send(reliable_channel, uid_hex + 'rel'))
+    connection._occasional_send_task = occasional_send_task
+
+async def onClose(connection):
+    print("Connection closed (onClose callback)")
+    # Kill occasional_send task
+    if connection and hasattr(connection, '_occasional_send_task') and connection._occasional_send_task:
+        connection._occasional_send_task.cancel()
+        try:
+            await connection._occasional_send_task
+        except asyncio.CancelledError:
+            pass
+                        
 async def websocket_client(ws_connection, server_url=None):
     """Handle WebSocket client logic with an upgraded connection"""
     global ws, current_server_url
@@ -213,8 +232,8 @@ async def websocket_client(ws_connection, server_url=None):
                 "version": manifest["version"],
                 "local_ips": local_ips}
         await ws.send(json.dumps(data))  # announce as device
-        if not MICROPYTHON:
-            asyncio.create_task(ws_sender(ws))
+        # if not MICROPYTHON:
+        #     asyncio.create_task(ws_sender(ws))
         print("Connected!")
 
         ota_trust()
@@ -244,23 +263,8 @@ async def websocket_client(ws_connection, server_url=None):
                     to_uid = my_dict.get("to_uid")
                     
                     try:
-                        # Create and bind UDP socket (from_head acts as server)
-                        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                        sock.bind(('0.0.0.0', 8888))
-                        
-                        # Gather host candidates from local_ips
-                        local_ips = ota.get_local_ips()
-                        candidates = []
-                        for ip in local_ips:
-                            candidates.append({
-                                "type": "host",
-                                "address": ip,
-                                "port": 8888
-                            })
-                        
-                        # Query STUN server for srflx candidates
-                        srflx_candidates = await query_stun_server(sock, timeout=0.25)
-                        candidates.extend(srflx_candidates)
+                        # Gather candidates (creates socket, gathers host and srflx candidates)
+                        sock, candidates = await UDPConnection.gather_candidates(ota.get_local_ips())
                         
                         # Store socket and local candidates for later use when ANSWER arrives
                         pending_udp_connections[to_uid] = {
@@ -289,23 +293,8 @@ async def websocket_client(ws_connection, server_url=None):
                     print(f"OFFER received from {from_uid} with {len(candidates)} candidates")
                     
                     try:
-                        # Create and bind UDP socket (to_head acts as client)
-                        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                        sock.bind(('0.0.0.0', 8888))
-                        
-                        # Gather host candidates from local_ips
-                        local_ips = ota.get_local_ips()
-                        answer_candidates = []
-                        for ip in local_ips:
-                            answer_candidates.append({
-                                "type": "host",
-                                "address": ip,
-                                "port": 8888
-                            })
-                        
-                        # Query STUN server for srflx candidates
-                        srflx_candidates = await query_stun_server(sock, timeout=0.25)
-                        answer_candidates.extend(srflx_candidates)
+                        # Gather candidates (creates socket, gathers host and srflx candidates)
+                        sock, answer_candidates = await UDPConnection.gather_candidates(ota.get_local_ips())
                         
                         # Store socket and candidates for candidate pair evaluation
                         pending_udp_connections[from_uid] = {
@@ -325,29 +314,6 @@ async def websocket_client(ws_connection, server_url=None):
                         print(f"Answer message: {answer_msg}")
                         await ws.send(json.dumps(answer_msg))
                         print(f"Sent ANSWER to {from_uid} with {len(answer_candidates)} candidates")
-                        
-                        async def onOpen(connection):
-                            print("Client: Connection opened (onOpen callback)")
-                            # Store the connection
-                            udp_connections[from_uid] = connection
-                            
-                            # Access channels from connection
-                            reliable_channel = connection.reliable_channel
-                            
-                            # Start occasional_send task
-                            print("Starting occasional_send (client)")
-                            occasional_send_task = asyncio.create_task(occasional_send(reliable_channel, uid_hex + 'rel'))
-                            connection._occasional_send_task = occasional_send_task
-                        
-                        async def onClose(connection):
-                            print("Client: Connection closed (onClose callback)")
-                            # Kill occasional_send task
-                            if connection and hasattr(connection, '_occasional_send_task') and connection._occasional_send_task:
-                                connection._occasional_send_task.cancel()
-                                try:
-                                    await connection._occasional_send_task
-                                except asyncio.CancelledError:
-                                    pass
                         
                         connection = await UDPConnection.create(
                             sock, answer_candidates, candidates, from_uid, uid_hex, ws,
@@ -381,29 +347,6 @@ async def websocket_client(ws_connection, server_url=None):
                         sock = conn_info["socket"]
                         local_candidates = conn_info.get("local_candidates", [])
                         
-                        async def onOpen(connection):
-                            print("Server: Connection opened (onOpen callback)")
-                            # Store the connection
-                            udp_connections[from_uid] = connection
-                            
-                            # Access channels from connection
-                            reliable_channel = connection.reliable_channel
-                            
-                            # Start occasional_send task
-                            print("Starting occasional_send (server)")
-                            occasional_send_task = asyncio.create_task(occasional_send(reliable_channel, uid_hex + 'rel'))
-                            connection._occasional_send_task = occasional_send_task
-                        
-                        async def onClose(connection):
-                            print("Server: Connection closed (onClose callback)")
-                            # Kill occasional_send task
-                            if connection and hasattr(connection, '_occasional_send_task') and connection._occasional_send_task:
-                                connection._occasional_send_task.cancel()
-                                try:
-                                    await connection._occasional_send_task
-                                except asyncio.CancelledError:
-                                    pass
-                        
                         connection = await UDPConnection.create(
                             sock, local_candidates, candidates, from_uid, uid_hex, ws,
                             onOpen=onOpen, onClose=onClose
@@ -417,19 +360,14 @@ async def websocket_client(ws_connection, server_url=None):
             except Exception as e:
                 print("Error processing message:", e)
 
-    except ConnectionClosed as e:
-        ws.close()
-        ws = None
-        print("WebSocket connection closed:", e)
-        raise  # Re-raise to trigger reconnection
     except Exception as e:
-        ws.close()
+        await ws.close()
         ws = None
         print("WebSocket error:", e)
         raise  # Re-raise to trigger reconnection
     finally:
         if ws:
-            ws.close()
+            await ws.close()
             print("Connection closed")
 
 async def websocket(server_url):
