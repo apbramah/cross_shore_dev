@@ -131,6 +131,120 @@ def ota_trust():
     if ota_present:
         ota.trust()
 
+# ==== CONFIGURATION ====
+from machine import UART, Pin
+import struct
+import socket
+
+TCP_PORT   = 8080
+TCP_PORT2   = 8081
+UART_ID    = 0           # 0 or 1
+UART_ID1    = 1           # 0 or 1
+UART_BAUD  = 115200
+UART_BAUD1  = 9600
+LISTEN_PORT_JOYSTICK = 8890
+LISTEN_PORT_AUTOCAM = 8889
+BUFFER_SIZE = 1024
+WS_URL = "ws://192.168.60.91:443/"
+# ========================
+
+# Setup UART
+uart = UART(UART_ID, UART_BAUD)
+uart1 = UART(UART_ID1, UART_BAUD1)
+led = Pin(25, Pin.OUT)
+
+led.value(0)
+mode = "joystick"  # "joystick" or "auto_cam"
+
+def hexdump(data: bytes) -> str:
+    """Return a hex dump string for given bytes."""
+    return " ".join(f"{b:02X}" for b in data)
+
+def decode_udp_packet(data: bytes):
+    """Decode a 16-byte control packet into fields."""
+    if len(data) != 16:
+        print("Unexpected length:", len(data))
+        return None
+
+    if data[0] != 0xDE:
+        print("Invalid header:", data[0])
+        return None
+
+    data_type = data[1]
+
+    if data_type == 0xFD:
+        zoom, focus, iris, yaw, pitch, roll, _ = struct.unpack("<6H2s", data[2:16])
+        return {
+            "zoom": zoom,
+            "focus": focus,
+            "iris": iris,
+            "yaw": yaw,
+            "pitch": pitch,
+            "roll": roll,
+        }
+    elif data_type == 0xF3:
+        pitch, roll, yaw, zoom, focus, iris, _ = struct.unpack("<6H2s", data[2:16])
+        return {
+            "zoom": zoom,
+            "focus": focus,
+            "iris": iris,
+            "yaw": yaw,
+            "pitch": pitch,
+            "roll": roll,
+        }
+
+def crc16_calculate(data):
+    polynomial = 0x8005
+    crc_register = 0
+    for byte in data:
+        for shift_register in range(8):
+            data_bit = (byte >> shift_register) & 1
+            crc_bit = (crc_register >> 15) & 1
+            crc_register = (crc_register << 1) & 0xFFFF
+            if data_bit != crc_bit:
+                crc_register ^= polynomial
+    return crc_register
+
+PACKET_START = 0x24
+
+def create_packet(command_id, payload):
+    payload_size = len(payload)
+    header_checksum = (command_id + payload_size) % 256
+    header = bytearray([command_id, payload_size, header_checksum])
+    header_and_payload = header + payload
+    crc = crc16_calculate(header_and_payload)
+    crc_bytes = bytearray([crc & 0xFF, (crc >> 8) & 0xFF])
+    return bytearray([PACKET_START]) + header_and_payload + crc_bytes
+
+CMD_SET_ADJ_VARS_VAL = 31
+CMD_API_VIRT_CH_CONTROL = 45
+CMD_CONTROL_EXT = 121
+CMD_CONTROL = 67
+
+async def joystick():
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.setblocking(False)
+    sock.bind(("0.0.0.0", LISTEN_PORT_JOYSTICK))
+    print("Listening for joystick UDP packets on port", LISTEN_PORT_JOYSTICK)
+
+    while True:
+        try:
+            data, addr = sock.recvfrom(BUFFER_SIZE)  # non-blocking
+        except OSError:
+            # No data available
+            await asyncio.sleep(0)  # yield to scheduler
+            continue
+
+        if mode != "joystick":
+            continue
+
+        fields = decode_udp_packet(data)
+        if fields:
+            payload = struct.pack(">3H", fields["yaw"], fields["pitch"], fields["roll"])
+            packet = create_packet(CMD_API_VIRT_CH_CONTROL, payload)
+            print("UART joystick -->", hexdump(packet))
+            uart.write(packet)
+
 ws = None
 current_server_url = None  # Store server URL for UDP discovery
 pending_udp_connections = {}  # Store pending UDP connection info: peer_uid -> {socket, is_server, local_candidates}
@@ -213,7 +327,7 @@ async def onClose(connection):
                         
 async def websocket_client(ws_connection, server_url=None):
     """Handle WebSocket client logic with an upgraded connection"""
-    global ws, current_server_url
+    global mode, ws, current_server_url
     ws = ws_connection
     if server_url:
         current_server_url = server_url
@@ -235,7 +349,10 @@ async def websocket_client(ws_connection, server_url=None):
         # if not MICROPYTHON:
         #     asyncio.create_task(ws_sender(ws))
         print("Connected!")
-
+        data = {"type": "CURRENT_MODE",
+                "uid": uid_hex,
+                "mode": mode}
+        await ws.send(json.dumps(data))
         ota_trust()
 
         while True:
@@ -356,6 +473,39 @@ async def websocket_client(ws_connection, server_url=None):
                         
                     except Exception as e:
                         print(f"Error handling ANSWER (server side): {e}")
+                elif my_dict["type"] == "SET_MODE":
+                    if my_dict['mode'] == "auto_cam":
+                        led.value(1)
+                        mode = "auto_cam"
+                        data = {"type": "CURRENT_MODE",
+                                "uid": uid_hex,
+                                "mode": mode}
+                        await ws.send(json.dumps(data))
+                    elif my_dict['mode'] == "joystick":
+                        led.value(0)
+                        mode = "joystick"
+
+                        payload = bytearray([0x01, 0x26, 0x00, 0x15, 0x00, 0x00])
+                        packet = create_packet(CMD_SET_ADJ_VARS_VAL, payload)
+                        uart.write(packet)
+
+                        # When switching to joystick mode, ensure that the angle mode is disabled
+                        payload = bytearray([0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
+                        packet = create_packet(CMD_CONTROL, payload)
+                        uart.write(packet)
+
+                        data = {"type": "CURRENT_MODE",
+                                "uid": uid_hex,
+                                "mode": mode}
+                        await ws.send(json.dumps(data))
+                    elif my_dict['mode'] == "fixed":
+                        led.value(0)
+                        mode = "fixed"
+
+                        data = {"type": "CURRENT_MODE",
+                                "uid": uid_hex,
+                                "mode": mode}
+                        await ws.send(json.dumps(data))
                                         
             except Exception as e:
                 print("Error processing message:", e)
@@ -377,7 +527,7 @@ async def websocket(server_url):
     await websocket_client(ws_connection, server_url)
 
 async def as_main(server_url):
-    tasks = [websocket(server_url)]
+    tasks = [joystick(), websocket(server_url)]
 
     # Run all tasks concurrently
     await asyncio.gather(*tasks)

@@ -5,7 +5,7 @@ import os
 import sys
 
 heads = set()
-controllers = set()
+browsers = set()
 uid_to_head = dict()
 
 # Base directory for serving files (cross_shore_dev)
@@ -39,12 +39,12 @@ async def websocket_handler(ws, ip_address, port):
 
             ip = ip_address
             msg["ip"] = ip
-            for ctrl in controllers:
-                await ctrl.send_str(json.dumps(msg))
+            for browser in browsers:
+                await browser.send_str(json.dumps(msg))
         elif msg["type"] == "BROWSER":
             print("Browser connected")
-            controller = ws
-            controllers.add(controller)
+            browser = ws
+            browsers.add(browser)
 
             for uid, head in uid_to_head.items():
                 ip = getattr(head, 'ip', 'unknown')
@@ -54,17 +54,18 @@ async def websocket_handler(ws, ip_address, port):
                 network_configs = getattr(head, 'network_configs', [])
                 local_ips = getattr(head, 'local_ips', [])
                 notify = json.dumps({"type": "HEAD_CONNECTED", "uid": uid, "ip": ip, "name": name, "version": version, "app_path": app_path, "network_configs": network_configs, "local_ips": local_ips})
-                await controller.send_str(notify)
+                await browser.send_str(notify)
                 mode = getattr(head, 'mode', 'unknown')
                 notify = json.dumps({"type": "CURRENT_MODE", "uid": uid, "mode": mode})
-                await controller.send_str(notify)
+                await browser.send_str(notify)
 
         async for msg in ws:
             if msg.type == WSMsgType.TEXT:
                 message = msg.data
                 # Message came from a browser
-                if ws in controllers:
+                if ws in browsers:
                     msg_data = json.loads(message)
+                    print("From browser:", message)
                     uid = msg_data.get("uid")
                     head = uid_to_head.get(uid)
                     if head:
@@ -79,6 +80,7 @@ async def websocket_handler(ws, ip_address, port):
                 # Message came from a head
                 elif ws in heads:
                     head = ws
+                    print("From head:", message)
                     msg_data = json.loads(message)
                     to_uid = msg_data.get("to_uid")
                     if to_uid:
@@ -91,9 +93,8 @@ async def websocket_handler(ws, ip_address, port):
                         # Message is for browsers
                         if msg_data["type"] == "CURRENT_MODE":
                             head.mode = msg_data["mode"]
-                        for ctrl in controllers:
-                            print("Server: Forwarding", message, "to browser")
-                            await ctrl.send_str(message)
+                        for browser in browsers:
+                            await browser.send_str(message)
             elif msg.type == WSMsgType.ERROR:
                 print('WebSocket connection closed with exception %s' % ws.exception())
                 break
@@ -116,11 +117,11 @@ async def websocket_handler(ws, ip_address, port):
             if dead_uid:
                 del uid_to_head[dead_uid]
                 notify = json.dumps({"type": "HEAD_DISCONNECTED", "uid": dead_uid})
-                for ctrl in controllers:
-                    await ctrl.send_str(notify)
-        elif ws in controllers:
+                for browser in browsers:
+                    await browser.send_str(notify)
+        elif ws in browsers:
             print("Browser disconnected")
-            controllers.remove(ws)
+            browsers.remove(ws)
 
 async def http_handler(request):
     print('http_handler', request)
