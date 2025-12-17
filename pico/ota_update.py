@@ -182,17 +182,22 @@ def apply_update(home_url, manifest):
     else:
         os.mkdir(target_dir)
 
-    for path in manifest["files"]:
-        print("Updating file:", path)
-        url = '/'.join([home_url, registry_get('app_path', 'apps/base'), path])
-        dest = f"{target_dir}/{path}"
+    for filename, fileinfo in manifest["files"].items():
+        print("Updating file:", filename)
+
+        if isinstance(fileinfo, dict) and "path" in fileinfo:
+            file_path = fileinfo["path"]
+            url = "/".join([home_url, file_path])
+        else:
+            url = "/".join([home_url, registry_get("app_path", "apps/base"), filename])
+
+        dest = f"{target_dir}/{filename}"
         download_file(url, dest)
 
     manifest["num_boot_attempts"] = 0
     manifest["trusted"] = False
     with open(f"{target_dir}/manifest.json", "w") as f:
         json.dump(manifest, f)
-    print(manifest)
 
     print("Switching active slot to:", target_dir)
     set_active_dir(target_dir)
@@ -258,7 +263,6 @@ def run_active_app():
     try:
         with open('manifest.json') as f:
             manifest = json.load(f)
-            print(manifest)
             if manifest["trusted"]:
                 print("App is trusted.")
             else:

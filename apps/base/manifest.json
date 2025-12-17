@@ -1,11 +1,22 @@
 {
-  "version": "193",
+  "version": "198",
   "files": {
-    "main.py": "a2f4c3d5...",
-    "logging.py": "b4e5f6a7...",
-    "uwebsockets/client.py": "c7d8e9f0...",
-    "uwebsockets/protocol.py": "d1e2f3a4...",
-    "udp_con.py": "d1e2f3a4...",
-    "stun_query.py": "e2f3a4b5..."
+    "main.py": {
+    },
+    "logging.py": {
+      "path": "libs/logging.py"
+    },
+    "uwebsockets/client.py": {
+      "path": "libs/uwebsockets/client.py"
+    },
+    "uwebsockets/protocol.py": {
+      "path": "libs/uwebsockets/protocol.py"
+    },
+    "udp_con.py": {
+      "path": "libs/udp_con.py"
+    },
+    "stun_query.py": {
+      "path": "libs/stun_query.py"
+    }
   }
 }
