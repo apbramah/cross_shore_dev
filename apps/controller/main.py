@@ -3,6 +3,7 @@ from udp_con import UDPConnection
 import json
 import threading
 import time
+import queue
 
 import asyncio
 uid_hex = 'andyunique'
@@ -67,8 +68,45 @@ async def send_udp_message(values, channel):
 
 def run_gui():
     """Run the tkinter GUI in a separate thread"""
+    global heads_dropdown, heads_dropdown_queue
     root = tk.Tk()
     root.title("EX Head Controller Relative")
+    
+    # Create queue for heads list updates
+    heads_dropdown_queue = queue.Queue()
+    
+    # Heads selection dropdown
+    heads_frame = ttk.Frame(root)
+    heads_frame.pack(side=tk.TOP, fill=tk.X, padx=10, pady=10)
+    
+    ttk.Label(heads_frame, text="Select Head:").pack(side=tk.LEFT, padx=5)
+    heads_dropdown = ttk.Combobox(heads_frame, state="readonly", width=30)
+    heads_dropdown.pack(side=tk.LEFT, padx=5)
+    heads_dropdown.set("No heads available")
+    
+    # Function to update dropdown from queue
+    def update_heads_dropdown():
+        try:
+            while True:
+                new_heads_list = heads_dropdown_queue.get_nowait()
+                # Build display strings: "name (uid)"
+                display_values = [f"{head['name']} ({head['uid']})" for head in new_heads_list]
+                if display_values:
+                    heads_dropdown['values'] = display_values
+                    # Keep current selection if it still exists, otherwise select first
+                    current = heads_dropdown.get()
+                    if current not in display_values and display_values:
+                        heads_dropdown.set(display_values[0])
+                else:
+                    heads_dropdown['values'] = []
+                    heads_dropdown.set("No heads available")
+        except queue.Empty:
+            pass
+        # Schedule next check
+        root.after(100, update_heads_dropdown)
+    
+    # Start polling the queue
+    root.after(100, update_heads_dropdown)
     
     sliders = []
     
@@ -191,6 +229,10 @@ pending_udp_connections = {}  # Store pending UDP connection info: peer_uid -> {
 reliable_channel = None  # Store the reliable channel for sending UDP messages
 current_slider_values = [0] * 6  # Store current slider values (thread-safe access needed)
 slider_values_lock = threading.Lock()  # Lock for thread-safe access to slider values
+heads_list = []  # Store current heads list
+heads_list_lock = threading.Lock()  # Lock for thread-safe access to heads list
+heads_dropdown = None  # Reference to the dropdown widget
+heads_dropdown_queue = None  # Queue for passing heads list updates to GUI thread
 
 def http_to_ws_url(http_url):
     """Convert HTTP URL to WebSocket URL for upgrading the connection"""
@@ -321,6 +363,16 @@ async def websocket_client(ws_connection, server_url=None):
                     new_network_configs = my_dict.get("network_configs")
                     if new_network_configs is not None:
                         ota.registry_set('network_configs', new_network_configs)
+                elif my_dict["type"] == "HEADS_LIST":
+                    # Update heads list and send to GUI thread via queue
+                    new_heads_list = my_dict.get("heads", [])
+                    global heads_list, heads_dropdown_queue
+                    with heads_list_lock:
+                        heads_list = new_heads_list
+                    # Send to GUI thread via queue
+                    if heads_dropdown_queue is not None:
+                        heads_dropdown_queue.put(new_heads_list)
+                    print(f"Received heads list: {len(new_heads_list)} heads")
                 elif my_dict["type"] == "INITIATE_UDP_CONNECTION":
                     # from_head receives this - act as UDP server
                     to_uid = my_dict.get("to_uid")

@@ -12,6 +12,25 @@ uid_to_head = dict()
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
+def build_heads_list():
+    """Build a list of all connected heads with uid and name"""
+    heads_list = []
+    for uid, head in uid_to_head.items():
+        name = getattr(head, 'name', 'unknown')
+        heads_list.append({"uid": uid, "name": name})
+    return heads_list
+
+
+async def send_heads_list_to_all():
+    """Send the current heads list to all browsers and devices"""
+    heads_list = build_heads_list()
+    message = json.dumps({"type": "HEADS_LIST", "heads": heads_list})
+    
+    # Send to all heads (devices/controllers)
+    for head in heads:
+        await head.send_str(message)
+
+
 async def websocket_handler(ws, ip_address, port):
     """Handle WebSocket connections"""
     # First message tells us who they are
@@ -41,6 +60,9 @@ async def websocket_handler(ws, ip_address, port):
             msg["ip"] = ip
             for browser in browsers:
                 await browser.send_str(json.dumps(msg))
+            
+            # Send updated heads list to all clients
+            await send_heads_list_to_all()
         elif msg["type"] == "BROWSER":
             print("Browser connected")
             browser = ws
@@ -119,6 +141,9 @@ async def websocket_handler(ws, ip_address, port):
                 notify = json.dumps({"type": "DEVICE_DISCONNECT", "uid": dead_uid})
                 for browser in browsers:
                     await browser.send_str(notify)
+                
+                # Send updated heads list to all clients
+                await send_heads_list_to_all()
         elif ws in browsers:
             print("Browser disconnected")
             browsers.remove(ws)
