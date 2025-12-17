@@ -100,8 +100,8 @@ def run_gui():
         entry.pack(side=tk.RIGHT, padx=5)
         entry.insert(0, "0")
     
-        def on_slider_move(event, var=value_var, e=entry):
-            val = int(float(event.widget.get()))
+        def on_slider_move(value, var=value_var, e=entry):
+            val = int(float(value))
             var.set(val)
             e.delete(0, tk.END)
             e.insert(0, str(val))
