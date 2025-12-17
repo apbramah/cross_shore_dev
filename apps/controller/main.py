@@ -2,7 +2,6 @@ from udp_con import UDPConnection
 
 import json
 import threading
-import socket
 import time
 
 import asyncio
@@ -102,6 +101,11 @@ def run_gui():
             var.set(val)
             e.delete(0, tk.END)
             e.insert(0, str(val))
+
+            # Update shared slider values whenever any slider changes
+            global current_slider_values
+            with slider_values_lock:
+                current_slider_values = [int(s.get()) for s in sliders]
     
         def on_entry_change(event, s=slider, var=value_var):
             try:
@@ -178,16 +182,6 @@ def run_gui():
     # Create the sequencer toggle button
     sequencer_button = ttk.Button(root, text="Enable Sequencer", command=toggle_sequencer)
     sequencer_button.pack(side=tk.BOTTOM, pady=10)
-    
-    def update_slider_values():
-        """Update the shared slider values from the GUI thread"""
-        global current_slider_values
-        with slider_values_lock:
-            current_slider_values = [int(slider.get()) for slider in sliders]
-        root.after(50, update_slider_values)  # Schedule the next update after 50ms
-    
-    # Start the update loop
-    update_slider_values()
     
     root.mainloop()
 
