@@ -18,7 +18,7 @@ async def websocket_handler(ws, ip_address, port):
     try:
         message = await ws.receive_str()
         msg = json.loads(message)
-        if msg["type"] == "HEAD_CONNECTED":
+        if msg["type"] == "DEVICE_CONNECT":
             uid = msg.get("uid", "unknown")
             name = msg.get("name", "unknown")
             version = msg.get("version", "unknown")
@@ -53,7 +53,7 @@ async def websocket_handler(ws, ip_address, port):
                 app_path = head.app_path
                 network_configs = getattr(head, 'network_configs', [])
                 local_ips = getattr(head, 'local_ips', [])
-                notify = json.dumps({"type": "HEAD_CONNECTED", "uid": uid, "ip": ip, "name": name, "version": version, "app_path": app_path, "network_configs": network_configs, "local_ips": local_ips})
+                notify = json.dumps({"type": "DEVICE_CONNECT", "uid": uid, "ip": ip, "name": name, "version": version, "app_path": app_path, "network_configs": network_configs, "local_ips": local_ips})
                 await browser.send_str(notify)
                 mode = getattr(head, 'mode', 'unknown')
                 notify = json.dumps({"type": "CURRENT_MODE", "uid": uid, "mode": mode})
@@ -116,7 +116,7 @@ async def websocket_handler(ws, ip_address, port):
 
             if dead_uid:
                 del uid_to_head[dead_uid]
-                notify = json.dumps({"type": "HEAD_DISCONNECTED", "uid": dead_uid})
+                notify = json.dumps({"type": "DEVICE_DISCONNECT", "uid": dead_uid})
                 for browser in browsers:
                     await browser.send_str(notify)
         elif ws in browsers:

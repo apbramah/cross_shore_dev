@@ -224,7 +224,7 @@ async def websocket_client(ws_connection, server_url=None):
         local_ips = ota.get_local_ips()
         manifest = get_manifest()
 
-        data = {"type": "HEAD_CONNECTED",
+        data = {"type": "DEVICE_CONNECT",
                 "uid": uid_hex,
                 "name": device_name,
                 "app_path": app_path,

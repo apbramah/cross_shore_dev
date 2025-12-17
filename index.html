@@ -86,14 +86,14 @@
 
         switch (msg.type) {
 
-          case "HEAD_CONNECTED":
+          case "DEVICE_CONNECT":
             allHeads[msg.uid] = {ip: msg.ip, name: msg.name || "unknown"};
             addHeadPanel(msg.uid, msg.ip, msg.name || "unknown", msg.version, msg.app_path || 'apps/base', msg.network_configs || [['dhcp', 'http://192.168.60.91:80']], msg.local_ips || []);
             updateUdpDropdowns();
             log("From server: " + event.data);
             break;
 
-          case "HEAD_DISCONNECTED":
+          case "DEVICE_DISCONNECT":
             delete allHeads[msg.uid];
             removeHeadPanel(msg.uid);
             updateUdpDropdowns();
