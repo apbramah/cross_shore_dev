@@ -40,8 +40,7 @@ class UDPConnection:
         self.channels = {}  # channel_id -> DataChannel
         self.next_channel_id = 1
         self.running = False
-        self._receiver_task = None
-        self._evaluation_task = None
+        self._supervisor_task = None
         self.response_addresses = set()  # Track addresses we've responded to during evaluation
         self.checks_sent = {}  # Track connectivity checks sent during evaluation
         self.last_response_send_time = {}  # Track when we last sent a response to each address
@@ -150,8 +149,8 @@ class UDPConnection:
             # Set socket to non-blocking for asyncio
             self.sock.setblocking(False)
 
-        while self.running:
-            try:
+        try:
+            while self.running:
                 if MICROPYTHON:
                     # MicroPython: use timeout-based approach
                     self.sock.setblocking(False)
@@ -179,11 +178,10 @@ class UDPConnection:
                 elif data.startswith(STUN_RESPONSE_MAGIC) or data.startswith(STUN_CHECK_MAGIC):
                     await self._handle_stun_packet(data, addr)
                     
-            except Exception as e:
-                print(f"Error in receiver loop: {e}")
-                await asyncio.sleep(0.1)
+        except Exception as e:
+            print(f"Error in receiver loop: {e}")
+            self.running = False
     
-
     async def _open(self, addr):
         self.peer_addr = addr
         if self.onOpen:
@@ -316,8 +314,8 @@ class UDPConnection:
                     all_pairs.append((local_cand, remote_cand))
             
             if not all_pairs:
-                print("No candidate pairs to evaluate - closing connection")
-                await self.close()
+                print("No candidate pairs to evaluate - stopping connection")
+                self.running = False
                 return
             
             # Evaluate pairs by sending connectivity checks
@@ -354,55 +352,51 @@ class UDPConnection:
             # Wait before next round
             await asyncio.sleep(round_interval)
     
-    async def start(self):
-        """Start the connection: start receiver loop and continuous evaluation"""
-        if self.running:
-            return
-        
-        self.running = True
-        self._receiver_task = asyncio.create_task(self._receiver_loop())
-        self._evaluation_task = asyncio.create_task(self._evaluation_loop())
-        
-        # Create reliable channel
-        reliable_channel = self.create_channel('reliable')
-        await reliable_channel.start()
-        
-        # Create unreliable channel
-        unreliable_channel = self.create_channel('unreliable')
-        
-        # Store channel references as attributes for easy access
-        self.reliable_channel = reliable_channel
-        self.unreliable_channel = unreliable_channel
-        
-        # Set up default message handlers
-        async def on_reliable_message(data):
-            print(f"Reliable channel received: {data}")
-        async def on_unreliable_message(data):
-            print(f"Unreliable channel received: {data}")
-        
-        reliable_channel.on_message = on_reliable_message
-        unreliable_channel.on_message = on_unreliable_message
+    async def _supervisor_loop(self):
+        """Supervisor task that manages subordinate tasks and performs cleanup"""
+        try:
+            # Create reliable channel
+            reliable_channel = self.create_channel('reliable')
+            await reliable_channel.start()
+            
+            # Create unreliable channel
+            unreliable_channel = self.create_channel('unreliable')
+            
+            # Store channel references as attributes for easy access
+            self.reliable_channel = reliable_channel
+            self.unreliable_channel = unreliable_channel
+            
+            # Set up default message handlers
+            async def on_reliable_message(data):
+                print(f"Reliable channel received: {data}")
+            async def on_unreliable_message(data):
+                print(f"Unreliable channel received: {data}")
+            
+            reliable_channel.on_message = on_reliable_message
+            unreliable_channel.on_message = on_unreliable_message
+            
+            # Launch subordinate tasks
+            _receiver_task = asyncio.create_task(self._receiver_loop())
+            _evaluation_task = asyncio.create_task(self._evaluation_loop())
+            
+            # Wait for tasks to complete (they'll stop when self.running becomes False)
+            try:
+                await asyncio.gather(_receiver_task, _evaluation_task, return_exceptions=True)
+            except Exception as e:
+                print(f"Error in supervisor subordinate tasks: {e}")
+        finally:
+            # Perform cleanup when tasks complete
+            await self._cleanup()
     
-    async def close(self):
-        """Close the connection and all channels"""
-        self.running = False
-        if self._receiver_task:
-            self._receiver_task.cancel()
-            try:
-                await self._receiver_task
-            except asyncio.CancelledError:
-                pass
-        if self._evaluation_task:
-            self._evaluation_task.cancel()
-            try:
-                await self._evaluation_task
-            except asyncio.CancelledError:
-                pass
-        
+    async def _cleanup(self):
+        """Internal cleanup method - closes channels, socket, and sends final message"""
+        # Close all channels (this will handle their own internal tasks)
         for channel in self.channels.values():
-            await channel.close()
+            try:
+                await channel.close()
+            except Exception as e:
+                print(f"Error closing channel: {e}")
         
-        # Call onClose callback
         if self.onClose:
             try:
                 await self.onClose(self)
@@ -411,8 +405,8 @@ class UDPConnection:
         
         try:
             self.sock.close()
-        except:
-            pass
+        except Exception as e:
+            print(f"Error closing socket: {e}")
 
         result_msg = {
             "type": "UDP_CONNECTION_RESULT",
@@ -422,6 +416,30 @@ class UDPConnection:
             "message": "UDP connection closed"
         }
         await self.ws.send(json.dumps(result_msg))
+    
+    async def start(self):
+        """Start the connection: launches supervisor task"""
+        if self.running:
+            return
+        
+        self.running = True
+        self._supervisor_task = asyncio.create_task(self._supervisor_loop())
+    
+    async def close(self):
+        """Close the connection - signals shutdown and waits for supervisor cleanup"""
+        if not self.running:
+            return
+        
+        self.running = False
+        
+        # Wait for supervisor to complete cleanup
+        if self._supervisor_task and not self._supervisor_task.done():
+            try:
+                await self._supervisor_task
+            except asyncio.CancelledError:
+                pass
+            except Exception as e:
+                print(f"Error in supervisor task: {e}")
 
 class DataChannel:
     """Base class for datachannels"""
