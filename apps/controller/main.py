@@ -42,32 +42,29 @@ def ota_trust():
     if ota_present:
         ota.trust()
 
-# GUI Configuration (from head_controller_relative.py)
-UDP_IP = "192.168.60.87"  # Change this to your target IP
-UDP_PORT = 8890
 
 map_zoom = lambda value: (value + 0)
 map_iris = lambda value: (value + 512) >> 4
 map_focus = lambda value: (value + 512) >> 4
 map_pitch = lambda value: int(value * 0.2)
 
-def send_udp_message(values):
+async def send_udp_message(values, channel):
     # Pack values into a UDP message
     values = values.copy()  # Don't modify the original
     values[1] = map_pitch(values[1])
     values[3] = map_zoom(values[3])
     values[4] = map_focus(values[4])
     values[5] = map_iris(values[5])
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.bind(('', UDP_PORT))  # Bind to the specified source port
-    sock.sendto(bytes([0xDE, 0xFD, (values[3] >> 8) & 0xFF, values[3] & 0xFF,
-                       (values[4] >> 8) & 0xFF, values[4] & 0xFF,
-                       (values[5] >> 8) & 0xFF, values[5] & 0xFF,
-                       (values[0] >> 8) & 0xFF, values[0] & 0xFF,
-                       (values[1] >> 8) & 0xFF, values[1] & 0xFF,
-                       (values[2] >> 8) & 0xFF, values[2] & 0xFF,
-                       0x00, 0x00]), (UDP_IP, UDP_PORT))
-    sock.close()
+    # Pack values into bytes
+    message_bytes = bytes([0xDE, 0xFD, (values[3] >> 8) & 0xFF, values[3] & 0xFF,
+                           (values[4] >> 8) & 0xFF, values[4] & 0xFF,
+                           (values[5] >> 8) & 0xFF, values[5] & 0xFF,
+                           (values[0] >> 8) & 0xFF, values[0] & 0xFF,
+                           (values[1] >> 8) & 0xFF, values[1] & 0xFF,
+                           (values[2] >> 8) & 0xFF, values[2] & 0xFF,
+                           0x00, 0x00])
+    if channel:
+        await channel.send(message_bytes)
 
 def run_gui():
     """Run the tkinter GUI in a separate thread"""
@@ -182,19 +179,24 @@ def run_gui():
     sequencer_button = ttk.Button(root, text="Enable Sequencer", command=toggle_sequencer)
     sequencer_button.pack(side=tk.BOTTOM, pady=10)
     
-    def update_values():
-        values = [int(slider.get()) for slider in sliders]
-        send_udp_message(values)
-        root.after(50, update_values)  # Schedule the next update after 50ms
+    def update_slider_values():
+        """Update the shared slider values from the GUI thread"""
+        global current_slider_values
+        with slider_values_lock:
+            current_slider_values = [int(slider.get()) for slider in sliders]
+        root.after(50, update_slider_values)  # Schedule the next update after 50ms
     
     # Start the update loop
-    update_values()
+    update_slider_values()
     
     root.mainloop()
 
 ws = None
 current_server_url = None  # Store server URL for UDP discovery
 pending_udp_connections = {}  # Store pending UDP connection info: peer_uid -> {socket, is_server, local_candidates}
+reliable_channel = None  # Store the reliable channel for sending UDP messages
+current_slider_values = [0] * 6  # Store current slider values (thread-safe access needed)
+slider_values_lock = threading.Lock()  # Lock for thread-safe access to slider values
 
 def http_to_ws_url(http_url):
     """Convert HTTP URL to WebSocket URL for upgrading the connection"""
@@ -246,31 +248,37 @@ def get_manifest():
         manifest = json.load(f)
     return manifest
 
-async def occasional_send(channel, my_string):
+async def send_slider_values(channel):
     while True:
-        print('sending', my_string)
-        await channel.send(my_string.encode('utf-8'))
-        await asyncio.sleep(1)
+        global current_slider_values
+        if channel:
+            with slider_values_lock:
+                values = current_slider_values.copy()
+            await send_udp_message(values, channel)
+        await asyncio.sleep(0.05)  # 50ms interval, same as original update_values
 
 async def onOpen(connection):
     print("Connection opened (onOpen callback)")
     
     # Access channels from connection
-    reliable_channel = connection.reliable_channel
+    global unreliable_channel
+    unreliable_channel = connection.unreliable_channel
     
-    # Start occasional_send task
-    occasional_send_task = asyncio.create_task(occasional_send(reliable_channel, uid_hex + 'rel'))
-    connection._occasional_send_task = occasional_send_task
+    # Start slider values sending task
+    slider_send_task = asyncio.create_task(send_slider_values(unreliable_channel))
+    connection._slider_send_task = slider_send_task
 
 async def onClose(connection):
     print("Connection closed (onClose callback)")
-    # Kill occasional_send task
-    if connection and hasattr(connection, '_occasional_send_task') and connection._occasional_send_task:
-        connection._occasional_send_task.cancel()
+    # Kill slider_send task
+    if connection and hasattr(connection, '_slider_send_task') and connection._slider_send_task:
+        connection._slider_send_task.cancel()
         try:
-            await connection._occasional_send_task
+            await connection._slider_send_task
         except asyncio.CancelledError:
             pass
+    global unreliable_channel
+    unreliable_channel = None
                         
 async def websocket_client(ws_connection, server_url=None):
     """Handle WebSocket client logic with an upgraded connection"""
