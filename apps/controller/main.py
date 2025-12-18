@@ -109,6 +109,13 @@ def run_gui():
 
     connect_button = ttk.Button(heads_frame, text="Connect", command=on_connect_pressed)
     connect_button.pack(side=tk.LEFT, padx=5)
+
+    def on_disconnect_pressed():
+        # GUI thread only: enqueue an event for asyncio thread to handle.
+        gui_to_async_queue.put({"type": "DISCONNECT"})
+
+    disconnect_button = ttk.Button(heads_frame, text="Disconnect", command=on_disconnect_pressed)
+    disconnect_button.pack(side=tk.LEFT, padx=5)
     
     # Function to update dropdown from queue
     def update_heads_dropdown():
@@ -260,6 +267,7 @@ heads_list_lock = threading.Lock()  # Lock for thread-safe access to heads list
 heads_dropdown = None  # Reference to the dropdown widget
 heads_dropdown_queue = None  # Queue for passing heads list updates to GUI thread
 gui_to_async_queue = queue.Queue()  # Queue for passing GUI events to asyncio thread (thread-safe)
+current_udp_connection = None  # Currently active UDPConnection (if any)
 
 def http_to_ws_url(http_url):
     """Convert HTTP URL to WebSocket URL for upgrading the connection"""
@@ -322,6 +330,8 @@ async def send_slider_values(channel):
 
 async def onOpen(connection):
     print("Connection opened (onOpen callback)")
+    global current_udp_connection
+    current_udp_connection = connection
     
     # Access channels from connection
     global unreliable_channel
@@ -342,6 +352,9 @@ async def onClose(connection):
             pass
     global unreliable_channel
     unreliable_channel = None
+    global current_udp_connection
+    if current_udp_connection is connection:
+        current_udp_connection = None
 
 
 async def init_udp_connection(to_uid):
@@ -546,6 +559,10 @@ async def gui_event_pump_task():
                 to_uid = event.get("to_uid")
                 if to_uid:
                     await init_udp_connection(to_uid)
+            elif isinstance(event, dict) and event.get("type") == "DISCONNECT":
+                global current_udp_connection
+                if current_udp_connection:
+                    await current_udp_connection.close()
         finally:
             try:
                 gui_to_async_queue.task_done()
