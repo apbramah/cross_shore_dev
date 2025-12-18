@@ -109,17 +109,11 @@ from machine import UART, Pin
 import struct
 import socket
 
-TCP_PORT   = 8080
-TCP_PORT2   = 8081
 UART_ID    = 0           # 0 or 1
 UART_ID1    = 1           # 0 or 1
 UART_BAUD  = 115200
 UART_BAUD1  = 9600
-LISTEN_PORT_JOYSTICK = 8890
-LISTEN_PORT_AUTOCAM = 8889
 BUFFER_SIZE = 1024
-WS_URL = "ws://192.168.60.91:443/"
-# ========================
 
 # Setup UART
 uart = UART(UART_ID, UART_BAUD)
@@ -193,30 +187,6 @@ CMD_SET_ADJ_VARS_VAL = 31
 CMD_API_VIRT_CH_CONTROL = 45
 CMD_CONTROL_EXT = 121
 CMD_CONTROL = 67
-
-async def joystick():
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.setblocking(False)
-    sock.bind(("0.0.0.0", LISTEN_PORT_JOYSTICK))
-    print("Listening for joystick UDP packets on port", LISTEN_PORT_JOYSTICK)
-
-    while True:
-        try:
-            data, addr = sock.recvfrom(BUFFER_SIZE)  # non-blocking
-        except OSError:
-            # No data available
-            await asyncio.sleep(0)  # yield to scheduler
-            continue
-
-        if mode != "joystick":
-            continue
-
-        fields = decode_udp_packet(data)
-        if fields:
-            payload = struct.pack(">3H", fields["yaw"], fields["pitch"], fields["roll"])
-            packet = create_packet(CMD_API_VIRT_CH_CONTROL, payload)
-            print("UART joystick -->", hexdump(packet))
-            uart.write(packet)
 
 ws = None
 current_server_url = None  # Store server URL for UDP discovery
@@ -335,7 +305,12 @@ async def on_reliable_message(data):
         print(f"Error handling SET_MODE over reliable channel: {e}")
 
 async def on_unreliable_message(data):
-    print(f"Unreliable channel received: {data}")
+    fields = decode_udp_packet(data)
+    if fields:
+        payload = struct.pack(">3H", fields["yaw"], fields["pitch"], fields["roll"])
+        packet = create_packet(CMD_API_VIRT_CH_CONTROL, payload)
+        print("UART joystick -->", hexdump(packet))
+        uart.write(packet)
                         
 async def websocket_client(ws_connection, server_url=None):
     """Handle WebSocket client logic with an upgraded connection"""
@@ -449,7 +424,7 @@ async def websocket(server_url):
     await websocket_client(ws_connection, server_url)
 
 async def as_main(server_url):
-    tasks = [joystick(), websocket(server_url)]
+    tasks = [websocket(server_url)]
 
     # Run all tasks concurrently
     await asyncio.gather(*tasks)
