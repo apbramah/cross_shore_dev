@@ -187,6 +187,7 @@ CMD_SET_ADJ_VARS_VAL = 31
 CMD_API_VIRT_CH_CONTROL = 45
 CMD_CONTROL_EXT = 121
 CMD_CONTROL = 67
+CMD_BEEP_SOUND = 89
 
 ws = None
 current_server_url = None  # Store server URL for UDP discovery
@@ -361,6 +362,14 @@ async def websocket_client(ws_connection, server_url=None):
                     new_network_configs = my_dict.get("network_configs")
                     if new_network_configs is not None:
                         ota.registry_set('network_configs', new_network_configs)
+                elif my_dict["type"] == "IDENTIFY":
+                    led.toggle()
+
+                    # payload = bytearray([0x01, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
+                    payload = bytearray([0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
+                    packet = create_packet(CMD_BEEP_SOUND, payload)
+                    uart.write(packet)
+
                 elif my_dict["type"] == "OFFER":
                     # to_head receives this - act as UDP client
                     from_uid = my_dict.get("from_uid")

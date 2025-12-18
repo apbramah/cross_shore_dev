@@ -185,6 +185,14 @@
         ? `<p>Current mode: <strong><span id="mode_${uid}">unknown</span></strong></p>`
         : ``;
 
+      const identifyHtml = (device_type === "head")
+        ? `
+        <button class="inactive" onclick="identify('${uid}')" id="identify_${uid}">
+          Identify
+        </button>
+        `
+        : ``;
+
       div.innerHTML = `
         <h3><a href="simplebgc://${ip}:8080">Head UID: ${uid}</a></h3>
         <p>IP: ${ip}</p>
@@ -202,6 +210,7 @@
           <button onclick="setAppPath('${uid}')">Save</button>
         </p>
         ${networkConfigsHtml}
+        ${identifyHtml}
         <button class="inactive" onclick="reboot('${uid}')" id="reboot_${uid}">
           Reboot
         </button>
@@ -236,6 +245,11 @@
     }
     function reboot(uid) {
       const obj = {type: "REBOOT", uid: uid};
+      appendHeadLog(uid, "Sending: " + JSON.stringify(obj));
+      ws.send(JSON.stringify(obj));
+    }
+    function identify(uid) {
+      const obj = {type: "IDENTIFY", uid: uid};
       appendHeadLog(uid, "Sending: " + JSON.stringify(obj));
       ws.send(JSON.stringify(obj));
     }
