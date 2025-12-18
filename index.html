@@ -89,14 +89,12 @@
           case "DEVICE_CONNECT":
             allHeads[msg.uid] = {ip: msg.ip, name: msg.name || "unknown"};
             addHeadPanel(msg.uid, msg.ip, msg.name || "unknown", msg.version, msg.app_path || 'apps/base', msg.network_configs || [['dhcp', 'http://192.168.60.91:80']], msg.local_ips || []);
-            updateUdpDropdowns();
             log("From server: " + event.data);
             break;
 
           case "DEVICE_DISCONNECT":
             delete allHeads[msg.uid];
             removeHeadPanel(msg.uid);
-            updateUdpDropdowns();
             log("From server: " + event.data);
             break;
             
@@ -202,13 +200,6 @@
         <button class="inactive" onclick="reboot('${uid}')" id="reboot_${uid}">
           Reboot
         </button>
-        <p style="margin-top: 10px;">
-          <strong>UDP Connection:</strong>
-          <select id="udp_target_${uid}" style="padding: 4px; margin: 5px;">
-            <option value="">Select head...</option>
-          </select>
-          <button onclick="initiateUdpConnection('${uid}')" style="padding: 4px 8px; font-size: 12px;">Connect</button>
-        </p>
         <pre class="head-log" id="head_log_${uid}"></pre>
       `;
 
@@ -330,44 +321,6 @@
       ws.send(JSON.stringify(obj));
     }
     
-    function updateUdpDropdowns() {
-      // Update all UDP dropdowns with current list of heads
-      Object.keys(headPanels).forEach(uid => {
-        const dropdown = document.getElementById(`udp_target_${uid}`);
-        if (!dropdown) return;
-        
-        const currentValue = dropdown.value;
-        dropdown.innerHTML = '<option value="">Select head...</option>';
-        
-        Object.keys(allHeads).forEach(targetUid => {
-          if (targetUid !== uid) {
-            const head = allHeads[targetUid];
-            const option = document.createElement('option');
-            option.value = targetUid;
-            option.textContent = `${head.name} (${head.ip})`;
-            dropdown.appendChild(option);
-          }
-        });
-        
-        // Restore previous selection if still valid
-        if (currentValue && allHeads[currentValue]) {
-          dropdown.value = currentValue;
-        }
-      });
-    }
-    
-    function initiateUdpConnection(uid) {
-      const dropdown = document.getElementById(`udp_target_${uid}`);
-      if (!dropdown || !dropdown.value) {
-        appendHeadLog(uid, "Please select a head to connect to");
-        return;
-      }
-      
-      const targetUid = dropdown.value;
-      const obj = {type: "INITIATE_UDP_CONNECTION", uid: uid, to_uid: targetUid};
-      appendHeadLog(uid, "Initiating UDP connection to " + targetUid + ": " + JSON.stringify(obj));
-      ws.send(JSON.stringify(obj));
-    }
   </script>
 </body>
 </html>

@@ -149,7 +149,7 @@ def run_gui():
 
     def update_joystick_controls_visibility():
         # Visible only when connected AND Joystick mode selected.
-        set_joystick_controls_visible(bool(connected and current_mode == "JOYSTICK"))
+        set_joystick_controls_visible(bool(connected and current_mode == "joystick"))
 
     def on_mode_pressed(mode: str):
         # GUI thread only: enqueue an event for asyncio thread to handle.
@@ -158,9 +158,9 @@ def run_gui():
         update_joystick_controls_visibility()
         gui_to_async_queue.put({"type": "SET_MODE", "mode": mode})
 
-    auto_cam_button = ttk.Button(mode_frame, text="Auto-cam", command=lambda: on_mode_pressed("AUTO_CAM"))
-    joystick_button = ttk.Button(mode_frame, text="Joystick", command=lambda: on_mode_pressed("JOYSTICK"))
-    fixed_button = ttk.Button(mode_frame, text="Fixed", command=lambda: on_mode_pressed("FIXED"))
+    auto_cam_button = ttk.Button(mode_frame, text="Auto-cam", command=lambda: on_mode_pressed("auto_cam"))
+    joystick_button = ttk.Button(mode_frame, text="Joystick", command=lambda: on_mode_pressed("joystick"))
+    fixed_button = ttk.Button(mode_frame, text="Fixed", command=lambda: on_mode_pressed("fixed"))
 
     auto_cam_button.pack(side=tk.LEFT, padx=5, pady=5)
     joystick_button.pack(side=tk.LEFT, padx=5, pady=5)
@@ -461,7 +461,7 @@ async def init_udp_connection(to_uid):
         print(f"Sent OFFER to {to_uid} with {len(candidates)} candidates")
         
     except Exception as e:
-        print(f"Error handling INITIATE_UDP_CONNECTION: {e}")
+        print(f"Error handling init_udp_connection: {e}")
 
        
 async def websocket_client(ws_connection, server_url=None):
@@ -519,48 +519,6 @@ async def websocket_client(ws_connection, server_url=None):
                         heads_list = new_heads_list
                     async_to_gui_queue.put({"type": "HEADS_LIST", "heads": new_heads_list})
                     print(f"Received heads list: {len(new_heads_list)} heads")
-                elif my_dict["type"] == "INITIATE_UDP_CONNECTION":
-                    await init_udp_connection(my_dict.get("to_uid"))                    
-                elif my_dict["type"] == "OFFER":
-                    # to_head receives this - act as UDP client
-                    from_uid = my_dict.get("from_uid")
-                    candidates = my_dict.get("candidates", [])
-                    print(f"OFFER received from {from_uid} with {len(candidates)} candidates")
-                    
-                    try:
-                        # Gather candidates (creates socket, gathers host and srflx candidates)
-                        sock, answer_candidates = await UDPConnection.gather_candidates(ota.get_local_ips())
-                        
-                        # Store socket and candidates for candidate pair evaluation
-                        pending_udp_connections[from_uid] = {
-                            "socket": sock,
-                            "is_server": False,
-                            "local_candidates": answer_candidates,
-                            "remote_candidates": candidates
-                        }
-                        
-                        # Send ANSWER message via WebSocket
-                        answer_msg = {
-                            "type": "ANSWER",
-                            "from_uid": uid_hex,
-                            "to_uid": from_uid,
-                            "candidates": answer_candidates
-                        }
-                        print(f"Answer message: {answer_msg}")
-                        await ws.send(json.dumps(answer_msg))
-                        print(f"Sent ANSWER to {from_uid} with {len(answer_candidates)} candidates")
-                        
-                        connection = await UDPConnection.create(
-                            sock, answer_candidates, candidates, from_uid, uid_hex, ws,
-                            onOpen=onOpen, onClose=onClose
-                        )
-                        
-                        # Clean up pending connection
-                        del pending_udp_connections[from_uid]
-                        
-                    except Exception as e:
-                        print(f"Error handling OFFER: {e}")
-                    
                 elif my_dict["type"] == "ANSWER":
                     # from_head receives this - establish connection (server side)
                     from_uid = my_dict.get("from_uid")  # This is the to_head's uid (the one who sent ANSWER)
@@ -568,8 +526,6 @@ async def websocket_client(ws_connection, server_url=None):
                     print(f"ANSWER received from {from_uid} with {len(candidates)} candidates")
                     
                     try:
-                        # Retrieve the stored socket from INITIATE_UDP_CONNECTION (we're the server)
-                        # The peer_uid we stored is the to_uid, which is from_uid in this message
                         if from_uid not in pending_udp_connections:
                             print(f"No pending connection found for {from_uid}")
                             return
@@ -645,7 +601,7 @@ async def gui_event_pump_task():
             elif isinstance(event, dict) and event.get("type") == "SET_MODE":
                 mode = event.get("mode")
                 if current_udp_connection and mode:
-                    if mode == "JOYSTICK":
+                    if mode == "joystick":
                         await _start_slider_send_task_if_needed(current_udp_connection)
                     else:
                         await _stop_slider_send_task_if_running(current_udp_connection)

@@ -29,7 +29,19 @@ class UDPConnection:
     Handles packet demultiplexing and channel management.
     Also handles candidate pair evaluation for connection establishment.
     """
-    def __init__(self, sock, local_candidates, remote_candidates, peer_uid, local_uid, ws, onOpen=None, onClose=None):
+    def __init__(
+        self,
+        sock,
+        local_candidates,
+        remote_candidates,
+        peer_uid,
+        local_uid,
+        ws,
+        onOpen=None,
+        onClose=None,
+        on_reliable_message=None,
+        on_unreliable_message=None,
+    ):
         self.sock = sock
         self.local_candidates = local_candidates
         self.all_remote_candidates = remote_candidates.copy()
@@ -48,14 +60,39 @@ class UDPConnection:
         self.candidates_that_responded = set()  # Track candidates that have responded (address, port) tuples
         self.onOpen = onOpen  # Callback called when peer_addr is set
         self.onClose = onClose  # Callback called when connection closes
+        self.on_reliable_message = on_reliable_message
+        self.on_unreliable_message = on_unreliable_message
     
     @classmethod
-    async def create(cls, sock, local_candidates, remote_candidates, peer_uid, local_uid, ws, onOpen=None, onClose=None):
+    async def create(
+        cls,
+        sock,
+        local_candidates,
+        remote_candidates,
+        peer_uid,
+        local_uid,
+        ws,
+        onOpen=None,
+        onClose=None,
+        on_reliable_message=None,
+        on_unreliable_message=None,
+    ):
         """
         Create and start a UDPConnection.
         This is an async classmethod that creates the connection and starts it automatically.
         """
-        connection = cls(sock, local_candidates, remote_candidates, peer_uid, local_uid, ws, onOpen=onOpen, onClose=onClose)
+        connection = cls(
+            sock,
+            local_candidates,
+            remote_candidates,
+            peer_uid,
+            local_uid,
+            ws,
+            onOpen=onOpen,
+            onClose=onClose,
+            on_reliable_message=on_reliable_message,
+            on_unreliable_message=on_unreliable_message,
+        )
         await connection.start()
         print(f"Created UDP connection with channels for {peer_uid}")
         return connection
@@ -366,14 +403,15 @@ class UDPConnection:
             self.reliable_channel = reliable_channel
             self.unreliable_channel = unreliable_channel
             
-            # Set up default message handlers
-            async def on_reliable_message(data):
+            # Set up message handlers (from caller if provided, else defaults)
+            async def _default_on_reliable_message(data):
                 print(f"Reliable channel received: {data}")
-            async def on_unreliable_message(data):
+
+            async def _default_on_unreliable_message(data):
                 print(f"Unreliable channel received: {data}")
-            
-            reliable_channel.on_message = on_reliable_message
-            unreliable_channel.on_message = on_unreliable_message
+
+            reliable_channel.on_message = self.on_reliable_message or _default_on_reliable_message
+            unreliable_channel.on_message = self.on_unreliable_message or _default_on_unreliable_message
             
             # Launch subordinate tasks
             _receiver_task = asyncio.create_task(self._receiver_loop())
