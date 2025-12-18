@@ -396,10 +396,6 @@ async def onOpen(connection):
     # Access channels from connection
     global unreliable_channel
     unreliable_channel = connection.unreliable_channel
-    
-    # Start slider values sending task
-    slider_send_task = asyncio.create_task(send_slider_values(unreliable_channel))
-    connection._slider_send_task = slider_send_task
 
 async def onClose(connection):
     print("Connection closed (onClose callback)")
@@ -416,6 +412,30 @@ async def onClose(connection):
     if current_udp_connection is connection:
         current_udp_connection = None
     async_to_gui_queue.put({"type": "UDP_CONNECTION_STATE", "connected": False})
+
+async def _start_slider_send_task_if_needed(connection):
+    """Start the continuous slider streaming task (Joystick mode) if it's not already running."""
+    if not connection:
+        return
+    existing = getattr(connection, "_slider_send_task", None)
+    if existing and not existing.done():
+        return
+    task = asyncio.create_task(send_slider_values(connection.unreliable_channel))
+    connection._slider_send_task = task
+
+async def _stop_slider_send_task_if_running(connection):
+    """Stop the continuous slider streaming task if running."""
+    if not connection:
+        return
+    task = getattr(connection, "_slider_send_task", None)
+    if not task:
+        return
+    if not task.done():
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
 
 async def init_udp_connection(to_uid):
@@ -620,10 +640,15 @@ async def gui_event_pump_task():
                     await init_udp_connection(to_uid)
             elif isinstance(event, dict) and event.get("type") == "DISCONNECT":
                 if current_udp_connection:
+                    await _stop_slider_send_task_if_running(current_udp_connection)
                     await current_udp_connection.close()
             elif isinstance(event, dict) and event.get("type") == "SET_MODE":
                 mode = event.get("mode")
                 if current_udp_connection and mode:
+                    if mode == "JOYSTICK":
+                        await _start_slider_send_task_if_needed(current_udp_connection)
+                    else:
+                        await _stop_slider_send_task_if_running(current_udp_connection)
                     msg = {"type": "SET_MODE", "mode": mode}
                     channel = getattr(current_udp_connection, "reliable_channel", None)
                     if channel:

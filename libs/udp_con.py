@@ -370,8 +370,7 @@ class UDPConnection:
             async def on_reliable_message(data):
                 print(f"Reliable channel received: {data}")
             async def on_unreliable_message(data):
-                pass
-                # print(f"Unreliable channel received: {data}")
+                print(f"Unreliable channel received: {data}")
             
             reliable_channel.on_message = on_reliable_message
             unreliable_channel.on_message = on_unreliable_message
