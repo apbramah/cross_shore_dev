@@ -315,7 +315,34 @@ async def onClose(connection):
             pass
     global unreliable_channel
     unreliable_channel = None
-                        
+
+
+async def init_udp_connection(to_uid):
+    try:
+        # Gather candidates (creates socket, gathers host and srflx candidates)
+        sock, candidates = await UDPConnection.gather_candidates(ota.get_local_ips())
+        
+        # Store socket and local candidates for later use when ANSWER arrives
+        pending_udp_connections[to_uid] = {
+            "socket": sock,
+            "is_server": True,
+            "local_candidates": candidates
+        }
+        
+        # Send OFFER message via WebSocket
+        offer_msg = {
+            "type": "OFFER",
+            "to_uid": to_uid,
+            "from_uid": uid_hex,
+            "candidates": candidates
+        }
+        await ws.send(json.dumps(offer_msg))
+        print(f"Sent OFFER to {to_uid} with {len(candidates)} candidates")
+        
+    except Exception as e:
+        print(f"Error handling INITIATE_UDP_CONNECTION: {e}")
+
+       
 async def websocket_client(ws_connection, server_url=None):
     """Handle WebSocket client logic with an upgraded connection"""
     global ws, current_server_url
@@ -374,33 +401,7 @@ async def websocket_client(ws_connection, server_url=None):
                         heads_dropdown_queue.put(new_heads_list)
                     print(f"Received heads list: {len(new_heads_list)} heads")
                 elif my_dict["type"] == "INITIATE_UDP_CONNECTION":
-                    # from_head receives this - act as UDP server
-                    to_uid = my_dict.get("to_uid")
-                    
-                    try:
-                        # Gather candidates (creates socket, gathers host and srflx candidates)
-                        sock, candidates = await UDPConnection.gather_candidates(ota.get_local_ips())
-                        
-                        # Store socket and local candidates for later use when ANSWER arrives
-                        pending_udp_connections[to_uid] = {
-                            "socket": sock,
-                            "is_server": True,
-                            "local_candidates": candidates
-                        }
-                        
-                        # Send OFFER message via WebSocket
-                        offer_msg = {
-                            "type": "OFFER",
-                            "to_uid": to_uid,
-                            "from_uid": uid_hex,
-                            "candidates": candidates
-                        }
-                        await ws.send(json.dumps(offer_msg))
-                        print(f"Sent OFFER to {to_uid} with {len(candidates)} candidates")
-                        
-                    except Exception as e:
-                        print(f"Error handling INITIATE_UDP_CONNECTION: {e}")
-                    
+                    await init_udp_connection(my_dict.get("to_uid"))                    
                 elif my_dict["type"] == "OFFER":
                     # to_head receives this - act as UDP client
                     from_uid = my_dict.get("from_uid")
