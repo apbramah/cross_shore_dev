@@ -83,6 +83,32 @@ def run_gui():
     heads_dropdown = ttk.Combobox(heads_frame, state="readonly", width=30)
     heads_dropdown.pack(side=tk.LEFT, padx=5)
     heads_dropdown.set("No heads available")
+
+    def _extract_uid_from_dropdown_value(value: str):
+        """
+        Dropdown display values look like: "name (uid)".
+        Returns uid string or None if it can't be parsed.
+        """
+        if not value:
+            return None
+        l = value.rfind("(")
+        r = value.rfind(")")
+        if l == -1 or r == -1 or r <= l + 1:
+            return None
+        uid = value[l + 1:r].strip()
+        return uid or None
+
+    def on_connect_pressed():
+        # GUI thread only: enqueue an event for asyncio thread to handle.
+        selected = heads_dropdown.get()
+        to_uid = _extract_uid_from_dropdown_value(selected)
+        if not to_uid:
+            print(f"Connect pressed but no valid head selected: {selected!r}")
+            return
+        gui_to_async_queue.put({"type": "CONNECT", "to_uid": to_uid})
+
+    connect_button = ttk.Button(heads_frame, text="Connect", command=on_connect_pressed)
+    connect_button.pack(side=tk.LEFT, padx=5)
     
     # Function to update dropdown from queue
     def update_heads_dropdown():
@@ -233,6 +259,7 @@ heads_list = []  # Store current heads list
 heads_list_lock = threading.Lock()  # Lock for thread-safe access to heads list
 heads_dropdown = None  # Reference to the dropdown widget
 heads_dropdown_queue = None  # Queue for passing heads list updates to GUI thread
+gui_to_async_queue = queue.Queue()  # Queue for passing GUI events to asyncio thread (thread-safe)
 
 def http_to_ws_url(http_url):
     """Convert HTTP URL to WebSocket URL for upgrading the connection"""
@@ -510,8 +537,23 @@ async def run_gui_task():
     while thread.is_alive():
         await asyncio.sleep(1)
 
+async def gui_event_pump_task():
+    """Pump GUI events from thread-safe queue into asyncio thread (no asyncio calls in GUI thread)."""
+    while True:
+        event = await asyncio.to_thread(gui_to_async_queue.get)
+        try:
+            if isinstance(event, dict) and event.get("type") == "CONNECT":
+                to_uid = event.get("to_uid")
+                if to_uid:
+                    await init_udp_connection(to_uid)
+        finally:
+            try:
+                gui_to_async_queue.task_done()
+            except Exception:
+                pass
+
 async def as_main(server_url):
-    tasks = [run_gui_task(), websocket(server_url)]
+    tasks = [run_gui_task(), gui_event_pump_task(), websocket(server_url)]
 
     # Run all tasks concurrently
     await asyncio.gather(*tasks)
