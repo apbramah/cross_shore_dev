@@ -228,6 +228,7 @@ async def websocket_client(ws_connection, server_url=None):
                 "uid": uid_hex,
                 "name": device_name,
                 "app_path": app_path,
+                "device_type": "base",
                 "network_configs": network_configs,
                 "version": manifest["version"],
                 "local_ips": local_ips}
