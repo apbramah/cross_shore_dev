@@ -133,9 +133,29 @@ def run_gui():
 
     # Mode buttons panel (only visible when a UDP connection is active)
     mode_frame = ttk.Frame(root)
+    joystick_controls_frame = ttk.Frame(root)
+    joystick_controls_visible = False
+    connected = False
+    current_mode = None
+
+    def set_joystick_controls_visible(visible: bool):
+        nonlocal joystick_controls_visible
+        if visible and not joystick_controls_visible:
+            joystick_controls_frame.pack(fill=tk.BOTH, expand=True)
+            joystick_controls_visible = True
+        elif not visible and joystick_controls_visible:
+            joystick_controls_frame.pack_forget()
+            joystick_controls_visible = False
+
+    def update_joystick_controls_visibility():
+        # Visible only when connected AND Joystick mode selected.
+        set_joystick_controls_visible(bool(connected and current_mode == "JOYSTICK"))
 
     def on_mode_pressed(mode: str):
         # GUI thread only: enqueue an event for asyncio thread to handle.
+        nonlocal current_mode
+        current_mode = mode
+        update_joystick_controls_visibility()
         gui_to_async_queue.put({"type": "SET_MODE", "mode": mode})
 
     auto_cam_button = ttk.Button(mode_frame, text="Auto-cam", command=lambda: on_mode_pressed("AUTO_CAM"))
@@ -163,7 +183,12 @@ def run_gui():
             while True:
                 event = async_to_gui_queue.get_nowait()
                 if isinstance(event, dict) and event.get("type") == "UDP_CONNECTION_STATE":
-                    set_mode_panel_visible(bool(event.get("connected")))
+                    nonlocal connected, current_mode
+                    connected = bool(event.get("connected"))
+                    set_mode_panel_visible(connected)
+                    if not connected:
+                        current_mode = None
+                    update_joystick_controls_visibility()
                 elif isinstance(event, dict) and event.get("type") == "HEADS_LIST":
                     update_dropdown(event.get("heads", []))
         except queue.Empty:
@@ -180,7 +205,7 @@ def run_gui():
     
     # Create and place sliders
     for name in slider_names:
-        frame = ttk.Frame(root)
+        frame = ttk.Frame(joystick_controls_frame)
         frame.pack(fill=tk.BOTH, expand=True)
         
         label = ttk.Label(frame, text=name)
@@ -258,8 +283,10 @@ def run_gui():
                 self.press_time = None
     
     # Create and place buttons
+    buttons_frame = ttk.Frame(joystick_controls_frame)
+    buttons_frame.pack(side=tk.TOP, fill=tk.X, padx=5, pady=5)
     for i in range(4):
-        button = ButtonWithLongPress(root, text=f"Position {i + 1}")
+        button = ButtonWithLongPress(buttons_frame, text=f"Position {i + 1}")
         button.pack(side=tk.LEFT, padx=5, pady=5)
         buttons.append(button)
     
@@ -283,8 +310,8 @@ def run_gui():
             sequencer_button.config(text="Enable Sequencer")
     
     # Create the sequencer toggle button
-    sequencer_button = ttk.Button(root, text="Enable Sequencer", command=toggle_sequencer)
-    sequencer_button.pack(side=tk.BOTTOM, pady=10)
+    sequencer_button = ttk.Button(joystick_controls_frame, text="Enable Sequencer", command=toggle_sequencer)
+    sequencer_button.pack(side=tk.TOP, pady=10)
     
     root.mainloop()
 
