@@ -1,124 +1,97 @@
 from udp_con import UDPConnection
 
 import json
-try:
-    MICROPYTHON = True
-    import uasyncio as asyncio
-    import machine
-    import ubinascii
-    from uwebsockets.protocol import ConnectionClosed
+import uasyncio as asyncio
+import machine
+import ubinascii
+from uwebsockets.protocol import ConnectionClosed
 
-    # Get the unique ID as bytes
-    uid_bytes = machine.unique_id()
+# Get the unique ID as bytes
+uid_bytes = machine.unique_id()
 
-    # Convert to hex string
-    uid_hex = ubinascii.hexlify(uid_bytes).decode()
-    
-    class MicroPythonWebSocket:
-        def __init__(self, websocket, heartbeat_interval=30.0, heartbeat_timeout=5.0):
-            self.websocket = websocket
-            self.heartbeat_interval = heartbeat_interval
-            self.heartbeat_task = None
-            self.running = True
-            
-            # Enable heartbeat tracking on underlying websocket
-            self.websocket.heartbeat_enabled = True
-            self.websocket.heartbeat_timeout = heartbeat_timeout
+# Convert to hex string
+uid_hex = ubinascii.hexlify(uid_bytes).decode()
 
-        async def _heartbeat_loop(self):
-            """Periodically send PING messages"""
-            while self.running:
-                try:
-                    await asyncio.sleep(self.heartbeat_interval)
-                    if self.running and self.websocket.open:
-                        try:
-                            self.websocket.ping()
-                        except Exception as e:
-                            print(f"Error sending PING: {e}")
-                            break
-                except asyncio.CancelledError:
-                    break
-                except Exception as e:
-                    print(f"Error in heartbeat loop: {e}")
-                    break
-
-        def start_heartbeat(self):
-            """Start the heartbeat task"""
-            if self.heartbeat_task is None:
-                self.heartbeat_task = asyncio.create_task(self._heartbeat_loop())
-
-        def stop_heartbeat(self):
-            """Stop the heartbeat task"""
-            self.running = False
-            if self.heartbeat_task:
-                self.heartbeat_task.cancel()
-                try:
-                    # Note: can't await in synchronous method, task will be cleaned up
-                    pass
-                except:
-                    pass
-
-        async def recv(self):
-            while True:
-                try:
-                    msg = self.websocket.recv()
-                    if msg != "":
-                        return msg
-                    else:
-                        await asyncio.sleep(0)
-                except ConnectionClosed as e:
-                    # Re-raise ConnectionClosed exceptions (includes heartbeat timeout)
-                    raise
-                except Exception as e:
-                    # Handle other exceptions
-                    if "Heartbeat timeout" in str(e):
-                        raise ConnectionClosed("Heartbeat timeout")
-                    raise
-
-        async def send(self, data):
-            self.websocket.send(data)
-
-        # def send_sync(self, data):
-        #     self.websocket.send(data)
-
-        async def close(self):
-            self.stop_heartbeat()
-            self.websocket.close()
+class MicroPythonWebSocket:
+    def __init__(self, websocket, heartbeat_interval=30.0, heartbeat_timeout=5.0):
+        self.websocket = websocket
+        self.heartbeat_interval = heartbeat_interval
+        self.heartbeat_task = None
+        self.running = True
         
-    async def upgrade_http_to_websocket(http_url):
-        """Upgrade an HTTP connection to WebSocket"""
-        import uwebsockets.client
-        ws_url = http_to_ws_url(http_url) + '/ws'
-        ws = uwebsockets.client.connect(ws_url)
-        ws.sock.setblocking(False)
-        ws_wrapper = MicroPythonWebSocket(ws, heartbeat_interval=4.0, heartbeat_timeout=1.0)
-        ws_wrapper.start_heartbeat()
-        return ws_wrapper
+        # Enable heartbeat tracking on underlying websocket
+        self.websocket.heartbeat_enabled = True
+        self.websocket.heartbeat_timeout = heartbeat_timeout
 
-except ImportError:
-    MICROPYTHON = False
-    import asyncio
-    uid_hex = 'andyunique'
+    async def _heartbeat_loop(self):
+        """Periodically send PING messages"""
+        while self.running:
+            try:
+                await asyncio.sleep(self.heartbeat_interval)
+                if self.running and self.websocket.open:
+                    try:
+                        self.websocket.ping()
+                    except Exception as e:
+                        print(f"Error sending PING: {e}")
+                        break
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                print(f"Error in heartbeat loop: {e}")
+                break
 
-    class CPythonWebSocket:
-        def __init__(self, websocket):
-            self.websocket = websocket
+    def start_heartbeat(self):
+        """Start the heartbeat task"""
+        if self.heartbeat_task is None:
+            self.heartbeat_task = asyncio.create_task(self._heartbeat_loop())
 
-        async def recv(self):
-            return await self.websocket.recv()
+    def stop_heartbeat(self):
+        """Stop the heartbeat task"""
+        self.running = False
+        if self.heartbeat_task:
+            self.heartbeat_task.cancel()
+            try:
+                # Note: can't await in synchronous method, task will be cleaned up
+                pass
+            except:
+                pass
 
-        async def send(self, data):
-            await self.websocket.send(data)
+    async def recv(self):
+        while True:
+            try:
+                msg = self.websocket.recv()
+                if msg != "":
+                    return msg
+                else:
+                    await asyncio.sleep(0)
+            except ConnectionClosed as e:
+                # Re-raise ConnectionClosed exceptions (includes heartbeat timeout)
+                raise
+            except Exception as e:
+                # Handle other exceptions
+                if "Heartbeat timeout" in str(e):
+                    raise ConnectionClosed("Heartbeat timeout")
+                raise
 
-        async def close(self):
-            await self.websocket.close()
+    async def send(self, data):
+        self.websocket.send(data)
+
+    # def send_sync(self, data):
+    #     self.websocket.send(data)
+
+    async def close(self):
+        self.stop_heartbeat()
+        self.websocket.close()
     
-    async def upgrade_http_to_websocket(http_url):
-        """Upgrade an HTTP connection to WebSocket"""
-        import websockets
-        ws_url = http_to_ws_url(http_url) + '/ws'
-        ws = await websockets.connect(ws_url)
-        return CPythonWebSocket(ws)
+async def upgrade_http_to_websocket(http_url):
+    """Upgrade an HTTP connection to WebSocket"""
+    import uwebsockets.client
+    ws_url = http_to_ws_url(http_url) + '/ws'
+    ws = uwebsockets.client.connect(ws_url)
+    ws.sock.setblocking(False)
+    ws_wrapper = MicroPythonWebSocket(ws, heartbeat_interval=4.0, heartbeat_timeout=1.0)
+    ws_wrapper.start_heartbeat()
+    return ws_wrapper
 
 ota_present = False
 try:
@@ -261,34 +234,20 @@ def http_to_ws_url(http_url):
 
 # import builtins
 
-# if not MICROPYTHON:
-#     print_queue = asyncio.Queue()
-
-#     async def ws_sender(ws):
-#         while True:
-#             message = await print_queue.get()
-#             data = {"type": "PRINTF",
-#                     "uid": uid_hex,
-#                     "message": message.strip()}
-#             await ws.send(json.dumps(data))
-
 # print function that also sends to websocket if available
 # def ws_print(*args, **kwargs):
 #     original_print(*args, **kwargs)
 
 #     global ws
-#     if ws and getattr(ws, 'open', True):
-#         sep = kwargs.get("sep", " ")
-#         end = kwargs.get("end", "\n")
-#         message = sep.join(str(arg) for arg in args) + end
+    # if ws and getattr(ws, 'open', True):
+    #     sep = kwargs.get("sep", " ")
+    #     end = kwargs.get("end", "\n")
+    #     message = sep.join(str(arg) for arg in args) + end
 
-#         if MICROPYTHON:
-#             data = {"type": "PRINTF",
-#                     "uid": uid_hex,
-#                     "message": message.strip()}
-#             ws.send_sync(json.dumps(data))
-#         else:            
-#             print_queue.put_nowait(message)
+    #     data = {"type": "PRINTF",
+    #             "uid": uid_hex,
+    #             "message": message.strip()}
+    #     ws.send_sync(json.dumps(data))
 
 # Override the built-in print function
 # original_print = builtins.print
@@ -400,8 +359,6 @@ async def websocket_client(ws_connection, server_url=None):
                 "version": manifest["version"],
                 "local_ips": local_ips}
         await ws.send(json.dumps(data))  # announce as device
-        # if not MICROPYTHON:
-        #     asyncio.create_task(ws_sender(ws))
         print("Connected!")
         data = {"type": "CURRENT_MODE",
                 "uid": uid_hex,
