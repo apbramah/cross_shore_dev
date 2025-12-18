@@ -4,9 +4,9 @@ import json
 import os
 import sys
 
-heads = set()
+devices = set()
 browsers = set()
-uid_to_head = dict()
+uid_to_device = dict()
 
 # Base directory for serving files (cross_shore_dev)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -15,20 +15,24 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 def build_heads_list():
     """Build a list of all connected heads with uid and name"""
     heads_list = []
-    for uid, head in uid_to_head.items():
-        name = getattr(head, 'name', 'unknown')
+    for uid, device in uid_to_device.items():
+        device_type = getattr(device, "device_type", "unknown")
+        if device_type != "head":
+            continue
+        name = getattr(device, "name", "unknown")
         heads_list.append({"uid": uid, "name": name})
     return heads_list
 
 
 async def send_heads_list_to_all():
-    """Send the current heads list to all browsers and devices"""
+    """Send the current heads list to all controllers"""
     heads_list = build_heads_list()
     message = json.dumps({"type": "HEADS_LIST", "heads": heads_list})
     
-    # Send to all heads (devices/controllers)
-    for head in heads:
-        await head.send_str(message)
+    # Send to all controller devices
+    for device in devices:
+        if getattr(device, "device_type", "unknown") == "controller":
+            await device.send_str(message)
 
 
 async def websocket_handler(ws, ip_address, port):
@@ -45,18 +49,18 @@ async def websocket_handler(ws, ip_address, port):
             device_type = msg.get("device_type", "unknown")
             network_configs = msg.get("network_configs", [])
             local_ips = msg.get("local_ips", [])
-            print("Head connected", uid)
-            head = ws
+            print("Device connected", uid)
+            device = ws
 
-            heads.add(head)
-            uid_to_head[uid] = head
-            head.name = name
-            head.version = version
-            head.app_path = app_path
-            head.network_configs = network_configs
-            head.ip = ip_address
-            head.local_ips = local_ips
-            head.device_type = device_type
+            devices.add(device)
+            uid_to_device[uid] = device
+            device.name = name
+            device.version = version
+            device.app_path = app_path
+            device.network_configs = network_configs
+            device.ip = ip_address
+            device.local_ips = local_ips
+            device.device_type = device_type
 
             ip = ip_address
             msg["ip"] = ip
@@ -70,17 +74,17 @@ async def websocket_handler(ws, ip_address, port):
             browser = ws
             browsers.add(browser)
 
-            for uid, head in uid_to_head.items():
-                ip = getattr(head, 'ip', 'unknown')
-                name = head.name
-                version = head.version
-                app_path = head.app_path
-                network_configs = getattr(head, 'network_configs', [])
-                local_ips = getattr(head, 'local_ips', [])
-                device_type = getattr(head, 'device_type', "unknown")
+            for uid, device in uid_to_device.items():
+                ip = getattr(device, 'ip', 'unknown')
+                name = device.name
+                version = device.version
+                app_path = device.app_path
+                network_configs = getattr(device, 'network_configs', [])
+                local_ips = getattr(device, 'local_ips', [])
+                device_type = getattr(device, 'device_type', "unknown")
                 notify = json.dumps({"type": "DEVICE_CONNECT", "uid": uid, "ip": ip, "name": name, "version": version, "app_path": app_path, "network_configs": network_configs, "local_ips": local_ips, "device_type": device_type})
                 await browser.send_str(notify)
-                mode = getattr(head, 'mode', 'unknown')
+                mode = getattr(device, 'mode', 'unknown')
                 notify = json.dumps({"type": "CURRENT_MODE", "uid": uid, "mode": mode})
                 await browser.send_str(notify)
 
@@ -92,32 +96,32 @@ async def websocket_handler(ws, ip_address, port):
                     msg_data = json.loads(message)
                     print("From browser:", message)
                     uid = msg_data.get("uid")
-                    head = uid_to_head.get(uid)
-                    if head:
-                        await head.send_str(message)
+                    device = uid_to_device.get(uid)
+                    if device:
+                        await device.send_str(message)
                         if msg_data["type"] == "SET_NAME":
-                            head.name = msg_data.get("name", "unknown")
+                            device.name = msg_data.get("name", "unknown")
                         elif msg_data["type"] == "SET_APP_PATH":
-                            head.app_path = msg_data.get("app_path", "apps/base")
+                            device.app_path = msg_data.get("app_path", "apps/base")
                         elif msg_data["type"] == "SET_NETWORK_CONFIGS":
-                            head.network_configs = msg_data.get("network_configs", [])
+                            device.network_configs = msg_data.get("network_configs", [])
 
-                # Message came from a head
-                elif ws in heads:
-                    head = ws
-                    print("From head:", message)
+                # Message came from a device
+                elif ws in devices:
+                    device = ws
+                    print("From device:", message)
                     msg_data = json.loads(message)
                     to_uid = msg_data.get("to_uid")
                     if to_uid:
-                        # Message is for a particular head
-                        to_head = uid_to_head.get(to_uid)
-                        if to_head:
-                            await to_head.send_str(message)
-                            print(f"Forward {message} to to_head {to_uid}")
+                        # Message is for a particular device
+                        to_device = uid_to_device.get(to_uid)
+                        if to_device:
+                            await to_device.send_str(message)
+                            print(f"Forward {message} to to_device {to_uid}")
                     else:
                         # Message is for browsers
                         if msg_data["type"] == "CURRENT_MODE":
-                            head.mode = msg_data["mode"]
+                            device.mode = msg_data["mode"]
                         for browser in browsers:
                             await browser.send_str(message)
             elif msg.type == WSMsgType.ERROR:
@@ -128,19 +132,19 @@ async def websocket_handler(ws, ip_address, port):
         print("Connection error:", e)
 
     finally:
-        if ws in heads:
-            print("Head disconnected")
-            heads.remove(ws)
+        if ws in devices:
+            print("Device disconnected")
+            devices.remove(ws)
 
             # find UID that belonged to this ws
             dead_uid = None
-            for uid, sock in uid_to_head.items():
+            for uid, sock in uid_to_device.items():
                 if sock == ws:
                     dead_uid = uid
                     break
 
             if dead_uid:
-                del uid_to_head[dead_uid]
+                del uid_to_device[dead_uid]
                 notify = json.dumps({"type": "DEVICE_DISCONNECT", "uid": dead_uid})
                 for browser in browsers:
                     await browser.send_str(notify)
