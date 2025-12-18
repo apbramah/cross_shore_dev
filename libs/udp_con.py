@@ -266,7 +266,7 @@ class UDPConnection:
             try:
                 self._send_raw(response_packet, addr)
                 self.response_addresses.add(addr)  # Mark for continued responses
-                print(f"Sent connectivity check response to {addr}")
+                # print(f"Sent connectivity check response to {addr}")
             except Exception as e:
                 print(f"Error sending response to {addr}: {e}")
     
@@ -330,7 +330,7 @@ class UDPConnection:
                     }).encode('utf-8')
                     self._send_raw(check_packet, remote_addr)
                     self.checks_sent[remote_addr] = (local_cand, remote_cand)
-                    print(f"Sent connectivity check to {remote_addr}")
+                    # print(f"Sent connectivity check to {remote_addr}")
                 except Exception as e:
                     print(f"Error sending connectivity check to {remote_addr}: {e}")
             
@@ -370,7 +370,8 @@ class UDPConnection:
             async def on_reliable_message(data):
                 print(f"Reliable channel received: {data}")
             async def on_unreliable_message(data):
-                print(f"Unreliable channel received: {data}")
+                pass
+                # print(f"Unreliable channel received: {data}")
             
             reliable_channel.on_message = on_reliable_message
             unreliable_channel.on_message = on_unreliable_message

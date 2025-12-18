@@ -116,6 +116,46 @@ def run_gui():
 
     disconnect_button = ttk.Button(heads_frame, text="Disconnect", command=on_disconnect_pressed)
     disconnect_button.pack(side=tk.LEFT, padx=5)
+
+    # Mode buttons panel (only visible when a UDP connection is active)
+    mode_frame = ttk.Frame(root)
+
+    def on_mode_pressed(mode: str):
+        # GUI thread only: enqueue an event for asyncio thread to handle.
+        gui_to_async_queue.put({"type": "SET_MODE", "mode": mode})
+
+    auto_cam_button = ttk.Button(mode_frame, text="Auto-cam", command=lambda: on_mode_pressed("AUTO_CAM"))
+    joystick_button = ttk.Button(mode_frame, text="Joystick", command=lambda: on_mode_pressed("JOYSTICK"))
+    fixed_button = ttk.Button(mode_frame, text="Fixed", command=lambda: on_mode_pressed("FIXED"))
+
+    auto_cam_button.pack(side=tk.LEFT, padx=5, pady=5)
+    joystick_button.pack(side=tk.LEFT, padx=5, pady=5)
+    fixed_button.pack(side=tk.LEFT, padx=5, pady=5)
+
+    mode_panel_visible = False
+
+    def set_mode_panel_visible(visible: bool):
+        nonlocal mode_panel_visible
+        if visible and not mode_panel_visible:
+            mode_frame.pack(side=tk.TOP, fill=tk.X, padx=10, pady=5)
+            mode_panel_visible = True
+        elif not visible and mode_panel_visible:
+            mode_frame.pack_forget()
+            mode_panel_visible = False
+
+    def process_async_to_gui_events():
+        # GUI thread: apply state changes driven by asyncio thread events.
+        try:
+            while True:
+                event = async_to_gui_queue.get_nowait()
+                if isinstance(event, dict) and event.get("type") == "UDP_CONNECTION_STATE":
+                    set_mode_panel_visible(bool(event.get("connected")))
+        except queue.Empty:
+            pass
+        root.after(100, process_async_to_gui_events)
+
+    # Start processing asyncio->GUI events
+    root.after(100, process_async_to_gui_events)
     
     # Function to update dropdown from queue
     def update_heads_dropdown():
@@ -267,6 +307,7 @@ heads_list_lock = threading.Lock()  # Lock for thread-safe access to heads list
 heads_dropdown = None  # Reference to the dropdown widget
 heads_dropdown_queue = None  # Queue for passing heads list updates to GUI thread
 gui_to_async_queue = queue.Queue()  # Queue for passing GUI events to asyncio thread (thread-safe)
+async_to_gui_queue = queue.Queue()  # Queue for passing asyncio events to GUI thread (thread-safe)
 current_udp_connection = None  # Currently active UDPConnection (if any)
 
 def http_to_ws_url(http_url):
@@ -332,6 +373,7 @@ async def onOpen(connection):
     print("Connection opened (onOpen callback)")
     global current_udp_connection
     current_udp_connection = connection
+    async_to_gui_queue.put({"type": "UDP_CONNECTION_STATE", "connected": True})
     
     # Access channels from connection
     global unreliable_channel
@@ -355,6 +397,7 @@ async def onClose(connection):
     global current_udp_connection
     if current_udp_connection is connection:
         current_udp_connection = None
+    async_to_gui_queue.put({"type": "UDP_CONNECTION_STATE", "connected": False})
 
 
 async def init_udp_connection(to_uid):
@@ -560,9 +603,15 @@ async def gui_event_pump_task():
                 if to_uid:
                     await init_udp_connection(to_uid)
             elif isinstance(event, dict) and event.get("type") == "DISCONNECT":
-                global current_udp_connection
                 if current_udp_connection:
                     await current_udp_connection.close()
+            elif isinstance(event, dict) and event.get("type") == "SET_MODE":
+                mode = event.get("mode")
+                if current_udp_connection and mode:
+                    msg = {"type": "SET_MODE", "mode": mode}
+                    channel = getattr(current_udp_connection, "reliable_channel", None)
+                    if channel:
+                        await channel.send(json.dumps(msg).encode("utf-8"))
         finally:
             try:
                 gui_to_async_queue.task_done()
