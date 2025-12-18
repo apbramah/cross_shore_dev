@@ -592,9 +592,10 @@ async def gui_event_pump_task():
         event = await asyncio.to_thread(gui_to_async_queue.get)
         try:
             if isinstance(event, dict) and event.get("type") == "CONNECT":
-                to_uid = event.get("to_uid")
-                if to_uid:
-                    await init_udp_connection(to_uid)
+                if not current_udp_connection:
+                    to_uid = event.get("to_uid")
+                    if to_uid:
+                        await init_udp_connection(to_uid)
             elif isinstance(event, dict) and event.get("type") == "DISCONNECT":
                 if current_udp_connection:
                     await _stop_slider_send_task_if_running(current_udp_connection)
