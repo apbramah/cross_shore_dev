@@ -68,12 +68,9 @@ async def send_udp_message(values, channel):
 
 def run_gui():
     """Run the tkinter GUI in a separate thread"""
-    global heads_dropdown, heads_dropdown_queue
+    global heads_dropdown
     root = tk.Tk()
     root.title("EX Head Controller Relative")
-    
-    # Create queue for heads list updates
-    heads_dropdown_queue = queue.Queue()
     
     # Heads selection dropdown
     heads_frame = ttk.Frame(root)
@@ -117,6 +114,23 @@ def run_gui():
     disconnect_button = ttk.Button(heads_frame, text="Disconnect", command=on_disconnect_pressed)
     disconnect_button.pack(side=tk.LEFT, padx=5)
 
+    def update_dropdown(heads):
+        heads = heads or []
+        # Build display strings: "name (uid)"
+        display_values = [
+            f"{head.get('name', 'unknown')} ({head.get('uid', '')})"
+            for head in heads
+            if isinstance(head, dict)
+        ]
+        if display_values:
+            heads_dropdown["values"] = display_values
+            current = heads_dropdown.get()
+            if current not in display_values:
+                heads_dropdown.set(display_values[0])
+        else:
+            heads_dropdown["values"] = []
+            heads_dropdown.set("No heads available")
+
     # Mode buttons panel (only visible when a UDP connection is active)
     mode_frame = ttk.Frame(root)
 
@@ -150,36 +164,14 @@ def run_gui():
                 event = async_to_gui_queue.get_nowait()
                 if isinstance(event, dict) and event.get("type") == "UDP_CONNECTION_STATE":
                     set_mode_panel_visible(bool(event.get("connected")))
+                elif isinstance(event, dict) and event.get("type") == "HEADS_LIST":
+                    update_dropdown(event.get("heads", []))
         except queue.Empty:
             pass
         root.after(100, process_async_to_gui_events)
 
     # Start processing asyncio->GUI events
     root.after(100, process_async_to_gui_events)
-    
-    # Function to update dropdown from queue
-    def update_heads_dropdown():
-        try:
-            while True:
-                new_heads_list = heads_dropdown_queue.get_nowait()
-                # Build display strings: "name (uid)"
-                display_values = [f"{head['name']} ({head['uid']})" for head in new_heads_list]
-                if display_values:
-                    heads_dropdown['values'] = display_values
-                    # Keep current selection if it still exists, otherwise select first
-                    current = heads_dropdown.get()
-                    if current not in display_values and display_values:
-                        heads_dropdown.set(display_values[0])
-                else:
-                    heads_dropdown['values'] = []
-                    heads_dropdown.set("No heads available")
-        except queue.Empty:
-            pass
-        # Schedule next check
-        root.after(100, update_heads_dropdown)
-    
-    # Start polling the queue
-    root.after(100, update_heads_dropdown)
     
     sliders = []
     
@@ -305,7 +297,6 @@ slider_values_lock = threading.Lock()  # Lock for thread-safe access to slider v
 heads_list = []  # Store current heads list
 heads_list_lock = threading.Lock()  # Lock for thread-safe access to heads list
 heads_dropdown = None  # Reference to the dropdown widget
-heads_dropdown_queue = None  # Queue for passing heads list updates to GUI thread
 gui_to_async_queue = queue.Queue()  # Queue for passing GUI events to asyncio thread (thread-safe)
 async_to_gui_queue = queue.Queue()  # Queue for passing asyncio events to GUI thread (thread-safe)
 current_udp_connection = None  # Currently active UDPConnection (if any)
@@ -474,14 +465,12 @@ async def websocket_client(ws_connection, server_url=None):
                     if new_network_configs is not None:
                         ota.registry_set('network_configs', new_network_configs)
                 elif my_dict["type"] == "HEADS_LIST":
-                    # Update heads list and send to GUI thread via queue
+                    # Update heads list and send to GUI thread via async_to_gui_queue
                     new_heads_list = my_dict.get("heads", [])
-                    global heads_list, heads_dropdown_queue
+                    global heads_list
                     with heads_list_lock:
                         heads_list = new_heads_list
-                    # Send to GUI thread via queue
-                    if heads_dropdown_queue is not None:
-                        heads_dropdown_queue.put(new_heads_list)
+                    async_to_gui_queue.put({"type": "HEADS_LIST", "heads": new_heads_list})
                     print(f"Received heads list: {len(new_heads_list)} heads")
                 elif my_dict["type"] == "INITIATE_UDP_CONNECTION":
                     await init_udp_connection(my_dict.get("to_uid"))                    
