@@ -326,7 +326,54 @@ async def onClose(connection):
             pass
 
 async def on_reliable_message(data):
-    print(f"Reliable channel received: {data}")
+    global mode, ws
+    # Reliable channel payload is bytes; attempt to interpret as JSON messages.
+    try:
+        if isinstance(data, (bytes, bytearray)):
+            text = data.decode("utf-8")
+        else:
+            text = str(data)
+        msg = json.loads(text)
+    except Exception:
+        # Fallback: just print raw payload
+        print(f"Reliable channel received: {data}")
+        return
+
+    if msg.get("type") != "SET_MODE":
+        print(f"Reliable channel received (json): {msg}")
+        return
+
+    try:
+        requested_mode = msg.get("mode")
+        if requested_mode == "auto_cam":
+            led.value(1)
+            mode = "auto_cam"
+        elif requested_mode == "joystick":
+            led.value(0)
+            mode = "joystick"
+
+            payload = bytearray([0x01, 0x26, 0x00, 0x15, 0x00, 0x00])
+            packet = create_packet(CMD_SET_ADJ_VARS_VAL, payload)
+            uart.write(packet)
+
+            # When switching to joystick mode, ensure that the angle mode is disabled
+            payload = bytearray([0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
+            packet = create_packet(CMD_CONTROL, payload)
+            uart.write(packet)
+        elif requested_mode == "fixed":
+            led.value(0)
+            mode = "fixed"
+        else:
+            print(f"Unknown mode requested over reliable channel: {requested_mode}")
+            return
+
+        # Announce updated mode back over WebSocket (if connected)
+        if ws:
+            data = {"type": "CURRENT_MODE", "uid": uid_hex, "mode": mode}
+            await ws.send(json.dumps(data))
+        print(f"SET_MODE handled over reliable channel -> mode={mode}")
+    except Exception as e:
+        print(f"Error handling SET_MODE over reliable channel: {e}")
 
 async def on_unreliable_message(data):
     print(f"Unreliable channel received: {data}")
@@ -423,40 +470,6 @@ async def websocket_client(ws_connection, server_url=None):
                         
                     except Exception as e:
                         print(f"Error handling OFFER: {e}")
-                    
-                elif my_dict["type"] == "SET_MODE":
-                    if my_dict['mode'] == "auto_cam":
-                        led.value(1)
-                        mode = "auto_cam"
-                        data = {"type": "CURRENT_MODE",
-                                "uid": uid_hex,
-                                "mode": mode}
-                        await ws.send(json.dumps(data))
-                    elif my_dict['mode'] == "joystick":
-                        led.value(0)
-                        mode = "joystick"
-
-                        payload = bytearray([0x01, 0x26, 0x00, 0x15, 0x00, 0x00])
-                        packet = create_packet(CMD_SET_ADJ_VARS_VAL, payload)
-                        uart.write(packet)
-
-                        # When switching to joystick mode, ensure that the angle mode is disabled
-                        payload = bytearray([0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
-                        packet = create_packet(CMD_CONTROL, payload)
-                        uart.write(packet)
-
-                        data = {"type": "CURRENT_MODE",
-                                "uid": uid_hex,
-                                "mode": mode}
-                        await ws.send(json.dumps(data))
-                    elif my_dict['mode'] == "fixed":
-                        led.value(0)
-                        mode = "fixed"
-
-                        data = {"type": "CURRENT_MODE",
-                                "uid": uid_hex,
-                                "mode": mode}
-                        await ws.send(json.dumps(data))
                                         
             except Exception as e:
                 print("Error processing message:", e)
