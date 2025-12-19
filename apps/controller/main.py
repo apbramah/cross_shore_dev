@@ -8,6 +8,7 @@ import queue
 import asyncio
 import uuid
 import secrets
+import os
 
 # Generate a unique ID based on MAC address + random string (unique per instance)
 uid_hex = format(uuid.getnode(), 'x') + secrets.token_hex(8)
@@ -75,6 +76,12 @@ def run_gui():
     global heads_dropdown
     root = tk.Tk()
     root.title("EX Head Controller Relative")
+    
+    # Handle window close (X button) - exit immediately
+    def on_closing():
+        os._exit(0)
+    
+    root.protocol("WM_DELETE_WINDOW", on_closing)
     
     # Heads selection dropdown
     heads_frame = ttk.Frame(root)
