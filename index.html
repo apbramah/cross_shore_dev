@@ -166,23 +166,21 @@
       div.className = "head-panel";
       div.id = "head_" + uid;
 
-      // Build network_configs HTML (only for controllers)
-      let networkConfigsHtml = (device_type === "head")
-        ? (() => {
-            let html = `<div style="margin: 10px 0;"><strong>Network Configs:</strong><div id="network_configs_${uid}">`;
-            network_configs.forEach((config, idx) => {
-              // Parse config: if config[0] is a string "dhcp", it's dynamic; if it's an array, it's static
-              const isDynamic = typeof config[0] === 'string' && config[0] === 'dhcp';
-              const staticConfig = Array.isArray(config[0]) ? config[0] : ['', '', '', ''];
-              html += createNetworkConfigHtml(uid, idx, isDynamic, staticConfig, config[1] || '');
-            });
-            html += `</div>`;
-            html += `<button onclick="addNetworkConfig('${uid}')" style="padding: 4px 8px; font-size: 12px; margin-top: 5px;">Add Config</button>`;
-            html += `<button onclick="saveNetworkConfigs('${uid}')" style="padding: 4px 8px; font-size: 12px; margin-top: 5px; margin-left: 5px;">Save Configs</button>`;
-            html += `</div>`;
-            return html;
-          })()
-        : ``;
+      // Build network_configs HTML
+      let networkConfigsHtml = (() => {
+          let html = `<div style="margin: 10px 0;"><strong>Network Configs:</strong><div id="network_configs_${uid}">`;
+          network_configs.forEach((config, idx) => {
+            // Parse config: if config[0] is a string "dhcp", it's dynamic; if it's an array, it's static
+            const isDynamic = typeof config[0] === 'string' && config[0] === 'dhcp';
+            const staticConfig = Array.isArray(config[0]) ? config[0] : ['', '', '', ''];
+            html += createNetworkConfigHtml(uid, idx, isDynamic, staticConfig, config[1] || '');
+          });
+          html += `</div>`;
+          html += `<button onclick="addNetworkConfig('${uid}')" style="padding: 4px 8px; font-size: 12px; margin-top: 5px;">Add Config</button>`;
+          html += `<button onclick="saveNetworkConfigs('${uid}')" style="padding: 4px 8px; font-size: 12px; margin-top: 5px; margin-left: 5px;">Save Configs</button>`;
+          html += `</div>`;
+          return html;
+        })();
 
       const modeHtml = (device_type === "head")
         ? `<p>Current mode: <strong><span id="mode_${uid}">unknown</span></strong></p>`
