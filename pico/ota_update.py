@@ -237,7 +237,11 @@ def check_for_version_update():
 
             if current_nic_setup != nic_setup:
                 current_nic_setup = None
-                connect_network(nic_setup)
+                try:
+                    connect_network(nic_setup)
+                except Exception as e:
+                    print("Failed to connect to network:", e)
+                    continue
             print('Connected. Local ips:', local_ips)
             current_nic_setup = nic_setup
 
