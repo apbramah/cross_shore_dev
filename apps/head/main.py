@@ -118,7 +118,6 @@ bgc = BGC()
 
 led = Pin(25, Pin.OUT)
 
-led.value(0)
 mode = "joystick"  # "joystick" or "auto_cam"
 
 ws = None
@@ -208,17 +207,13 @@ async def on_reliable_message(data):
     try:
         requested_mode = msg.get("mode")
         if requested_mode == "auto_cam":
-            led.value(1)
             mode = "auto_cam"
         elif requested_mode == "joystick":
-            led.value(0)
             mode = "joystick"
 
             bgc.set_gyro_heading_adjustment()
-
             bgc.disable_angle_mode()
         elif requested_mode == "fixed":
-            led.value(0)
             mode = "fixed"
         else:
             print(f"Unknown mode requested over reliable channel: {requested_mode}")
@@ -288,9 +283,7 @@ async def websocket_client(ws_connection, server_url=None):
                         ota.registry_set('network_configs', new_network_configs)
                 elif my_dict["type"] == "IDENTIFY":
                     led.toggle()
-
                     bgc.beep()
-
                 elif my_dict["type"] == "OFFER":
                     # to_head receives this - act as UDP client
                     from_uid = my_dict.get("from_uid")
