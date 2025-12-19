@@ -106,7 +106,12 @@ class UDPConnection:
         """
         # Create and bind UDP socket
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.bind(('0.0.0.0', 8888))
+        if MICROPYTHON:
+            port = 8888
+            sock.bind(('0.0.0.0', port))
+        else:
+            sock.bind(('0.0.0.0', 0))
+            port = sock.getsockname()[1]
         
         # Gather host candidates from local_ips
         candidates = []
@@ -114,7 +119,7 @@ class UDPConnection:
             candidates.append({
                 "type": "host",
                 "address": ip,
-                "port": 8888
+                "port": port
             })
         
         # Query STUN server for srflx candidates

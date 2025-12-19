@@ -6,7 +6,11 @@ import time
 import queue
 
 import asyncio
-uid_hex = 'andyunique'
+import uuid
+import secrets
+
+# Generate a unique ID based on MAC address + random string (unique per instance)
+uid_hex = format(uuid.getnode(), 'x') + secrets.token_hex(8)
 
 import tkinter as tk
 from tkinter import ttk
