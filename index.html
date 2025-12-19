@@ -166,20 +166,25 @@
       div.className = "head-panel";
       div.id = "head_" + uid;
 
-      // Build network_configs HTML
-      let networkConfigsHtml = `<div style="margin: 10px 0;"><strong>Network Configs:</strong><div id="network_configs_${uid}">`;
-      network_configs.forEach((config, idx) => {
-        networkConfigsHtml += `
-          <div style="margin: 5px 0; padding: 5px; border: 1px solid #ccc; border-radius: 4px;">
-            <input type="text" id="nic_${uid}_${idx}" value="${escapeHtml(config[0] || '')}" placeholder="nic_setup" style="width: 100px;">
-            <input type="text" id="url_${uid}_${idx}" value="${escapeHtml(config[1] || '')}" placeholder="server_url" style="width: 200px;">
-            <button onclick="removeNetworkConfig('${uid}', ${idx})" style="padding: 4px 8px; font-size: 12px;">Remove</button>
-          </div>`;
-      });
-      networkConfigsHtml += `</div>`;
-      networkConfigsHtml += `<button onclick="addNetworkConfig('${uid}')" style="padding: 4px 8px; font-size: 12px; margin-top: 5px;">Add Config</button>`;
-      networkConfigsHtml += `<button onclick="saveNetworkConfigs('${uid}')" style="padding: 4px 8px; font-size: 12px; margin-top: 5px; margin-left: 5px;">Save Configs</button>`;
-      networkConfigsHtml += `</div>`;
+      // Build network_configs HTML (only for controllers)
+      let networkConfigsHtml = (device_type === "head")
+        ? (() => {
+            let html = `<div style="margin: 10px 0;"><strong>Network Configs:</strong><div id="network_configs_${uid}">`;
+            network_configs.forEach((config, idx) => {
+              html += `
+                <div style="margin: 5px 0; padding: 5px; border: 1px solid #ccc; border-radius: 4px;">
+                  <input type="text" id="nic_${uid}_${idx}" value="${escapeHtml(config[0] || '')}" placeholder="nic_setup" style="width: 100px;">
+                  <input type="text" id="url_${uid}_${idx}" value="${escapeHtml(config[1] || '')}" placeholder="server_url" style="width: 200px;">
+                  <button onclick="removeNetworkConfig('${uid}', ${idx})" style="padding: 4px 8px; font-size: 12px;">Remove</button>
+                </div>`;
+            });
+            html += `</div>`;
+            html += `<button onclick="addNetworkConfig('${uid}')" style="padding: 4px 8px; font-size: 12px; margin-top: 5px;">Add Config</button>`;
+            html += `<button onclick="saveNetworkConfigs('${uid}')" style="padding: 4px 8px; font-size: 12px; margin-top: 5px; margin-left: 5px;">Save Configs</button>`;
+            html += `</div>`;
+            return html;
+          })()
+        : ``;
 
       const modeHtml = (device_type === "head")
         ? `<p>Current mode: <strong><span id="mode_${uid}">unknown</span></strong></p>`
@@ -199,11 +204,13 @@
         <p>Local IPs: <span id="local_ips_${uid}">${(local_ips || []).join(', ')}</span></p>
         <p>version: ${version}</p>
         ${modeHtml}
-        <p>
-          name:
-          <input type="text" id="name_${uid}" value="${escapeHtml(name)}">
-          <button onclick="setName('${uid}')">Save</button>
-        </p>
+        ${(device_type === "head")
+          ? `<p>
+              name:
+              <input type="text" id="name_${uid}" value="${escapeHtml(name)}">
+              <button onclick="setName('${uid}')">Save</button>
+            </p>`
+          : ``}
         <p>
           app_path:
           <input type="text" id="app_path_${uid}" value="${escapeHtml(app_path)}">
