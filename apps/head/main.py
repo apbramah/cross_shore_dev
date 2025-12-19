@@ -267,75 +267,67 @@ async def websocket_client(ws_connection, server_url=None):
             msg = await ws.recv()
 
             print("Received:", msg)
-            try:
-                my_dict = json.loads(msg)
-                if my_dict["type"] == "REBOOT":
-                    ota.reboot()
-                elif my_dict["type"] == "SET_NAME":
-                    new_name = my_dict.get("name")
-                    if new_name:
-                        ota.registry_set('name', new_name)
-                elif my_dict["type"] == "SET_APP_PATH":
-                    new_app_path = my_dict.get("app_path")
-                    if new_app_path:
-                        ota.registry_set('app_path', new_app_path)
-                elif my_dict["type"] == "SET_NETWORK_CONFIGS":
-                    new_network_configs = my_dict.get("network_configs")
-                    if new_network_configs is not None:
-                        ota.registry_set('network_configs', new_network_configs)
-                elif my_dict["type"] == "IDENTIFY":
-                    led.toggle()
-                    bgc.beep()
-                elif my_dict["type"] == "OFFER":
-                    # to_head receives this - act as UDP client
-                    from_uid = my_dict.get("from_uid")
-                    candidates = my_dict.get("candidates", [])
-                    print(f"OFFER received from {from_uid} with {len(candidates)} candidates")
+            my_dict = json.loads(msg)
+            if my_dict["type"] == "REBOOT":
+                raise Exception("Reboot requested")
+            elif my_dict["type"] == "SET_NAME":
+                new_name = my_dict.get("name")
+                if new_name:
+                    ota.registry_set('name', new_name)
+            elif my_dict["type"] == "SET_APP_PATH":
+                new_app_path = my_dict.get("app_path")
+                if new_app_path:
+                    ota.registry_set('app_path', new_app_path)
+            elif my_dict["type"] == "SET_NETWORK_CONFIGS":
+                new_network_configs = my_dict.get("network_configs")
+                if new_network_configs is not None:
+                    ota.registry_set('network_configs', new_network_configs)
+            elif my_dict["type"] == "IDENTIFY":
+                led.toggle()
+                bgc.beep()
+            elif my_dict["type"] == "OFFER":
+                # to_head receives this - act as UDP client
+                from_uid = my_dict.get("from_uid")
+                candidates = my_dict.get("candidates", [])
+                print(f"OFFER received from {from_uid} with {len(candidates)} candidates")
+                
+                try:
+                    # Gather candidates (creates socket, gathers host and srflx candidates)
+                    sock, answer_candidates = await UDPConnection.gather_candidates(ota.get_local_ips())
                     
-                    try:
-                        # Gather candidates (creates socket, gathers host and srflx candidates)
-                        sock, answer_candidates = await UDPConnection.gather_candidates(ota.get_local_ips())
-                        
-                        # Store socket and candidates for candidate pair evaluation
-                        pending_udp_connections[from_uid] = {
-                            "socket": sock,
-                            "is_server": False,
-                            "local_candidates": answer_candidates,
-                            "remote_candidates": candidates
-                        }
-                        
-                        # Send ANSWER message via WebSocket
-                        answer_msg = {
-                            "type": "ANSWER",
-                            "from_uid": uid_hex,
-                            "to_uid": from_uid,
-                            "candidates": answer_candidates
-                        }
-                        print(f"Answer message: {answer_msg}")
-                        await ws.send(json.dumps(answer_msg))
-                        print(f"Sent ANSWER to {from_uid} with {len(answer_candidates)} candidates")
-                        
-                        connection = await UDPConnection.create(
-                            sock, answer_candidates, candidates, from_uid, uid_hex, ws,
-                            onOpen=onOpen,
-                            onClose=onClose,
-                            on_reliable_message=on_reliable_message,
-                            on_unreliable_message=on_unreliable_message,
-                        )
-                        
-                        # Clean up pending connection
-                        del pending_udp_connections[from_uid]
-                        
-                    except Exception as e:
-                        print(f"Error handling OFFER: {e}")
+                    # Store socket and candidates for candidate pair evaluation
+                    pending_udp_connections[from_uid] = {
+                        "socket": sock,
+                        "is_server": False,
+                        "local_candidates": answer_candidates,
+                        "remote_candidates": candidates
+                    }
+                    
+                    # Send ANSWER message via WebSocket
+                    answer_msg = {
+                        "type": "ANSWER",
+                        "from_uid": uid_hex,
+                        "to_uid": from_uid,
+                        "candidates": answer_candidates
+                    }
+                    print(f"Answer message: {answer_msg}")
+                    await ws.send(json.dumps(answer_msg))
+                    print(f"Sent ANSWER to {from_uid} with {len(answer_candidates)} candidates")
+                    
+                    connection = await UDPConnection.create(
+                        sock, answer_candidates, candidates, from_uid, uid_hex, ws,
+                        onOpen=onOpen,
+                        onClose=onClose,
+                        on_reliable_message=on_reliable_message,
+                        on_unreliable_message=on_unreliable_message,
+                    )
+                    
+                    # Clean up pending connection
+                    del pending_udp_connections[from_uid]
+                    
+                except Exception as e:
+                    print(f"Error handling OFFER: {e}")
                                         
-            except Exception as e:
-                print("Error processing message:", e)
-
-    except Exception as e:
-        await ws.close()
-        print("WebSocket error:", e)
-        raise  # Re-raise to trigger reconnection
     finally:
         ws = None
 
