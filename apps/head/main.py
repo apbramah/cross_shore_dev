@@ -76,8 +76,8 @@ class MicroPythonWebSocket:
     async def send(self, data):
         self.websocket.send(data)
 
-    # def send_sync(self, data):
-    #     self.websocket.send(data)
+    def send_sync(self, data):
+        self.websocket.send(data)
 
     async def close(self):
         self.stop_heartbeat()
@@ -135,26 +135,26 @@ def http_to_ws_url(http_url):
         # If it's already a WebSocket URL, return as is
         return http_url
 
-# import builtins
+import builtins
 
 # print function that also sends to websocket if available
-# def ws_print(*args, **kwargs):
-#     original_print(*args, **kwargs)
+def ws_print(*args, **kwargs):
+    original_print(*args, **kwargs)
 
-#     global ws
-    # if ws and getattr(ws, 'open', True):
-    #     sep = kwargs.get("sep", " ")
-    #     end = kwargs.get("end", "\n")
-    #     message = sep.join(str(arg) for arg in args) + end
+    global ws
+    if ws and getattr(ws, 'open', True):
+        sep = kwargs.get("sep", " ")
+        end = kwargs.get("end", "\n")
+        message = sep.join(str(arg) for arg in args) + end
 
-    #     data = {"type": "PRINTF",
-    #             "uid": uid_hex,
-    #             "message": message.strip()}
-    #     ws.send_sync(json.dumps(data))
+        data = {"type": "PRINTF",
+                "uid": uid_hex,
+                "message": message.strip()}
+        ws.send_sync(json.dumps(data))
 
 # Override the built-in print function
-# original_print = builtins.print
-# builtins.print = ws_print
+original_print = builtins.print
+builtins.print = ws_print
 
 def get_manifest():
     with open('manifest.json') as f:
