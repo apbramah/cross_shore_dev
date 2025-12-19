@@ -8,4 +8,4 @@ try:
 except Exception as e:
     print(f"App execution error: {e}")
 finally:
-    ota_update.reboot()
+    print("I would have rebooted here, but this is the debug version")

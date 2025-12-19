@@ -33,7 +33,6 @@ class MicroPythonWebSocket:
                         self.websocket.ping()
                     except Exception as e:
                         print(f"Error sending PING: {e}")
-                        break
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -140,16 +139,19 @@ import builtins
 def ws_print(*args, **kwargs):
     original_print(*args, **kwargs)
 
-    global ws
-    if ws and getattr(ws, 'open', True):
-        sep = kwargs.get("sep", " ")
-        end = kwargs.get("end", "\n")
-        message = sep.join(str(arg) for arg in args) + end
+    # Our overridden print cannot raise an exception, so we need to catch it here
+    try:
+        if ws and getattr(ws, 'open', True):
+            sep = kwargs.get("sep", " ")
+            end = kwargs.get("end", "\n")
+            message = sep.join(str(arg) for arg in args) + end
 
-        data = {"type": "PRINTF",
-                "uid": uid_hex,
-                "message": message.strip()}
-        ws.send_sync(json.dumps(data))
+            data = {"type": "PRINTF",
+                    "uid": uid_hex,
+                    "message": message.strip()}
+            ws.send_sync(json.dumps(data))
+    except Exception as e:
+        original_print(f"Error sending PRINTF via websocket: {e}")
 
 # Override the built-in print function
 original_print = builtins.print
@@ -332,13 +334,10 @@ async def websocket_client(ws_connection, server_url=None):
 
     except Exception as e:
         await ws.close()
-        ws = None
         print("WebSocket error:", e)
         raise  # Re-raise to trigger reconnection
     finally:
-        if ws:
-            await ws.close()
-            print("Connection closed")
+        ws = None
 
 async def websocket(server_url):
     """Upgrade the HTTP connection to WebSocket using the provided server_url"""
