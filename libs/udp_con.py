@@ -123,8 +123,8 @@ class UDPConnection:
             })
         
         # Query STUN server for srflx candidates
-        srflx_candidates = await query_stun_server(sock, timeout=0.25)
-        candidates.extend(srflx_candidates)
+        # srflx_candidates = await query_stun_server(sock, timeout=0.25)
+        # candidates.extend(srflx_candidates)
         
         return sock, candidates
 
@@ -290,6 +290,7 @@ class UDPConnection:
                 if (known_cand["address"] == prflx_candidate["address"] and
                     known_cand["port"] == prflx_candidate["port"]):
                     already_known = True
+                    print(f"Already known prflx candidate: {known_cand}")
                     break
             
             if not already_known:

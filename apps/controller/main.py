@@ -242,9 +242,10 @@ def run_gui():
             e.insert(0, str(val))
 
             # Update shared slider values whenever any slider changes
-            global current_slider_values
-            with slider_values_lock:
-                current_slider_values = [int(s.get()) for s in sliders]
+            if not joystick:
+                global current_slider_values
+                with slider_values_lock:
+                    current_slider_values = [int(s.get()) for s in sliders]
     
         def on_entry_change(event, s=slider, var=value_var):
             try:
@@ -323,7 +324,50 @@ def run_gui():
     # Create the sequencer toggle button
     sequencer_button = ttk.Button(joystick_controls_frame, text="Enable Sequencer", command=toggle_sequencer)
     sequencer_button.pack(side=tk.TOP, pady=10)
-    
+
+    # --- Gamepad integration (from game_pad.py) running inside Tkinter event loop ---
+    # This keeps printing to stdout but does NOT modify the Tk UI.
+    joystick = None
+    try:
+        import pygame
+        pygame.init()
+        pygame.joystick.init()
+        if pygame.joystick.get_count() == 0:
+            print("No controller detected")
+        else:
+            joystick = pygame.joystick.Joystick(0)
+            joystick.init()
+            print("Controller:", joystick.get_name())
+            print("Axes:", joystick.get_numaxes(), "Buttons:", joystick.get_numbuttons(), "Hats:", joystick.get_numhats())
+    except Exception as e:
+        print("Joystick init failed:", e)
+        joystick = None
+
+    def poll_joystick():
+        if joystick is None:
+            return
+        try:
+            pygame.event.pump()
+            axes = [joystick.get_axis(i) for i in range(joystick.get_numaxes())]
+            buttons = [joystick.get_button(i) for i in range(joystick.get_numbuttons())]
+            hats = [joystick.get_hat(i) for i in range(joystick.get_numhats())]
+            print("Axes:", ["{:+.2f}".format(a) for a in axes],
+                  "Buttons:", buttons,
+                  "Hats:", hats)
+
+            global current_slider_values
+            with slider_values_lock:
+                current_slider_values = [int(axes[i] * 512) for i in range(6)]
+
+        except Exception as e:
+            print("Joystick polling failed:", e)
+            return
+        # Re-schedule for continuous polling inside Tkinter loop
+        root.after(50, poll_joystick)
+
+    if joystick is not None:
+        root.after(50, poll_joystick)
+
     root.mainloop()
 
 ws = None
