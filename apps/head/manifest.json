@@ -1,9 +1,11 @@
 {
-  "version": "236",
+  "version": "237",
   "files": {
     "main.py": {
     },
     "bgc.py": {
+    },
+    "camera_sony.py": {
     },
     "logging.py": {
       "path": "libs/logging.py"

@@ -103,17 +103,13 @@ def ota_trust():
     if ota_present:
         ota.trust()
 
-from machine import UART, Pin
+from machine import Pin
 from bgc import BGC
-
-UART_ID1    = 1           # 0 or 1
-UART_BAUD1  = 9600
-
-# Setup UART1
-uart1 = UART(UART_ID1, UART_BAUD1)
+from camera_sony import CameraSony
 
 # BGC controller instance
 bgc = BGC()
+camera = CameraSony()
 
 led = Pin(25, Pin.OUT)
 
