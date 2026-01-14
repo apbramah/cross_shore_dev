@@ -71,6 +71,8 @@ async def send_udp_message(values, channel):
     if channel:
         await channel.send(message_bytes)
 
+joystick = None
+
 def run_gui():
     """Run the tkinter GUI in a separate thread"""
     global heads_dropdown
@@ -183,7 +185,6 @@ def run_gui():
                     set_mode_panel_visible(connected)
                     if not connected:
                         current_mode = None
-                    update_joystick_controls_visibility()
                 elif isinstance(event, dict) and event.get("type") == "HEADS_LIST":
                     update_dropdown(event.get("heads", []))
         except queue.Empty:
@@ -193,48 +194,50 @@ def run_gui():
     # Start processing asyncio->GUI events
     root.after(100, process_async_to_gui_events)
        
-    # --- Gamepad integration (from game_pad.py) running inside Tkinter event loop ---
-    # This keeps printing to stdout but does NOT modify the Tk UI.
-    joystick = None
+    joysticks = []
     try:
         import pygame
         pygame.init()
         pygame.joystick.init()
-        if pygame.joystick.get_count() == 0:
-            print("No controller detected")
-        else:
-            joystick = pygame.joystick.Joystick(0)
-            joystick.init()
-            print("Controller:", joystick.get_name())
-            print("Axes:", joystick.get_numaxes(), "Buttons:", joystick.get_numbuttons(), "Hats:", joystick.get_numhats())
+        for i in range(pygame.joystick.get_count()):
+            js = pygame.joystick.Joystick(i)
+            js.init()
+            print(f"Joystick {i} name: {js.get_name()} axes: {js.get_numaxes()} hats: {js.get_numhats()} buttons: {js.get_numbuttons()}")
+            joysticks.append(js)
     except Exception as e:
         print("Joystick init failed:", e)
-        joystick = None
 
     def poll_joystick():
-        if joystick is None:
-            return
-        try:
-            pygame.event.pump()
+        pygame.event.pump()
+        global joystick
+        if not joystick:
+            for j in joysticks:
+                buttons = [j.get_button(i) for i in range(j.get_numbuttons())]
+
+                lb_button = buttons[4]
+                rb_button = buttons[5]
+
+                if lb_button and rb_button:
+                    joystick = j
+                    print(f"Selected joystick name: {joystick.get_name()}")
+                    break
+
+        else:
             axes = [joystick.get_axis(i) for i in range(joystick.get_numaxes())]
             buttons = [joystick.get_button(i) for i in range(joystick.get_numbuttons())]
             hats = [joystick.get_hat(i) for i in range(joystick.get_numhats())]
-            print("Axes:", ["{:+.2f}".format(a) for a in axes],
-                  "Buttons:", buttons,
-                  "Hats:", hats)
+            # print("Axes:", ["{:+.2f}".format(a) for a in axes],
+            #       "Buttons:", buttons,
+            #       "Hats:", hats)
 
             global current_slider_values
             with slider_values_lock:
                 current_slider_values = [int(axes[i] * 512) for i in range(6)]
 
-        except Exception as e:
-            print("Joystick polling failed:", e)
-            return
         # Re-schedule for continuous polling inside Tkinter loop
         root.after(50, poll_joystick)
 
-    if joystick is not None:
-        root.after(50, poll_joystick)
+    root.after(50, poll_joystick)
 
     root.mainloop()
 
