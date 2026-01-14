@@ -144,29 +144,13 @@ def run_gui():
 
     # Mode buttons panel (only visible when a UDP connection is active)
     mode_frame = ttk.Frame(root)
-    joystick_controls_frame = ttk.Frame(root)
-    joystick_controls_visible = False
     connected = False
     current_mode = None
-
-    def set_joystick_controls_visible(visible: bool):
-        nonlocal joystick_controls_visible
-        if visible and not joystick_controls_visible:
-            joystick_controls_frame.pack(fill=tk.BOTH, expand=True)
-            joystick_controls_visible = True
-        elif not visible and joystick_controls_visible:
-            joystick_controls_frame.pack_forget()
-            joystick_controls_visible = False
-
-    def update_joystick_controls_visibility():
-        # Visible only when connected AND Joystick mode selected.
-        set_joystick_controls_visible(bool(connected and current_mode == "joystick"))
 
     def on_mode_pressed(mode: str):
         # GUI thread only: enqueue an event for asyncio thread to handle.
         nonlocal current_mode
         current_mode = mode
-        update_joystick_controls_visibility()
         gui_to_async_queue.put({"type": "SET_MODE", "mode": mode})
 
     auto_cam_button = ttk.Button(mode_frame, text="Auto-cam", command=lambda: on_mode_pressed("auto_cam"))
@@ -208,123 +192,7 @@ def run_gui():
 
     # Start processing asyncio->GUI events
     root.after(100, process_async_to_gui_events)
-    
-    sliders = []
-    
-    # Labels for sliders
-    slider_names = ["Yaw", "Pitch", "Roll", "Zoom", "Focus", "Iris"]
-    
-    # Create and place sliders
-    for name in slider_names:
-        frame = ttk.Frame(joystick_controls_frame)
-        frame.pack(fill=tk.BOTH, expand=True)
-        
-        label = ttk.Label(frame, text=name)
-        label.pack(side=tk.TOP, pady=5)
-        
-        slider = ttk.Scale(frame, from_=-512, to=512, orient=tk.HORIZONTAL, length=200)
-        slider.set(0)
-        value_var = tk.IntVar(value=0)  # Variable to hold the current value
-    
-        # Live value label
-        value_label = ttk.Label(frame, textvariable=value_var)
-        value_label.pack(side=tk.RIGHT, padx=5)
-    
-        # Entry box to type value
-        entry = ttk.Entry(frame, width=5)
-        entry.pack(side=tk.RIGHT, padx=5)
-        entry.insert(0, "0")
-    
-        def on_slider_move(value, var=value_var, e=entry):
-            val = int(float(value))
-            var.set(val)
-            e.delete(0, tk.END)
-            e.insert(0, str(val))
-
-            # Update shared slider values whenever any slider changes
-            if not joystick:
-                global current_slider_values
-                with slider_values_lock:
-                    current_slider_values = [int(s.get()) for s in sliders]
-    
-        def on_entry_change(event, s=slider, var=value_var):
-            try:
-                val = int(event.widget.get())
-                s.set(val)
-                var.set(val)
-            except ValueError:
-                pass  # ignore non-integer input
-    
-        slider.config(command=lambda val, var=value_var, e=entry: on_slider_move(val, var, e))
-        entry.bind("<Return>", on_entry_change)
-        slider.pack(side=tk.TOP)
-        sliders.append(slider)
-    
-    buttons = []
-    
-    def set_slider_values(values):
-        for slider, value in zip(sliders, values):
-            slider.set(value)
-    
-    class ButtonWithLongPress(ttk.Button):
-        def __init__(self, master=None, **kwargs):
-            super().__init__(master, **kwargs)
-            self.bind("<ButtonPress>", self.on_press)
-            self.bind("<ButtonRelease>", self.on_release)
-            self.long_press_duration = 1000  # Duration for long press in milliseconds
-            self.press_time = None
-            self.stored_values = [0] * 6  # Initialize with default slider values
-    
-        def on_press(self, event):
-            self.press_time = time.time()
-            self.after(self.long_press_duration, self.check_long_press)
-    
-        def on_release(self, event):
-            if self.press_time:
-                elapsed = time.time() - self.press_time
-                if elapsed < self.long_press_duration / 1000:
-                    # Short press detected
-                    set_slider_values(self.stored_values)
-                self.press_time = None
-    
-        def check_long_press(self):
-            if self.press_time and (time.time() - self.press_time) >= self.long_press_duration / 1000:
-                # Long press detected
-                self.stored_values = [int(slider.get()) for slider in sliders]
-                print(f"Stored values for button {self['text']}: {self.stored_values}")
-                self.press_time = None
-    
-    # Create and place buttons
-    buttons_frame = ttk.Frame(joystick_controls_frame)
-    buttons_frame.pack(side=tk.TOP, fill=tk.X, padx=5, pady=5)
-    for i in range(4):
-        button = ButtonWithLongPress(buttons_frame, text=f"Position {i + 1}")
-        button.pack(side=tk.LEFT, padx=5, pady=5)
-        buttons.append(button)
-    
-    # Sequencer function to press buttons with a 2s delay
-    sequencer_enabled = False
-    
-    def press_buttons_sequentially(index=0):
-        if sequencer_enabled:
-            buttons[index].event_generate("<ButtonPress>")
-            buttons[index].event_generate("<ButtonRelease>")
-            next_index = (index + 1) % len(buttons)
-            root.after(2000, press_buttons_sequentially, next_index)
-    
-    def toggle_sequencer():
-        nonlocal sequencer_enabled
-        sequencer_enabled = not sequencer_enabled
-        if sequencer_enabled:
-            sequencer_button.config(text="Disable Sequencer")
-            press_buttons_sequentially()
-        else:
-            sequencer_button.config(text="Enable Sequencer")
-    
-    # Create the sequencer toggle button
-    sequencer_button = ttk.Button(joystick_controls_frame, text="Enable Sequencer", command=toggle_sequencer)
-    sequencer_button.pack(side=tk.TOP, pady=10)
-
+       
     # --- Gamepad integration (from game_pad.py) running inside Tkinter event loop ---
     # This keeps printing to stdout but does NOT modify the Tk UI.
     joystick = None
