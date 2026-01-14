@@ -148,10 +148,19 @@ def run_gui():
     mode_frame = ttk.Frame(root)
     connected = False
     current_mode = None
+    previous_mode = None  # Track mode before switching to joystick
 
     def on_mode_pressed(mode: str):
         # GUI thread only: enqueue an event for asyncio thread to handle.
-        nonlocal current_mode
+        nonlocal current_mode, previous_mode
+        # If switching away from joystick, save joystick as previous (for toggle back)
+        # If switching to joystick, save current mode as previous
+        if current_mode == "joystick" and mode != "joystick":
+            # Switching away from joystick - don't update previous_mode
+            pass
+        elif mode == "joystick" and current_mode != "joystick":
+            # Switching to joystick - save current mode as previous
+            previous_mode = current_mode
         current_mode = mode
         gui_to_async_queue.put({"type": "SET_MODE", "mode": mode})
 
@@ -207,9 +216,36 @@ def run_gui():
     except Exception as e:
         print("Joystick init failed:", e)
 
+    # Track previous button states for edge detection
+    prev_buttons = None
+    prev_hats = None
+    
+    def change_dropdown_selection(direction):
+        """Change dropdown selection up (-1) or down (+1)"""
+        values = heads_dropdown["values"]
+        if not values or len(values) == 0:
+            return
+        
+        current = heads_dropdown.get()
+        try:
+            current_index = values.index(current)
+        except ValueError:
+            # Current value not in list, default to first item
+            current_index = 0
+        
+        new_index = current_index + direction
+        # Wrap around: if going up from first, go to last; if going down from last, go to first
+        if new_index < 0:
+            new_index = len(values) - 1
+        elif new_index >= len(values):
+            new_index = 0
+        
+        heads_dropdown.set(values[new_index])
+        print(f"Changed head selection to: {values[new_index]}")
+    
     def poll_joystick():
         pygame.event.pump()
-        global joystick
+        global joystick, prev_buttons, prev_hats
         if not joystick:
             for j in joysticks:
                 buttons = [j.get_button(i) for i in range(j.get_numbuttons())]
@@ -220,6 +256,8 @@ def run_gui():
                 if lb_button and rb_button:
                     joystick = j
                     print(f"Selected joystick name: {joystick.get_name()}")
+                    prev_buttons = None  # Reset previous button states when joystick is selected
+                    prev_hats = None  # Reset previous hat states when joystick is selected
                     break
 
         else:
@@ -229,6 +267,66 @@ def run_gui():
             # print("Axes:", ["{:+.2f}".format(a) for a in axes],
             #       "Buttons:", buttons,
             #       "Hats:", hats)
+
+            # Check for button presses (edge detection)
+            if prev_buttons is not None and len(buttons) > 0:
+                a_button = buttons[0] if len(buttons) > 0 else False
+                b_button = buttons[1] if len(buttons) > 1 else False
+                joystick_button = buttons[8] if len(buttons) > 9 else False
+                prev_a_button = prev_buttons[0] if len(prev_buttons) > 0 else False
+                prev_b_button = prev_buttons[1] if len(prev_buttons) > 1 else False
+                prev_joystick_button = prev_buttons[8] if len(prev_buttons) > 9 else False
+                
+                # B button pressed (Connect) - transition from not pressed to pressed
+                if b_button and not prev_b_button:
+                    print("B button pressed - triggering Connect")
+                    on_connect_pressed()
+                
+                # A button pressed (Disconnect) - transition from not pressed to pressed
+                if a_button and not prev_a_button:
+                    print("A button pressed - triggering Disconnect")
+                    on_disconnect_pressed()
+                
+                # Joystick button pressed (toggle Joystick mode)
+                if joystick_button and not prev_joystick_button:
+                    print("Joystick button pressed - toggling mode")
+                    nonlocal current_mode, previous_mode
+                    if current_mode == "joystick":
+                        # Currently in joystick mode, switch back to previous mode
+                        if previous_mode:
+                            print(f"Switching back to previous mode: {previous_mode}")
+                            on_mode_pressed(previous_mode)
+                        else:
+                            # No previous mode, default to auto_cam
+                            print("No previous mode, defaulting to auto_cam")
+                            on_mode_pressed("auto_cam")
+                    else:
+                        # Not in joystick mode, switch to joystick
+                        print("Switching to joystick mode")
+                        on_mode_pressed("joystick")
+            
+            # Check for hat up/down presses (edge detection)
+            if prev_hats is not None and len(hats) > 0:
+                # Hat values are tuples (x, y) where y: -1 (down), 0 (neutral), 1 (up)
+                current_hat = hats[0] if len(hats) > 0 else (0, 0)
+                prev_hat = prev_hats[0] if len(prev_hats) > 0 else (0, 0)
+                
+                current_y = current_hat[1] if len(current_hat) > 1 else 0
+                prev_y = prev_hat[1] if len(prev_hat) > 1 else 0
+                
+                # Hat up pressed (y changed from 0 or -1 to 1)
+                if current_y == 1 and prev_y != 1:
+                    print("Hat up pressed - moving selection up")
+                    change_dropdown_selection(-1)
+                
+                # Hat down pressed (y changed from 0 or 1 to -1)
+                if current_y == -1 and prev_y != -1:
+                    print("Hat down pressed - moving selection down")
+                    change_dropdown_selection(1)
+            
+            # Update previous button and hat states
+            prev_buttons = buttons.copy() if buttons else None
+            prev_hats = hats.copy() if hats else None
 
             global current_slider_values
             with slider_values_lock:
