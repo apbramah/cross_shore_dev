@@ -391,41 +391,6 @@ def http_to_ws_url(http_url):
         # If it's already a WebSocket URL, return as is
         return http_url
 
-# import builtins
-
-# if not MICROPYTHON:
-#     print_queue = asyncio.Queue()
-
-#     async def ws_sender(ws):
-#         while True:
-#             message = await print_queue.get()
-#             data = {"type": "PRINTF",
-#                     "uid": uid_hex,
-#                     "message": message.strip()}
-#             await ws.send(json.dumps(data))
-
-# print function that also sends to websocket if available
-# def ws_print(*args, **kwargs):
-#     original_print(*args, **kwargs)
-
-#     global ws
-#     if ws and getattr(ws, 'open', True):
-#         sep = kwargs.get("sep", " ")
-#         end = kwargs.get("end", "\n")
-#         message = sep.join(str(arg) for arg in args) + end
-
-#         if MICROPYTHON:
-#             data = {"type": "PRINTF",
-#                     "uid": uid_hex,
-#                     "message": message.strip()}
-#             ws.send_sync(json.dumps(data))
-#         else:            
-#             print_queue.put_nowait(message)
-
-# Override the built-in print function
-# original_print = builtins.print
-# builtins.print = ws_print
-
 def get_manifest():
     with open('manifest.json') as f:
         manifest = json.load(f)
@@ -452,7 +417,7 @@ async def _com_port_forwarding_task(port_name: str, target: str):
     
     try:
         # Open COM port
-        ser = serial.Serial(port_name, BAUD_RATE, timeout=0.1)
+        ser = serial.Serial(port_name, BAUD_RATE, timeout=0.1, write_timeout=0.1)
         print(f"COM port {port_name} opened for target={target}")
         
         with com_port_lock:

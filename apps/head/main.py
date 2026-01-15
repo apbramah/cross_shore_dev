@@ -201,7 +201,7 @@ def ws_print(*args, **kwargs):
 
 # Override the built-in print function
 original_print = builtins.print
-builtins.print = ws_print
+# builtins.print = ws_print
 
 def get_manifest():
     with open('manifest.json') as f:

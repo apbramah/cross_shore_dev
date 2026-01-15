@@ -12,4 +12,6 @@ class CameraSony:
         self.uart.write(data)
 
     def read_raw(self, max_bytes: int = BUFFER_SIZE):
-        return self.uart.read(max_bytes)
+        if self.uart.any():
+            return self.uart.read(max_bytes)
+        return None

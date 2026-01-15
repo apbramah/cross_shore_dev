@@ -12,6 +12,10 @@ CMD_API_VIRT_CH_CONTROL = 45
 CMD_CONTROL = 67
 CMD_BEEP_SOUND = 89
 
+def hexdump(data: bytes) -> str:
+    """Return a hex dump string for given bytes."""
+    return " ".join(f"{b:02X}" for b in data)
+
 class BGC:
     """Encapsulate BGC UART communication and related helpers."""
 
@@ -25,13 +29,13 @@ class BGC:
         # packets sent to the BGC are correctly formatted. Further checks for packet format could be added, but probably
         # are not worth the effort/workload.
         if data[0] != PACKET_START:
-            print("Invalid header:", data[0])
             return
-        
         self.uart.write(data)
 
     def read_raw(self, max_bytes: int = BUFFER_SIZE):
-        return self.uart.read(max_bytes)
+        if self.uart.any():
+            return self.uart.read(max_bytes)
+        return None
 
     @staticmethod
     def decode_udp_packet(data: bytes):
@@ -112,7 +116,6 @@ class BGC:
 
     def send_joystick_control(self, yaw, pitch, roll):
         payload = struct.pack(">3H", yaw, pitch, roll)
-        print("UART joystick -->", yaw, pitch, roll)
         self.send_cmd(CMD_API_VIRT_CH_CONTROL, payload)
 
 
