@@ -19,6 +19,15 @@ class BGC:
         self.uart = UART(UART_ID, UART_BAUD)
 
     def write_raw(self, data: bytes):
+        # The "FCB Control Software" application discovers the correct COM port by sending data to all the COM ports.
+        # This has the effect of sending raw camera packets to the BGC. Now we ought to filter these erroneous packets out
+        # earlier, but as a belt-and-braces measure, we'll filter it out here also. We can now be _reasonably_ sure that all
+        # packets sent to the BGC are correctly formatted. Further checks for packet format could be added, but probably
+        # are not worth the effort/workload.
+        if data[0] != PACKET_START:
+            print("Invalid header:", data[0])
+            return
+        
         self.uart.write(data)
 
     def read_raw(self, max_bytes: int = BUFFER_SIZE):
