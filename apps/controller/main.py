@@ -9,6 +9,15 @@ import asyncio
 import uuid
 import secrets
 import os
+import base64
+
+try:
+    import serial
+    import serial.tools.list_ports
+    serial_available = True
+except ImportError:
+    serial_available = False
+    print("pyserial not available - COM port forwarding disabled")
 
 # Generate a unique ID based on MAC address + random string (unique per instance)
 uid_hex = format(uuid.getnode(), 'x') + secrets.token_hex(8)
@@ -127,6 +136,14 @@ def run_gui():
     disconnect_button = ttk.Button(heads_frame, text="Disconnect", command=on_disconnect_pressed)
     disconnect_button.pack(side=tk.LEFT, padx=5)
 
+    def update_selected_head_uid():
+        """Update the selected head UID when dropdown changes"""
+        selected = heads_dropdown.get()
+        uid = _extract_uid_from_dropdown_value(selected)
+        global selected_head_uid
+        with selected_head_uid_lock:
+            selected_head_uid = uid
+
     def update_dropdown(heads):
         heads = heads or []
         # Build display strings: "name (uid)"
@@ -140,9 +157,16 @@ def run_gui():
             current = heads_dropdown.get()
             if current not in display_values:
                 heads_dropdown.set(display_values[0])
+            update_selected_head_uid()
         else:
             heads_dropdown["values"] = []
             heads_dropdown.set("No heads available")
+            with selected_head_uid_lock:
+                global selected_head_uid
+                selected_head_uid = None
+    
+    # Bind dropdown selection change event
+    heads_dropdown.bind("<<ComboboxSelected>>", lambda e: update_selected_head_uid())
 
     # Mode buttons panel (only visible when a UDP connection is active)
     mode_frame = ttk.Frame(root)
@@ -351,6 +375,10 @@ heads_dropdown = None  # Reference to the dropdown widget
 gui_to_async_queue = queue.Queue()  # Queue for passing GUI events to asyncio thread (thread-safe)
 async_to_gui_queue = queue.Queue()  # Queue for passing asyncio events to GUI thread (thread-safe)
 current_udp_connection = None  # Currently active UDPConnection (if any)
+selected_head_uid = None  # Currently selected head UID from dropdown
+selected_head_uid_lock = threading.Lock()  # Lock for thread-safe access to selected head UID
+com_port = None  # COM port serial connection (set by COM port task)
+com_port_lock = threading.Lock()  # Lock for thread-safe access to COM port
 
 def http_to_ws_url(http_url):
     """Convert HTTP URL to WebSocket URL for upgrading the connection"""
@@ -410,6 +438,88 @@ async def send_slider_values(channel):
                 values = current_slider_values.copy()
             await send_udp_message(values, channel)
         await asyncio.sleep(0.05)  # 50ms interval, same as original update_values
+
+async def com_port_forwarding_task():
+    """Task that reads from COM port and forwards to selected head via websocket"""
+    global com_port, selected_head_uid, ws
+    
+    if not serial_available:
+        print("COM port forwarding disabled - pyserial not available")
+        return
+    
+    COM_PORT_NAME = "COM7"
+    BAUD_RATE = 115200  # Standard baud rate, but doesn't matter for virtual port
+    
+    try:
+        # Open COM port
+        ser = serial.Serial(COM_PORT_NAME, BAUD_RATE, timeout=0.1)
+        print(f"COM port {COM_PORT_NAME} opened")
+        
+        with com_port_lock:
+            com_port = ser
+        
+        while True:
+            try:
+                # Read from COM port (blocking, so use to_thread)
+                data = await asyncio.to_thread(ser.read, 1024)
+                
+                if data and len(data) > 0:
+                    # Get selected head UID
+                    with selected_head_uid_lock:
+                        head_uid = selected_head_uid
+                    
+                    # Only forward if a head is selected and websocket is available
+                    if head_uid and ws:
+                        # Encode data as base64 for JSON transport
+                        data_b64 = base64.b64encode(data).decode('utf-8')
+                        
+                        # Send to head via websocket
+                        msg = {
+                            "type": "COM_DATA",
+                            "to_uid": head_uid,
+                            "from_uid": uid_hex,
+                            "data": data_b64
+                        }
+                        print(f"Sending COM data to head {head_uid}: {msg}")
+                        try:
+                            await ws.send(json.dumps(msg))
+                        except Exception as e:
+                            print(f"Error sending COM data to head {head_uid}: {e}")
+                
+                # Small delay to prevent busy loop
+                await asyncio.sleep(0.01)
+                
+            except Exception as e:
+                print(f"Error reading from COM port: {e}")
+                await asyncio.sleep(0.1)
+                
+    except serial.SerialException as e:
+        print(f"Error opening COM port {COM_PORT_NAME}: {e}")
+    except Exception as e:
+        print(f"Error in COM port forwarding task: {e}")
+    finally:
+        with com_port_lock:
+            if com_port:
+                try:
+                    com_port.close()
+                except:
+                    pass
+                com_port = None
+        print(f"COM port {COM_PORT_NAME} closed")
+
+async def write_to_com_port(data):
+    """Write data to COM port (called from websocket message handler)"""
+    global com_port
+    
+    with com_port_lock:
+        port = com_port
+    
+    if port and port.is_open:
+        try:
+            await asyncio.to_thread(port.write, data)
+            await asyncio.to_thread(port.flush)
+        except Exception as e:
+            print(f"Error writing to COM port: {e}")
 
 async def onOpen(connection):
     print("Connection opened (onOpen callback)")
@@ -572,6 +682,16 @@ async def websocket_client(ws_connection, server_url=None):
                         
                     except Exception as e:
                         print(f"Error handling ANSWER (server side): {e}")
+                elif my_dict["type"] == "COM_DATA":
+                    # Data from head - forward to COM port
+                    from_uid = my_dict.get("from_uid")
+                    data_b64 = my_dict.get("data", "")
+                    
+                    try:
+                        data = base64.b64decode(data_b64)
+                        await write_to_com_port(data)
+                    except Exception as e:
+                        print(f"Error forwarding COM_DATA from {from_uid} to COM port: {e}")
                                         
             except Exception as e:
                 print("Error processing message:", e)
@@ -642,7 +762,7 @@ async def gui_event_pump_task():
                 pass
 
 async def as_main(server_url):
-    tasks = [run_gui_task(), gui_event_pump_task(), websocket(server_url)]
+    tasks = [run_gui_task(), gui_event_pump_task(), websocket(server_url), com_port_forwarding_task()]
 
     # Run all tasks concurrently
     await asyncio.gather(*tasks)
