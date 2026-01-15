@@ -4,6 +4,7 @@ import json
 import uasyncio as asyncio
 import machine
 import ubinascii
+import binascii
 from uwebsockets.protocol import ConnectionClosed
 
 # Get the unique ID as bytes
@@ -118,6 +119,30 @@ mode = "joystick"  # "joystick" or "auto_cam"
 ws = None
 current_server_url = None  # Store server URL for UDP discovery
 pending_udp_connections = {}  # Store pending UDP connection info: peer_uid -> {socket, is_server, local_candidates}
+com_peer_uid = None  # controller uid to send COM_DATA back to (learned from inbound COM_DATA)
+
+async def _bgc_com_tx_task():
+    """Read raw bytes from BGC UART and send to controller via COM_DATA websocket messages."""
+    global ws, com_peer_uid
+    while True:
+        try:
+            data = bgc.read_raw()
+            if data:
+                peer = com_peer_uid
+                if peer and ws:
+                    msg = {
+                        "type": "COM_DATA",
+                        "to_uid": peer,
+                        "from_uid": uid_hex,
+                        "data": binascii.b2a_base64(data).decode().strip(),
+                    }
+                    await ws.send(json.dumps(msg))
+            await asyncio.sleep(0.01)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            print("Error in _bgc_com_tx_task:", e)
+            await asyncio.sleep(0.1)
 
 def http_to_ws_url(http_url):
     """Convert HTTP URL to WebSocket URL for upgrading the connection"""
@@ -232,7 +257,7 @@ async def on_unreliable_message(data):
                         
 async def websocket_client(ws_connection, server_url=None):
     """Handle WebSocket client logic with an upgraded connection"""
-    global mode, ws, current_server_url
+    global mode, ws, current_server_url, com_peer_uid
     ws = ws_connection
     if server_url:
         current_server_url = server_url
@@ -259,6 +284,9 @@ async def websocket_client(ws_connection, server_url=None):
         await ws.send(json.dumps(data))
         ota_trust()
 
+        # Start BGC -> WS COM_DATA bridge (TX direction)
+        bgc_tx_task = asyncio.create_task(_bgc_com_tx_task())
+
         while True:
             msg = await ws.recv()
 
@@ -281,6 +309,18 @@ async def websocket_client(ws_connection, server_url=None):
             elif my_dict["type"] == "IDENTIFY":
                 led.toggle()
                 bgc.beep()
+            elif my_dict["type"] == "COM_DATA":
+                # Raw bytes destined for BGC UART (from controller COM tunnel)
+                try:
+                    from_uid = my_dict.get("from_uid")
+                    data_b64 = my_dict.get("data", "")
+                    if from_uid:
+                        com_peer_uid = from_uid
+                    if data_b64:
+                        raw = binascii.a2b_base64(data_b64)
+                        bgc.write_raw(raw)
+                except Exception as e:
+                    print("Error handling COM_DATA:", e)
             elif my_dict["type"] == "OFFER":
                 # to_head receives this - act as UDP client
                 from_uid = my_dict.get("from_uid")
@@ -325,6 +365,11 @@ async def websocket_client(ws_connection, server_url=None):
                     print(f"Error handling OFFER: {e}")
                                         
     finally:
+        try:
+            bgc_tx_task.cancel()
+            await bgc_tx_task
+        except Exception:
+            pass
         ws = None
 
 async def websocket(server_url):

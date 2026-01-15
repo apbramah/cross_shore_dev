@@ -18,6 +18,12 @@ class BGC:
     def __init__(self):
         self.uart = UART(UART_ID, UART_BAUD)
 
+    def write_raw(self, data: bytes):
+        self.uart.write(data)
+
+    def read_raw(self, max_bytes: int = BUFFER_SIZE):
+        return self.uart.read(max_bytes)
+
     @staticmethod
     def decode_udp_packet(data: bytes):
         """Decode a 16-byte control packet into fields."""
@@ -73,7 +79,7 @@ class BGC:
         crc = self.crc16_calculate(header_and_payload)
         crc_bytes = bytearray([crc & 0xFF, (crc >> 8) & 0xFF])
         packet = bytearray([PACKET_START]) + header_and_payload + crc_bytes
-        self.uart.write(packet)
+        self.write_raw(packet)
 
     # === High-level helpers corresponding to specific CMD_ values ===
 
