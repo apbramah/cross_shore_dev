@@ -377,8 +377,9 @@ async_to_gui_queue = queue.Queue()  # Queue for passing asyncio events to GUI th
 current_udp_connection = None  # Currently active UDPConnection (if any)
 selected_head_uid = None  # Currently selected head UID from dropdown
 selected_head_uid_lock = threading.Lock()  # Lock for thread-safe access to selected head UID
-com_port = None  # COM port serial connection (set by COM port task)
-com_port_lock = threading.Lock()  # Lock for thread-safe access to COM port
+com_port_bgc = None     # COM7
+com_port_camera = None  # COM11
+com_port_lock = threading.Lock()  # Lock for thread-safe access to COM ports
 
 def http_to_ws_url(http_url):
     """Convert HTTP URL to WebSocket URL for upgrading the connection"""
@@ -439,24 +440,26 @@ async def send_slider_values(channel):
             await send_udp_message(values, channel)
         await asyncio.sleep(0.05)  # 50ms interval, same as original update_values
 
-async def com_port_forwarding_task():
-    """Task that reads from COM port and forwards to selected head via websocket"""
-    global com_port, selected_head_uid, ws
+async def _com_port_forwarding_task(port_name: str, target: str):
+    """Read from a local COM port and forward to selected head via websocket as COM_DATA."""
+    global selected_head_uid, ws, com_port_bgc, com_port_camera
     
     if not serial_available:
         print("COM port forwarding disabled - pyserial not available")
         return
     
-    COM_PORT_NAME = "COM7"
     BAUD_RATE = 115200  # Standard baud rate, but doesn't matter for virtual port
     
     try:
         # Open COM port
-        ser = serial.Serial(COM_PORT_NAME, BAUD_RATE, timeout=0.1)
-        print(f"COM port {COM_PORT_NAME} opened")
+        ser = serial.Serial(port_name, BAUD_RATE, timeout=0.1)
+        print(f"COM port {port_name} opened for target={target}")
         
         with com_port_lock:
-            com_port = ser
+            if target == "camera":
+                com_port_camera = ser
+            else:
+                com_port_bgc = ser
         
         while True:
             try:
@@ -476,6 +479,7 @@ async def com_port_forwarding_task():
                         # Send to head via websocket
                         msg = {
                             "type": "COM_DATA",
+                            "target": target,
                             "to_uid": head_uid,
                             "from_uid": uid_hex,
                             "data": data_b64
@@ -494,25 +498,29 @@ async def com_port_forwarding_task():
                 await asyncio.sleep(0.1)
                 
     except serial.SerialException as e:
-        print(f"Error opening COM port {COM_PORT_NAME}: {e}")
+        print(f"Error opening COM port {port_name}: {e}")
     except Exception as e:
         print(f"Error in COM port forwarding task: {e}")
     finally:
         with com_port_lock:
-            if com_port:
+            port_ref = com_port_camera if target == "camera" else com_port_bgc
+            if port_ref:
                 try:
-                    com_port.close()
+                    port_ref.close()
                 except:
                     pass
-                com_port = None
-        print(f"COM port {COM_PORT_NAME} closed")
+                if target == "camera":
+                    com_port_camera = None
+                else:
+                    com_port_bgc = None
+        print(f"COM port {port_name} closed for target={target}")
 
-async def write_to_com_port(data):
-    """Write data to COM port (called from websocket message handler)"""
-    global com_port
+async def write_to_com_port(target: str, data: bytes):
+    """Write data to a local COM port based on target (called from websocket message handler)."""
+    global com_port_bgc, com_port_camera
     
     with com_port_lock:
-        port = com_port
+        port = com_port_camera if target == "camera" else com_port_bgc
     
     if port and port.is_open:
         try:
@@ -686,10 +694,11 @@ async def websocket_client(ws_connection, server_url=None):
                     # Data from head - forward to COM port
                     from_uid = my_dict.get("from_uid")
                     data_b64 = my_dict.get("data", "")
+                    target = my_dict.get("target", "bgc")
                     
                     try:
                         data = base64.b64decode(data_b64)
-                        await write_to_com_port(data)
+                        await write_to_com_port(target, data)
                     except Exception as e:
                         print(f"Error forwarding COM_DATA from {from_uid} to COM port: {e}")
                                         
@@ -762,7 +771,13 @@ async def gui_event_pump_task():
                 pass
 
 async def as_main(server_url):
-    tasks = [run_gui_task(), gui_event_pump_task(), websocket(server_url), com_port_forwarding_task()]
+    tasks = [
+        run_gui_task(),
+        gui_event_pump_task(),
+        websocket(server_url),
+        _com_port_forwarding_task("COM7", "bgc"),
+        _com_port_forwarding_task("COM11", "camera"),
+    ]
 
     # Run all tasks concurrently
     await asyncio.gather(*tasks)

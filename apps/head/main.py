@@ -132,6 +132,7 @@ async def _bgc_com_tx_task():
                 if peer and ws:
                     msg = {
                         "type": "COM_DATA",
+                        "target": "bgc",
                         "to_uid": peer,
                         "from_uid": uid_hex,
                         "data": binascii.b2a_base64(data).decode().strip(),
@@ -142,6 +143,30 @@ async def _bgc_com_tx_task():
             break
         except Exception as e:
             print("Error in _bgc_com_tx_task:", e)
+            await asyncio.sleep(0.1)
+
+async def _camera_com_tx_task():
+    """Read raw bytes from camera UART and send to controller via COM_DATA websocket messages."""
+    global ws, com_peer_uid
+    while True:
+        try:
+            data = camera.read_raw()
+            if data:
+                peer = com_peer_uid
+                if peer and ws:
+                    msg = {
+                        "type": "COM_DATA",
+                        "target": "camera",
+                        "to_uid": peer,
+                        "from_uid": uid_hex,
+                        "data": binascii.b2a_base64(data).decode().strip(),
+                    }
+                    await ws.send(json.dumps(msg))
+            await asyncio.sleep(0.01)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            print("Error in _camera_com_tx_task:", e)
             await asyncio.sleep(0.1)
 
 def http_to_ws_url(http_url):
@@ -286,6 +311,7 @@ async def websocket_client(ws_connection, server_url=None):
 
         # Start BGC -> WS COM_DATA bridge (TX direction)
         bgc_tx_task = asyncio.create_task(_bgc_com_tx_task())
+        camera_tx_task = asyncio.create_task(_camera_com_tx_task())
 
         while True:
             msg = await ws.recv()
@@ -313,12 +339,16 @@ async def websocket_client(ws_connection, server_url=None):
                 # Raw bytes destined for BGC UART (from controller COM tunnel)
                 try:
                     from_uid = my_dict.get("from_uid")
+                    target = my_dict.get("target", "bgc")
                     data_b64 = my_dict.get("data", "")
                     if from_uid:
                         com_peer_uid = from_uid
                     if data_b64:
                         raw = binascii.a2b_base64(data_b64)
-                        bgc.write_raw(raw)
+                        if target == "camera":
+                            camera.write_raw(raw)
+                        else:
+                            bgc.write_raw(raw)
                 except Exception as e:
                     print("Error handling COM_DATA:", e)
             elif my_dict["type"] == "OFFER":
@@ -368,6 +398,11 @@ async def websocket_client(ws_connection, server_url=None):
         try:
             bgc_tx_task.cancel()
             await bgc_tx_task
+        except Exception:
+            pass
+        try:
+            camera_tx_task.cancel()
+            await camera_tx_task
         except Exception:
             pass
         ws = None
