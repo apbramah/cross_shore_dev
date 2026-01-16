@@ -201,7 +201,7 @@ def ws_print(*args, **kwargs):
 
 # Override the built-in print function
 original_print = builtins.print
-# builtins.print = ws_print
+builtins.print = ws_print
 
 def get_manifest():
     with open('manifest.json') as f:
@@ -279,6 +279,7 @@ async def on_unreliable_message(data):
     fields = BGC.decode_udp_packet(data)
     if fields:
         bgc.send_joystick_control(fields["yaw"], fields["pitch"], fields["roll"])
+        camera.move_zoom(fields["zoom"])
                         
 async def websocket_client(ws_connection, server_url=None):
     """Handle WebSocket client logic with an upgraded connection"""

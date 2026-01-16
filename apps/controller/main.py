@@ -70,7 +70,7 @@ async def send_udp_message(values, channel):
     values[4] = map_focus(values[4])
     values[5] = map_iris(values[5])
     # Pack values into bytes
-    message_bytes = bytes([0xDE, 0xFD, (values[3] >> 8) & 0xFF, values[3] & 0xFF,
+    message_bytes = bytes([0xDE, 0xFD, values[3] & 0xFF, (values[3] >> 8) & 0xFF,
                            (values[4] >> 8) & 0xFF, values[4] & 0xFF,
                            (values[5] >> 8) & 0xFF, values[5] & 0xFF,
                            (values[0] >> 8) & 0xFF, values[0] & 0xFF,
@@ -490,7 +490,7 @@ async def write_to_com_port(target: str, data: bytes):
     if port and port.is_open:
         try:
             await asyncio.to_thread(port.write, data)
-            await asyncio.to_thread(port.flush)
+            # await asyncio.to_thread(port.flush)
         except Exception as e:
             print(f"Error writing to COM port: {e}")
 

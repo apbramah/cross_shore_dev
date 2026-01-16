@@ -51,7 +51,7 @@ class BGC:
         data_type = data[1]
 
         if data_type == 0xFD:
-            zoom, focus, iris, yaw, pitch, roll, _ = struct.unpack("<6H2s", data[2:16])
+            zoom, focus, iris, yaw, pitch, roll, _ = struct.unpack("<h5H2s", data[2:16])
             return {
                 "zoom": zoom,
                 "focus": focus,
