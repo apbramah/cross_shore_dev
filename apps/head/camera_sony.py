@@ -1,28 +1,25 @@
-from machine import UART
+from machine import UART, Pin
+
+de = Pin(22, Pin.OUT)
+de.value(1) # Default to receive mode
 
 UART_ID = 1           # 0 or 1
-UART_BAUD = 9600
+UART_BAUD = 115200
 BUFFER_SIZE = 1024
-
-def hexdump(data: bytes) -> str:
-    """Return a hex dump string for given bytes."""
-    return " ".join(f"{b:02X}" for b in data)
 
 class CameraSony:
     def __init__(self):
-        self.uart = UART(UART_ID, UART_BAUD)
+        self.uart = UART(UART_ID, UART_BAUD, timeout=0)
         self.zoom = 0
 
     def write_raw(self, data: bytes):
-        print("Writing:", hexdump(data))
+        de.value(0)
         self.uart.write(data)
+        self.uart.flush()
+        de.value(1)
 
     def read_raw(self, max_bytes: int = BUFFER_SIZE):
-        if self.uart.any():
-            data = self.uart.read(max_bytes)
-            print("Reading:", hexdump(data))
-            return data
-        return None
+        return self.uart.read(max_bytes)
 
     # === High-level helpers ===
 

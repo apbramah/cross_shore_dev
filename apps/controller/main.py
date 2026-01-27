@@ -10,6 +10,7 @@ import uuid
 import secrets
 import os
 import base64
+import websockets
 
 try:
     import serial
@@ -40,7 +41,6 @@ class CPythonWebSocket:
 
 async def upgrade_http_to_websocket(http_url):
     """Upgrade an HTTP connection to WebSocket"""
-    import websockets
     ws_url = http_to_ws_url(http_url) + '/ws'
     ws = await websockets.connect(ws_url)
     return CPythonWebSocket(ws)
@@ -377,8 +377,8 @@ async_to_gui_queue = queue.Queue()  # Queue for passing asyncio events to GUI th
 current_udp_connection = None  # Currently active UDPConnection (if any)
 selected_head_uid = None  # Currently selected head UID from dropdown
 selected_head_uid_lock = threading.Lock()  # Lock for thread-safe access to selected head UID
-com_port_bgc = None     # COM7
-com_port_camera = None  # COM11
+com_port_bgc = None
+com_port_camera = None
 com_port_lock = threading.Lock()  # Lock for thread-safe access to COM ports
 
 def http_to_ws_url(http_url):
@@ -417,7 +417,7 @@ async def _com_port_forwarding_task(port_name: str, target: str):
     
     try:
         # Open COM port
-        ser = serial.Serial(port_name, BAUD_RATE, timeout=0.1, write_timeout=0.1)
+        ser = serial.Serial(port_name, BAUD_RATE, timeout=0, write_timeout=1)
         print(f"COM port {port_name} opened for target={target}")
         
         with com_port_lock:
@@ -429,7 +429,7 @@ async def _com_port_forwarding_task(port_name: str, target: str):
         while True:
             try:
                 # Read from COM port (blocking, so use to_thread)
-                data = await asyncio.to_thread(ser.read, 1024)
+                data = await asyncio.to_thread(ser.read, 64)
                 
                 if data and len(data) > 0:
                     # Get selected head UID
@@ -449,14 +449,14 @@ async def _com_port_forwarding_task(port_name: str, target: str):
                             "from_uid": uid_hex,
                             "data": data_b64
                         }
-                        print(f"Sending COM data to head {head_uid}: {msg}")
+                        #print(f"Sending COM data to head {head_uid}: {msg}")
                         try:
                             await ws.send(json.dumps(msg))
                         except Exception as e:
                             print(f"Error sending COM data to head {head_uid}: {e}")
                 
                 # Small delay to prevent busy loop
-                await asyncio.sleep(0.01)
+                await asyncio.sleep(0.0)
                 
             except Exception as e:
                 print(f"Error reading from COM port: {e}")
@@ -490,7 +490,7 @@ async def write_to_com_port(target: str, data: bytes):
     if port and port.is_open:
         try:
             await asyncio.to_thread(port.write, data)
-            # await asyncio.to_thread(port.flush)
+            await asyncio.to_thread(port.flush)
         except Exception as e:
             print(f"Error writing to COM port: {e}")
 
@@ -602,7 +602,7 @@ async def websocket_client(ws_connection, server_url=None):
         while True:
             msg = await ws.recv()
 
-            print("Received:", msg)
+            #print("Received:", msg)
             try:
                 my_dict = json.loads(msg)
                 if my_dict["type"] == "REBOOT":
@@ -663,6 +663,7 @@ async def websocket_client(ws_connection, server_url=None):
                     
                     try:
                         data = base64.b64decode(data_b64)
+                        #print("Andy: ", data)
                         await write_to_com_port(target, data)
                     except Exception as e:
                         print(f"Error forwarding COM_DATA from {from_uid} to COM port: {e}")
@@ -740,8 +741,8 @@ async def as_main(server_url):
         run_gui_task(),
         gui_event_pump_task(),
         websocket(server_url),
-        _com_port_forwarding_task("COM7", "bgc"),
-        _com_port_forwarding_task("COM11", "camera"),
+        _com_port_forwarding_task("COM31", "bgc"),
+        _com_port_forwarding_task("COM33", "camera"),
     ]
 
     # Run all tasks concurrently

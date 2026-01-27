@@ -151,7 +151,7 @@ async def _camera_com_tx_task():
     while True:
         try:
             data = camera.read_raw()
-            if data:
+            if data != None:
                 peer = com_peer_uid
                 if peer and ws:
                     msg = {
@@ -162,7 +162,7 @@ async def _camera_com_tx_task():
                         "data": binascii.b2a_base64(data).decode().strip(),
                     }
                     await ws.send(json.dumps(msg))
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(0.0)
         except asyncio.CancelledError:
             break
         except Exception as e:
@@ -317,7 +317,7 @@ async def websocket_client(ws_connection, server_url=None):
         while True:
             msg = await ws.recv()
 
-            print("Received:", msg)
+            #print("Received:", msg)
             my_dict = json.loads(msg)
             if my_dict["type"] == "REBOOT":
                 raise Exception("Reboot requested")

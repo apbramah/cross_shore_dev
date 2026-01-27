@@ -28,8 +28,8 @@ class BGC:
         # earlier, but as a belt-and-braces measure, we'll filter it out here also. We can now be _reasonably_ sure that all
         # packets sent to the BGC are correctly formatted. Further checks for packet format could be added, but probably
         # are not worth the effort/workload.
-        if data[0] != PACKET_START:
-            return
+        # if data[0] != PACKET_START:
+        #     return
         self.uart.write(data)
 
     def read_raw(self, max_bytes: int = BUFFER_SIZE):
