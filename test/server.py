@@ -109,7 +109,7 @@ async def websocket_handler(ws, ip_address, port):
                 # Message came from a device
                 elif ws in devices:
                     device = ws
-                    #print("From device:", message)
+                    print("From device:", message)
                     msg_data = json.loads(message)
                     to_uid = msg_data.get("to_uid")
                     if to_uid:
@@ -117,7 +117,7 @@ async def websocket_handler(ws, ip_address, port):
                         to_device = uid_to_device.get(to_uid)
                         if to_device:
                             await to_device.send_str(message)
-                            #print(f"Forward {message} to to_device {to_uid}")
+                            print(f"Forward {message} to to_device {to_uid}")
                     else:
                         # Message is for browsers
                         if msg_data["type"] == "CURRENT_MODE":

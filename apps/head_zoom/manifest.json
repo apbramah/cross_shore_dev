@@ -1,0 +1,26 @@
+{
+  "version": "290",
+  "files": {
+    "main.py": {
+    },
+    "bgc.py": {
+    },
+    "camera_sony.py": {
+    },
+    "logging.py": {
+      "path": "libs/logging.py"
+    },
+    "uwebsockets/client.py": {
+      "path": "libs/uwebsockets/client.py"
+    },
+    "uwebsockets/protocol.py": {
+      "path": "libs/uwebsockets/protocol.py"
+    },
+    "udp_con.py": {
+      "path": "libs/udp_con.py"
+    },
+    "stun_query.py": {
+      "path": "libs/stun_query.py"
+    }
+  }
+}
