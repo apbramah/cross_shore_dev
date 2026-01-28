@@ -663,7 +663,7 @@ async def websocket_client(ws_connection, server_url=None):
                     
                     try:
                         data = base64.b64decode(data_b64)
-                        #print("Andy: ", data)
+                        print("Andy: ", data)
                         await write_to_com_port(target, data)
                     except Exception as e:
                         print(f"Error forwarding COM_DATA from {from_uid} to COM port: {e}")
@@ -742,7 +742,7 @@ async def as_main(server_url):
         gui_event_pump_task(),
         websocket(server_url),
         _com_port_forwarding_task("COM31", "bgc"),
-        _com_port_forwarding_task("COM33", "camera"),
+        _com_port_forwarding_task("COM4", "camera"),
     ]
 
     # Run all tasks concurrently
