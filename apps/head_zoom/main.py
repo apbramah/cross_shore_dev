@@ -112,7 +112,10 @@ from camera_sony import CameraSony
 bgc = BGC()
 camera = CameraSony()
 
-led = Pin(25, Pin.OUT)
+bgc_power_en = Pin(25, Pin.OUT)
+bgc_power_en.value(1) # Force power enable through to BGC
+camera_power_en = Pin(15, Pin.OUT)
+camera_power_en.value(1) # Force power enable through to camera
 
 mode = "joystick"  # "joystick" or "auto_cam"
 
@@ -334,7 +337,6 @@ async def websocket_client(ws_connection, server_url=None):
                 if new_network_configs is not None:
                     ota.registry_set('network_configs', new_network_configs)
             elif my_dict["type"] == "IDENTIFY":
-                led.toggle()
                 bgc.beep()
             elif my_dict["type"] == "COM_DATA":
                 # Raw bytes destined for BGC UART (from controller COM tunnel)
