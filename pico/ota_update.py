@@ -80,10 +80,20 @@ except:
         # On a PC, the network is already connected, so nothing to
         # do in that regard. But we still need to populate local_ips
         import socket
+        import psutil
 
-        hostname = socket.gethostname()
+        def get_ipv4_addresses():
+            ips = []
+            for iface, addrs in psutil.net_if_addrs().items():
+                for addr in addrs:
+                    if addr.family == socket.AF_INET:
+                        ip = addr.address
+                        if not ip.startswith("127."):
+                            ips.append(ip)
+            return ips
+
         global local_ips
-        local_ips = socket.gethostbyname_ex(hostname)[2]
+        local_ips = get_ipv4_addresses()
 
 def path_exists(path):
     try:
