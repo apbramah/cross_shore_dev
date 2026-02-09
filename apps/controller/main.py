@@ -274,8 +274,8 @@ def run_gui():
             for j in joysticks:
                 buttons = [j.get_button(i) for i in range(j.get_numbuttons())]
 
-                lb_button = buttons[4]
-                rb_button = buttons[5]
+                lb_button = buttons[4] or buttons[6]
+                rb_button = buttons[5] or buttons[7]
 
                 if lb_button and rb_button:
                     joystick = j
@@ -296,11 +296,22 @@ def run_gui():
             if prev_buttons is not None and len(buttons) > 0:
                 a_button = buttons[0] if len(buttons) > 0 else False
                 b_button = buttons[1] if len(buttons) > 1 else False
-                joystick_button = buttons[8] if len(buttons) > 9 else False
+                if len(buttons) > 14:
+                    joystick_button = buttons[13]
+                elif len(buttons) > 9:
+                    joystick_button = buttons[8]
+                else:
+                    joystick_button = False
+
                 prev_a_button = prev_buttons[0] if len(prev_buttons) > 0 else False
                 prev_b_button = prev_buttons[1] if len(prev_buttons) > 1 else False
-                prev_joystick_button = prev_buttons[8] if len(prev_buttons) > 9 else False
-                
+                if len(prev_buttons) > 14:
+                    prev_joystick_button = prev_buttons[13]
+                elif len(prev_buttons) > 9:
+                    prev_joystick_button = prev_buttons[8]
+                else:
+                    prev_joystick_button = False
+
                 # B button pressed (Connect) - transition from not pressed to pressed
                 if b_button and not prev_b_button:
                     print("B button pressed - triggering Connect")
