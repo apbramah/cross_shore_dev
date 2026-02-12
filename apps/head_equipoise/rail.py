@@ -2,68 +2,122 @@ import odrive
 from odrive.utils import dump_errors, request_state
 from odrive.enums import AxisState, ControlMode
 import time
+import struct
 
 POS_TO_METRES = 29.26789093017578 / 2.726
 
-odrv0 = odrive.find_sync()
+class Sled:
+  def __init__(self):
+    self.odrv0 = odrive.find_sync()
+    self.ax = self.odrv0.axis0
 
-odrv0.axis0.controller.config.control_mode = ControlMode.VELOCITY_CONTROL
+  @staticmethod
+  def decode_udp_packet(data: bytes):
+    """Decode a 16-byte control packet into fields."""
+    if len(data) != 16:
+      print("Unexpected length:", len(data))
+      return None
 
-request_state(odrv0.axis0, AxisState.CLOSED_LOOP_CONTROL)
+    if data[0] != 0xDE:
+      print("Invalid header:", data[0])
+      return None
 
-odrv0.axis0.controller.input_vel = -3
+    data_type = data[1]
 
-print("Moving left...")
-while odrv0.axis0.current_state != AxisState.IDLE:
-  pass
-print("Done")
+    if data_type == 0xFD:
+      zoom, focus, iris, yaw, pitch, roll, _ = struct.unpack(">6h2s", data[2:16])
+      return {
+        "zoom": zoom,
+        "focus": focus,
+        "iris": iris,
+        "yaw": yaw,
+        "pitch": pitch,
+        "roll": roll,
+      }
+    elif data_type == 0xF3:
+      pitch, roll, yaw, zoom, focus, iris, _ = struct.unpack("<6H2s", data[2:16])
+      return {
+        "zoom": zoom,
+        "focus": focus,
+        "iris": iris,
+        "yaw": yaw,
+        "pitch": pitch,
+        "roll": roll,
+      }
 
-print(odrv0.axis0.pos_estimate)
+  def calibrate(self):
+    self.ax.controller.config.control_mode = ControlMode.VELOCITY_CONTROL
 
-dump_errors(odrv0, clear = True)
+    request_state(self.ax, AxisState.CLOSED_LOOP_CONTROL)
 
-odrv0.axis0.pos_estimate = 0
+    self.ax.controller.input_vel = -3
 
-request_state(odrv0.axis0, AxisState.CLOSED_LOOP_CONTROL)
+    print("Moving left...")
+    while self.ax.current_state != AxisState.IDLE:
+      pass
+    print("Done")
 
-odrv0.axis0.controller.input_vel = 3
+    print(self.ax.pos_estimate)
 
-print("Moving right...")
-while odrv0.axis0.current_state != AxisState.IDLE:
-  pass
-print("Done")
+    dump_errors(self.odrv0, clear = True)
 
-print(odrv0.axis0.pos_estimate)
+    self.ax.pos_estimate = 0
 
-dump_errors(odrv0, clear = True)
+    request_state(self.ax, AxisState.CLOSED_LOOP_CONTROL)
 
-# 29.26789093017578 is the number we expect which is 2.726m
+    self.ax.controller.input_vel = 3
 
-pos_m = odrv0.axis0.pos_estimate / POS_TO_METRES
-pos_halfway = pos_m / 2
+    print("Moving right...")
+    while self.ax.current_state != AxisState.IDLE:
+      pass
+    print("Done")
 
-print("Length:", pos_m)
-print("Halfway:", pos_halfway)
+    print(self.ax.pos_estimate)
 
-odrv0.axis0.controller.config.control_mode = ControlMode.POSITION_CONTROL
-request_state(odrv0.axis0, AxisState.CLOSED_LOOP_CONTROL)
+    dump_errors(self.odrv0, clear = True)
 
-odrv0.axis0.controller.config.vel_limit = 3
-odrv0.axis0.controller.input_pos = pos_halfway * POS_TO_METRES
+    # 29.26789093017578 is the number we expect which is 2.726m
 
-print("Centering...")
-while abs(odrv0.axis0.pos_estimate - pos_halfway * POS_TO_METRES) > 0.01 * POS_TO_METRES:
-  pass
-print("Done")
+    pos_m = self.ax.pos_estimate / POS_TO_METRES
+    pos_halfway = pos_m / 2
 
-dump_errors(odrv0)
+    print("Length:", pos_m)
+    print("Halfway:", pos_halfway)
 
-print("Yoyo mode")
+    self.ax.controller.config.control_mode = ControlMode.POSITION_CONTROL
+    request_state(self.ax, AxisState.CLOSED_LOOP_CONTROL)
 
-odrv0.axis0.controller.config.control_mode = ControlMode.VELOCITY_CONTROL
-while 1:
-  odrv0.axis0.controller.input_vel = -1
-  time.sleep(1)
-  odrv0.axis0.controller.input_vel = 1
-  time.sleep(1)
+    self.ax.controller.config.vel_limit = 3
+    self.ax.controller.input_pos = pos_halfway * POS_TO_METRES
 
+    print("Centering...")
+    while abs(self.ax.pos_estimate - pos_halfway * POS_TO_METRES) > 0.01 * POS_TO_METRES:
+      pass
+    print("Done")
+
+    dump_errors(self.odrv0)
+
+    self.ax.controller.config.control_mode = ControlMode.VELOCITY_CONTROL
+    self.ax.controller.config.vel_limit = 20
+    self.ax.controller.input_vel = 0
+
+  def set_velocity(self, input_vel):
+    self.ax.controller.input_vel = input_vel
+    dump_errors(self.odrv0, clear = True)
+    request_state(self.ax, AxisState.CLOSED_LOOP_CONTROL)
+    self.ax.controller.config.control_mode = ControlMode.VELOCITY_CONTROL
+    self.ax.controller.config.vel_limit = 20
+
+if __name__ == "__main__":
+  print("Calibrate...")
+
+  sled = Sled()
+  sled.calibrate()
+
+  print("Yoyo...")
+
+  while 1:
+    sled.set_velocity(-1)
+    time.sleep(1)
+    sled.set_velocity(1)
+    time.sleep(1)

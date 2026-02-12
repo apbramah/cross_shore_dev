@@ -12,6 +12,11 @@ import os
 import base64
 import websockets
 
+from rail import Sled
+
+sled = Sled()
+sled.calibrate()
+
 try:
     import serial
     import serial.tools.list_ports
@@ -610,7 +615,13 @@ async def on_reliable_message(data):
         print(f"Error handling SET_MODE over reliable channel: {e}")
 
 async def on_unreliable_message(data):
-    print(data)
+    # print(data)
+    fields = Sled.decode_udp_packet(data)
+    if fields:
+        print(fields["yaw"])
+        # This is crap, but it'll do for now.
+        vel = (fields["yaw"] / 512) * 20 
+        sled.set_velocity(vel)
 
 async def websocket_client(ws_connection, server_url=None):
     """Handle WebSocket client logic with an upgraded connection"""
