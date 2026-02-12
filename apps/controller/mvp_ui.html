@@ -1,0 +1,378 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Hydravision MVP UI (Axis Mapper)</title>
+  <style>
+    body { font-family: sans-serif; margin: 16px; max-width: 1100px; }
+    .row { display:flex; gap:12px; align-items:center; margin: 10px 0; flex-wrap: wrap; }
+    select, input, button { padding: 6px; }
+    button { cursor: pointer; }
+    .status { padding: 10px; background: #f3f3f3; border-radius: 10px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    .card { padding: 12px; border: 1px solid #ddd; border-radius: 12px; margin: 12px 0; }
+    .grid { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+    .axes-grid { display:grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+    @media (max-width: 900px) { .axes-grid { grid-template-columns: repeat(2, 1fr); } }
+    .axis { padding: 8px; background: #fafafa; border: 1px solid #e5e5e5; border-radius: 10px; }
+    .axis strong { display:block; margin-bottom: 4px; }
+    .pill { display:inline-block; padding: 2px 8px; border-radius: 999px; background:#e9e9e9; }
+    .pill.on { background:#dff3df; }
+    .warn { color: #b00020; }
+    .ok { color: #0a6; }
+    .small { font-size: 12px; opacity: 0.9; }
+    .mapping-table { border-collapse: collapse; width: 100%; }
+    .mapping-table th, .mapping-table td { border-bottom: 1px solid #eee; padding: 8px; text-align: left; }
+    .mapping-table th { background: #fafafa; }
+  </style>
+</head>
+<body>
+  <h2>Hydravision MVP (Browser Gamepad → Pi WebSocket → UDP)</h2>
+
+  <div class="row">
+    <label>Pi WebSocket URL:</label>
+    <input id="wsurl" size="38" value="ws://127.0.0.1:8765">
+    <button id="connect">Connect</button>
+    <span class="pill" id="wsPill">WS: disconnected</span>
+  </div>
+
+  <div class="row">
+    <label>Selected HEAD:</label>
+    <select id="heads"></select>
+  </div>
+
+  <div class="row">
+    <label><input type="checkbox" id="invYaw"> Invert Pan</label>
+    <label><input type="checkbox" id="invPitch"> Invert Tilt</label>
+    <label><input type="checkbox" id="invRoll"> Invert Roll</label>
+  </div>
+
+  <div class="row">
+    <label>Speed:</label>
+    <input type="range" id="speed" min="0.2" max="2.0" value="1.0" step="0.05">
+    <span id="speedVal" class="mono">1.00</span>
+
+    <label style="margin-left:20px;">Zoom gain:</label>
+    <input type="range" id="zoomGain" min="10" max="150" value="60" step="1">
+    <span id="zoomGainVal" class="mono">60</span>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h3 style="margin-top:0;">Gamepad</h3>
+      <div class="status">
+        <div><b>Status:</b> <span id="gpStatus" class="mono">not connected</span></div>
+        <div><b>Last named axes:</b> <span id="namedAxes" class="mono">-</span></div>
+      </div>
+
+      <h4>Raw axes</h4>
+      <div class="axes-grid" id="axesGrid"></div>
+      <div class="small">Tip: move one control at a time during mapping.</div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0;">Axis Mapper (auto-detect)</h3>
+      <div class="row">
+        <span class="pill on" id="mapperPill">Mapper: ON</span>
+        <button id="toggleMapper">Turn mapper OFF</button>
+        <button id="resetMap">Reset mapping</button>
+      </div>
+
+      <div class="status">
+        <div><b>Detected axis:</b> <span id="detected" class="mono">-</span></div>
+        <div class="small">“Detected” means: axis index that moved most in the last moment.</div>
+      </div>
+
+      <h4>Current mapping</h4>
+      <table class="mapping-table">
+        <thead>
+          <tr><th>Named axis</th><th>Raw index</th><th>Assign</th></tr>
+        </thead>
+        <tbody id="mapTableBody"></tbody>
+      </table>
+
+      <div class="small">
+        Your target mapping is:
+        <span class="mono">X=Pan, Y=Tilt, Z=Roll, Xrotate=Focus, Yrotate=Iris, Zrotate=Zoom</span>.
+      </div>
+
+      <div class="row">
+        <span id="mapHealth" class="mono"></span>
+      </div>
+    </div>
+  </div>
+
+<script>
+let ws = null;
+let state = { heads: [], selected: 0 };
+
+const MAP_KEY = "hydra_axis_map_v1";
+const DEFAULT_MAP = { X: 0, Y: 1, Z: 2, Xrotate: 3, Yrotate: 4, Zrotate: 5 };
+
+let axisMap = loadMap();
+let mapperEnabled = true;
+
+let lastAxes = [];
+let lastSendMs = 0;
+
+let detectedAxis = null;
+let detectedDelta = 0;
+
+function $(id){ return document.getElementById(id); }
+
+function setWsPill(text, ok){
+  const p = $("wsPill");
+  p.textContent = "WS: " + text;
+  p.classList.toggle("on", !!ok);
+}
+function setGpStatus(text){ $("gpStatus").textContent = text; }
+
+function send(obj){
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
+}
+
+function normDeadzone(v, dz=0.03){
+  if (Math.abs(v) < dz) return 0;
+  return v;
+}
+
+function loadMap(){
+  try {
+    const raw = localStorage.getItem(MAP_KEY);
+    if (!raw) return { ...DEFAULT_MAP };
+    const parsed = JSON.parse(raw);
+    return { ...DEFAULT_MAP, ...parsed };
+  } catch {
+    return { ...DEFAULT_MAP };
+  }
+}
+function saveMap(){
+  localStorage.setItem(MAP_KEY, JSON.stringify(axisMap));
+}
+
+function resetMap(){
+  axisMap = { ...DEFAULT_MAP };
+  saveMap();
+  renderMapTable();
+}
+
+function mappingHealth(){
+  // check duplicates / out-of-range
+  const vals = Object.values(axisMap);
+  const uniq = new Set(vals);
+  const dup = uniq.size !== vals.length;
+
+  const bad = vals.some(v => !Number.isInteger(v) || v < 0 || v > 31);
+  if (bad) return { ok:false, text:"Mapping has invalid index." };
+  if (dup) return { ok:false, text:"Mapping has duplicates (two names using same raw axis)." };
+  return { ok:true, text:"Mapping looks OK." };
+}
+
+function renderMapTable(){
+  const body = $("mapTableBody");
+  body.innerHTML = "";
+  const names = ["X","Y","Z","Xrotate","Yrotate","Zrotate"];
+  for (const name of names){
+    const tr = document.createElement("tr");
+
+    const td1 = document.createElement("td");
+    td1.textContent = name;
+    tr.appendChild(td1);
+
+    const td2 = document.createElement("td");
+    td2.innerHTML = `<span class="mono">${axisMap[name]}</span>`;
+    tr.appendChild(td2);
+
+    const td3 = document.createElement("td");
+    const btn = document.createElement("button");
+    btn.textContent = "Assign detected → " + name;
+    btn.disabled = (detectedAxis === null);
+    btn.onclick = () => {
+      if (detectedAxis === null) return;
+      axisMap[name] = detectedAxis;
+      saveMap();
+      renderMapTable();
+    };
+    td3.appendChild(btn);
+    tr.appendChild(td3);
+
+    body.appendChild(tr);
+  }
+
+  const mh = mappingHealth();
+  $("mapHealth").textContent = mh.text;
+  $("mapHealth").className = "mono " + (mh.ok ? "ok" : "warn");
+}
+
+function updateDetectedUI(){
+  if (detectedAxis === null){
+    $("detected").textContent = "-";
+  } else {
+    $("detected").textContent = `axis[${detectedAxis}]  Δ=${detectedDelta.toFixed(3)}`;
+  }
+  renderMapTable();
+}
+
+function renderAxesGrid(rawAxes){
+  const grid = $("axesGrid");
+  grid.innerHTML = "";
+  for (let i=0; i<rawAxes.length; i++){
+    const div = document.createElement("div");
+    div.className = "axis";
+    const val = rawAxes[i] ?? 0;
+    div.innerHTML = `<strong class="mono">axis[${i}]</strong><span class="mono">${val.toFixed(3)}</span>`;
+    grid.appendChild(div);
+  }
+}
+
+function readNamedAxes(gp){
+  const a = gp.axes || [];
+  const get = (idx) => normDeadzone(a[idx] ?? 0);
+
+  return {
+    X:        get(axisMap.X),
+    Y:        get(axisMap.Y),
+    Z:        get(axisMap.Z),
+    Xrotate:  get(axisMap.Xrotate),
+    Yrotate:  get(axisMap.Yrotate),
+    Zrotate:  get(axisMap.Zrotate),
+  };
+}
+
+// --- UI handlers ---
+$("toggleMapper").onclick = () => {
+  mapperEnabled = !mapperEnabled;
+  $("mapperPill").textContent = "Mapper: " + (mapperEnabled ? "ON" : "OFF");
+  $("mapperPill").classList.toggle("on", mapperEnabled);
+  $("toggleMapper").textContent = mapperEnabled ? "Turn mapper OFF" : "Turn mapper ON";
+};
+
+$("resetMap").onclick = () => resetMap();
+
+$("connect").onclick = () => {
+  const url = $("wsurl").value.trim();
+  ws = new WebSocket(url);
+  setWsPill("connecting…", false);
+
+  ws.onopen = () => setWsPill("connected", true);
+  ws.onclose = () => setWsPill("closed", false);
+  ws.onerror = () => setWsPill("error", false);
+
+  ws.onmessage = (ev) => {
+    try {
+      const msg = JSON.parse(ev.data);
+      if (msg.type === "STATE") {
+        state.heads = msg.heads || [];
+        state.selected = msg.selected || 0;
+        refreshHeadsUI();
+
+        $("invYaw").checked = !!msg.invert?.yaw;
+        $("invPitch").checked = !!msg.invert?.pitch;
+        $("invRoll").checked = !!msg.invert?.roll;
+
+        $("speed").value = msg.speed ?? 1.0;
+        $("speedVal").textContent = (msg.speed ?? 1.0).toFixed(2);
+
+        $("zoomGain").value = msg.zoom_gain ?? 60;
+        $("zoomGainVal").textContent = String(msg.zoom_gain ?? 60);
+      }
+      if (msg.type === "SELECTED") {
+        state.selected = msg.selected;
+        $("heads").value = String(state.selected);
+      }
+    } catch {}
+  };
+};
+
+function refreshHeadsUI(){
+  const sel = $("heads");
+  sel.innerHTML = "";
+  state.heads.forEach((h, i) => {
+    const opt = document.createElement("option");
+    opt.value = String(i);
+    opt.textContent = `${h.name} (${h.ip}:${h.port})`;
+    sel.appendChild(opt);
+  });
+  sel.value = String(state.selected ?? 0);
+}
+$("heads").onchange = (e) => {
+  send({type:"SELECT_HEAD", index: parseInt(e.target.value,10)});
+};
+
+function pushInvert(){
+  send({type:"SET_INVERT", invert:{
+    yaw: $("invYaw").checked,
+    pitch: $("invPitch").checked,
+    roll: $("invRoll").checked,
+  }});
+}
+$("invYaw").onchange = pushInvert;
+$("invPitch").onchange = pushInvert;
+$("invRoll").onchange = pushInvert;
+
+$("speed").oninput = (e) => {
+  const v = parseFloat(e.target.value);
+  $("speedVal").textContent = v.toFixed(2);
+  send({type:"SET_SPEED", speed: v});
+};
+$("zoomGain").oninput = (e) => {
+  const v = parseFloat(e.target.value);
+  $("zoomGainVal").textContent = String(v);
+  send({type:"SET_ZOOM_GAIN", zoom_gain: v});
+};
+
+// --- Main loop ---
+function tick(){
+  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  const gp = pads && pads[0];
+
+  if (!gp) {
+    setGpStatus("not connected");
+    requestAnimationFrame(tick);
+    return;
+  }
+
+  setGpStatus(`${gp.id} | axes=${gp.axes.length} buttons=${gp.buttons.length}`);
+
+  const raw = (gp.axes || []).map(v => +v || 0);
+  renderAxesGrid(raw);
+
+  // auto-detect moved axis
+  if (mapperEnabled) {
+    if (!lastAxes.length) lastAxes = raw.slice();
+    let bestI = null;
+    let bestD = 0;
+    for (let i=0; i<raw.length; i++){
+      const d = Math.abs(raw[i] - (lastAxes[i] ?? 0));
+      if (d > bestD) { bestD = d; bestI = i; }
+    }
+    // threshold to avoid noise
+    if (bestI !== null && bestD > 0.08) {
+      detectedAxis = bestI;
+      detectedDelta = bestD;
+      updateDetectedUI();
+    }
+    lastAxes = raw.slice();
+  }
+
+  // named axes using mapping
+  const named = readNamedAxes(gp);
+  $("namedAxes").textContent = JSON.stringify(named);
+
+  // send at ~20Hz
+  const now = performance.now();
+  if (!lastSendMs || (now - lastSendMs) > 50) {
+    send({type:"GAMEPAD", axes: named});
+    lastSendMs = now;
+  }
+
+  requestAnimationFrame(tick);
+}
+
+renderMapTable();
+tick();
+</script>
+</body>
+</html>
+

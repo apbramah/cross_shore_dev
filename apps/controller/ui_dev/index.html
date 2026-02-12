@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Gimbal Control Surface</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- OPERATOR MODE -->
+    <div id="operatorMode" class="screen">
+        <!-- TOP STATUS BAR -->
+        <div class="status-bar">
+            <div class="status-group">
+                <div class="connection-indicator" id="connectionIndicator">
+                    <span class="status-dot" id="statusDot"></span>
+                    <span class="status-label" id="statusLabel">DISCONNECTED</span>
+                </div>
+            </div>
+            <div class="status-group">
+                <div class="head-info" id="headInfo">
+                    <span class="head-name" id="headName">NO HEAD</span>
+                    <span class="head-ip" id="headIP">—</span>
+                </div>
+            </div>
+            <div class="status-group">
+                <div class="mode-indicator">
+                    <span class="mode-label">JOYSTICK</span>
+                </div>
+            </div>
+            <div class="status-group">
+                <div class="network-info" id="networkInfo">
+                    <span class="last-packet">—</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- MAIN CONTROL AREA -->
+        <div class="main-area">
+            <!-- LEFT PANEL: GIMBAL -->
+            <div class="panel gimbal-panel">
+                <div class="panel-header">GIMBAL</div>
+                <div class="gimbal-controls">
+                    <!-- PAN -->
+                    <div class="axis-control">
+                        <div class="axis-header">
+                            <span class="axis-label">PAN</span>
+                            <button class="invert-toggle" id="invertYaw" data-axis="yaw">
+                                <span class="toggle-icon">⟲</span>
+                            </button>
+                        </div>
+                        <div class="axis-gauge">
+                            <div class="gauge-track">
+                                <div class="gauge-fill" id="panFill"></div>
+                                <div class="gauge-center"></div>
+                            </div>
+                            <span class="axis-value" id="panValue">0.0</span>
+                        </div>
+                    </div>
+
+                    <!-- TILT -->
+                    <div class="axis-control">
+                        <div class="axis-header">
+                            <span class="axis-label">TILT</span>
+                            <button class="invert-toggle" id="invertPitch" data-axis="pitch">
+                                <span class="toggle-icon">⟲</span>
+                            </button>
+                        </div>
+                        <div class="axis-gauge">
+                            <div class="gauge-track">
+                                <div class="gauge-fill" id="tiltFill"></div>
+                                <div class="gauge-center"></div>
+                            </div>
+                            <span class="axis-value" id="tiltValue">0.0</span>
+                        </div>
+                    </div>
+
+                    <!-- ROLL -->
+                    <div class="axis-control">
+                        <div class="axis-header">
+                            <span class="axis-label">ROLL</span>
+                            <button class="invert-toggle" id="invertRoll" data-axis="roll">
+                                <span class="toggle-icon">⟲</span>
+                            </button>
+                        </div>
+                        <div class="axis-gauge">
+                            <div class="gauge-track">
+                                <div class="gauge-fill" id="rollFill"></div>
+                                <div class="gauge-center"></div>
+                            </div>
+                            <span class="axis-value" id="rollValue">0.0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RIGHT PANEL: LENS/CAMERA -->
+            <div class="panel lens-panel">
+                <div class="panel-header">LENS</div>
+                <div class="lens-controls">
+                    <!-- ZOOM -->
+                    <div class="lens-control zoom-control">
+                        <span class="lens-label">ZOOM</span>
+                        <div class="lens-gauge">
+                            <div class="lens-track">
+                                <div class="lens-fill" id="zoomFill"></div>
+                            </div>
+                            <span class="lens-value" id="zoomValue">0.0</span>
+                        </div>
+                    </div>
+
+                    <!-- FOCUS -->
+                    <div class="lens-control">
+                        <span class="lens-label">FOCUS</span>
+                        <div class="lens-gauge">
+                            <div class="lens-track">
+                                <div class="lens-fill" id="focusFill"></div>
+                            </div>
+                            <span class="lens-value" id="focusValue">0.0</span>
+                        </div>
+                    </div>
+
+                    <!-- IRIS -->
+                    <div class="lens-control">
+                        <span class="lens-label">IRIS</span>
+                        <div class="lens-gauge">
+                            <div class="lens-track">
+                                <div class="lens-fill" id="irisFill"></div>
+                            </div>
+                            <span class="lens-value" id="irisValue">0.0</span>
+                        </div>
+                    </div>
+
+                    <!-- PARAMETERS -->
+                    <div class="parameter-row">
+                        <div class="parameter">
+                            <span class="param-label">SPEED</span>
+                            <span class="param-value" id="speedDisplay">1.0×</span>
+                        </div>
+                        <div class="parameter">
+                            <span class="param-label">ZOOM GAIN</span>
+                            <span class="param-value" id="zoomGainDisplay">60</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- BOTTOM ENCODER STRIP -->
+        <div class="encoder-strip">
+            <!-- ENCODER 1: HEAD SELECTOR -->
+            <div class="encoder-zone" id="encoder1" data-encoder="1">
+                <div class="encoder-content">
+                    <div class="encoder-label">HEAD</div>
+                    <div class="encoder-value" id="encoder1Value">
+                        <div class="head-selector">
+                            <div class="head-list" id="headList">
+                                <div class="head-item">NO HEADS</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="encoder-hint">ROTATE: CYCLE • PUSH: SELECT</div>
+                </div>
+            </div>
+
+            <!-- ENCODER 2: SPEED -->
+            <div class="encoder-zone" id="encoder2" data-encoder="2">
+                <div class="encoder-content">
+                    <div class="encoder-label">SPEED</div>
+                    <div class="encoder-value" id="encoder2Value">
+                        <div class="slider-display">
+                            <div class="slider-bar">
+                                <div class="slider-fill" id="speedSlider"></div>
+                            </div>
+                            <span class="slider-text">1.0×</span>
+                        </div>
+                    </div>
+                    <div class="encoder-hint">0.2 – 2.0</div>
+                </div>
+            </div>
+
+            <!-- ENCODER 3: ZOOM GAIN -->
+            <div class="encoder-zone" id="encoder3" data-encoder="3">
+                <div class="encoder-content">
+                    <div class="encoder-label">ZOOM GAIN</div>
+                    <div class="encoder-value" id="encoder3Value">
+                        <div class="slider-display">
+                            <div class="slider-bar">
+                                <div class="slider-fill" id="zoomGainSlider"></div>
+                            </div>
+                            <span class="slider-text">60</span>
+                        </div>
+                    </div>
+                    <div class="encoder-hint">10 – 150</div>
+                </div>
+            </div>
+
+            <!-- ENCODER 4: MENU/NAV -->
+            <div class="encoder-zone" id="encoder4" data-encoder="4">
+                <div class="encoder-content">
+                    <div class="encoder-label">MENU</div>
+                    <div class="encoder-value" id="encoder4Value">
+                        <div class="menu-icon">☰</div>
+                    </div>
+                    <div class="encoder-hint">ROTATE: NAV • PUSH: MENU</div>
+                </div>
+            </div>
+
+            <!-- ENCODER 5: CONFIRM/BACK -->
+            <div class="encoder-zone" id="encoder5" data-encoder="5">
+                <div class="encoder-content">
+                    <div class="encoder-label">CONFIRM</div>
+                    <div class="encoder-value" id="encoder5Value">
+                        <div class="confirm-icon">✓</div>
+                    </div>
+                    <div class="encoder-hint">PUSH: OK • HOLD: ENG</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CONNECTION SETTINGS OVERLAY -->
+        <div class="overlay" id="connectionOverlay">
+            <div class="overlay-panel">
+                <h3>CONNECTION</h3>
+                <div class="form-group">
+                    <label>WEBSOCKET URL</label>
+                    <input type="text" id="wsUrl" value="ws://127.0.0.1:8765" />
+                </div>
+                <div class="button-group">
+                    <button id="connectBtn" class="btn btn-primary">CONNECT</button>
+                    <button id="disconnectBtn" class="btn btn-secondary">DISCONNECT</button>
+                </div>
+                <button id="closeOverlay" class="btn btn-tertiary">CLOSE</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ENGINEERING MODE -->
+    <div id="engineeringMode" class="screen hidden">
+        <div class="eng-header">
+            <h1>ENGINEERING MODE</h1>
+            <p>AXIS MAPPING & CALIBRATION</p>
+        </div>
+
+        <div class="eng-content">
+            <!-- LEFT: RAW AXES -->
+            <div class="eng-panel">
+                <h2>RAW GAMEPAD AXES</h2>
+                <div class="raw-axes" id="rawAxes">
+                    <!-- Dynamically populated -->
+                </div>
+                <div class="auto-detect">
+                    <span class="detect-label">LAST MOVED:</span>
+                    <span class="detect-value" id="lastMovedAxis">—</span>
+                </div>
+            </div>
+
+            <!-- RIGHT: MAPPING -->
+            <div class="eng-panel">
+                <h2>AXIS ASSIGNMENTS</h2>
+                <div class="mapping-list" id="mappingList">
+                    <div class="mapping-row" data-target="X">
+                        <span class="mapping-label">X (PAN)</span>
+                        <span class="mapping-arrow">←</span>
+                        <span class="mapping-source" id="mapX">AXIS 0</span>
+                    </div>
+                    <div class="mapping-row" data-target="Y">
+                        <span class="mapping-label">Y (TILT)</span>
+                        <span class="mapping-arrow">←</span>
+                        <span class="mapping-source" id="mapY">AXIS 1</span>
+                    </div>
+                    <div class="mapping-row" data-target="Z">
+                        <span class="mapping-label">Z (ROLL)</span>
+                        <span class="mapping-arrow">←</span>
+                        <span class="mapping-source" id="mapZ">AXIS 2</span>
+                    </div>
+                    <div class="mapping-row" data-target="Xrotate">
+                        <span class="mapping-label">Xrotate (FOCUS)</span>
+                        <span class="mapping-arrow">←</span>
+                        <span class="mapping-source" id="mapXrotate">AXIS 3</span>
+                    </div>
+                    <div class="mapping-row" data-target="Yrotate">
+                        <span class="mapping-label">Yrotate (IRIS)</span>
+                        <span class="mapping-arrow">←</span>
+                        <span class="mapping-source" id="mapYrotate">AXIS 4</span>
+                    </div>
+                    <div class="mapping-row" data-target="Zrotate">
+                        <span class="mapping-label">Zrotate (ZOOM)</span>
+                        <span class="mapping-arrow">←</span>
+                        <span class="mapping-source" id="mapZrotate">AXIS 5</span>
+                    </div>
+                </div>
+
+                <div class="eng-instructions">
+                    <p><strong>ENCODER 4:</strong> Rotate to select target axis</p>
+                    <p><strong>ENCODER 5:</strong> Push to assign detected axis</p>
+                    <p><strong>ENCODER 1:</strong> Scroll raw axes list</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="eng-actions">
+            <button id="resetMapping" class="btn btn-warning">RESET TO DEFAULT</button>
+            <button id="saveMapping" class="btn btn-primary">SAVE MAPPING</button>
+            <button id="exitEngineering" class="btn btn-secondary">RETURN TO OPERATOR UI</button>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
