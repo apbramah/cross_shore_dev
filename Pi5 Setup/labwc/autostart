@@ -1,7 +1,21 @@
 #!/bin/sh
 # Labwc autostart for HydraVision kiosk
+
+LOG="${HOME}/.cache/hydravision-kiosk.log"
+mkdir -p "$(dirname "$LOG")"
+
 xset s off
 xset -dpms
 xset s noblank
-chromium-browser --kiosk --start-fullscreen --disable-infobars --disable-session-crashed-bubble --disable-features=TranslateUI --noerrdialogs --autoplay-policy=no-user-gesture-required --allow-file-access-from-files file:///home/admin/Dev/cross_shore_dev/apps/controller/mvp_ui.html
+
+CHROME_BIN="$(command -v chromium-browser || command -v chromium || true)"
+if [ -z "$CHROME_BIN" ]; then
+  echo "Chromium not found in PATH." >>"$LOG"
+  exit 1
+fi
+
+"$CHROME_BIN" --kiosk --start-fullscreen --disable-infobars --disable-session-crashed-bubble \
+  --disable-features=TranslateUI --noerrdialogs --autoplay-policy=no-user-gesture-required \
+  --allow-file-access-from-files \
+  file:///home/admin/Dev/cross_shore_dev/apps/controller/mvp_ui.html >>"$LOG" 2>&1
 

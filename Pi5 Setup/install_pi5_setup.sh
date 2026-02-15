@@ -30,6 +30,17 @@ else
   echo "plymouth-set-default-theme not found, skipping Plymouth initramfs rebuild."
 fi
 
+if [ -f /etc/plymouth/plymouthd.conf ]; then
+  cat >/etc/plymouth/plymouthd.conf <<EOF
+[Daemon]
+Theme=$THEME_NAME
+EOF
+fi
+
+if command -v update-initramfs >/dev/null 2>&1; then
+  update-initramfs -u
+fi
+
 echo "[5/6] Installing systemd service..."
 cp -a "$SCRIPT_DIR/systemd/mvp_bridge.service" "$SYSTEMD_DIR/"
 systemctl daemon-reload
@@ -40,6 +51,7 @@ install -d "$AUTOSTART_DIR"
 cp -a "$SCRIPT_DIR/autostart/hydravision-kiosk.desktop" "$AUTOSTART_DIR/"
 install -d "$LABWC_DIR"
 cp -a "$SCRIPT_DIR/labwc/autostart" "$LABWC_DIR/autostart"
+chmod +x "$LABWC_DIR/autostart"
 
 echo "Done. Reboot recommended."
 

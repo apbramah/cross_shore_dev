@@ -33,6 +33,7 @@ sudo reboot
 ## Notes
 - The splash text is rendered by Plymouth itself (no external image file needed).
 - On Wayland (labwc), the kiosk is launched from `~/.config/labwc/autostart`.
+- Labwc kiosk log: `~/.cache/hydravision-kiosk.log`
 - The installer backs up `/boot/firmware/cmdline.txt` and `/boot/firmware/config.txt`
   to `/boot/firmware/backup_hydravision_YYYYMMDD_HHMMSS/`.
 - To disable kiosk/autostart, remove the desktop file or disable the service:
