@@ -5,10 +5,10 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=pi
-Group=pi
-WorkingDirectory=/home/pi/cross_shore_dev/apps/controller
-ExecStart=/usr/bin/python3 /home/pi/cross_shore_dev/apps/controller/mvp_bridge.py
+User=admin
+Group=admin
+WorkingDirectory=/home/admin/Dev/cross_shore_dev/apps/controller
+ExecStart=/usr/bin/python3 /home/admin/Dev/cross_shore_dev/apps/controller/mvp_bridge.py
 Restart=on-failure
 RestartSec=2
 Environment=PYTHONUNBUFFERED=1

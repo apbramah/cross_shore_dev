@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 THEME_NAME="hydravision"
 PLYMOUTH_DIR="/usr/share/plymouth/themes/${THEME_NAME}"
-AUTOSTART_DIR="/home/pi/.config/autostart"
+AUTOSTART_DIR="/home/admin/.config/autostart"
 SYSTEMD_DIR="/etc/systemd/system"
 
 echo "[1/5] Installing Plymouth theme..."

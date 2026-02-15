@@ -7,9 +7,9 @@ This folder contains the scripts and configs to:
 
 ## Assumptions
 - Raspberry Pi OS Desktop (64-bit) on Pi 5
-- Project checked out at `/home/pi/cross_shore_dev`
-- UI file is `/home/pi/cross_shore_dev/apps/controller/mvp_ui.html`
-- Bridge file is `/home/pi/cross_shore_dev/apps/controller/mvp_bridge.py`
+- Project checked out at `/home/admin/Dev/cross_shore_dev`
+- UI file is `/home/admin/Dev/cross_shore_dev/apps/controller/mvp_ui.html`
+- Bridge file is `/home/admin/Dev/cross_shore_dev/apps/controller/mvp_bridge.py`
 
 If your paths differ, edit:
 - `Pi5 Setup/systemd/mvp_bridge.service` (ExecStart and WorkingDirectory)
