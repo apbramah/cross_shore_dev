@@ -1,0 +1,35 @@
+// HydraVision Plymouth theme with slow fade-in text.
+
+Window.SetBackgroundTopColor(0.16, 0.16, 0.16);
+Window.SetBackgroundBottomColor(0.16, 0.16, 0.16);
+
+// Render text directly to avoid external assets.
+text_image = Image.Text("HydraVision", 0.82, 0.82, 0.82);
+text_sprite = Sprite(text_image);
+
+text_sprite.SetX((Window.GetWidth() - text_image.GetWidth()) / 2);
+text_sprite.SetY((Window.GetHeight() - text_image.GetHeight()) / 2);
+text_sprite.SetOpacity(0.0);
+
+start_time = 0.0;
+fade_duration = 4.0;
+
+function fade_in()
+{
+  if (start_time == 0.0)
+    start_time = Plymouth.GetTime();
+
+  elapsed = Plymouth.GetTime() - start_time;
+  opacity = elapsed / fade_duration;
+
+  if (opacity > 1.0)
+    opacity = 1.0;
+
+  text_sprite.SetOpacity(opacity);
+
+  if (opacity < 1.0)
+    Plymouth.SetRefreshFunction(fade_in);
+}
+
+fade_in();
+

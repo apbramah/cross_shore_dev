@@ -1,0 +1,18 @@
+[Unit]
+Description=HydraVision MVP Bridge (WebSocket to UDP)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/cross_shore_dev/apps/controller
+ExecStart=/usr/bin/python3 /home/pi/cross_shore_dev/apps/controller/mvp_bridge.py
+Restart=on-failure
+RestartSec=2
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
+

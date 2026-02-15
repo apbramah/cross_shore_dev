@@ -1,0 +1,9 @@
+[Plymouth Theme]
+Name=HydraVision
+Description=HydraVision minimal text splash
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/hydravision
+ScriptFile=/usr/share/plymouth/themes/hydravision/hydravision.script
+
