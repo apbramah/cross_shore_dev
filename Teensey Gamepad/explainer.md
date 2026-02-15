@@ -52,7 +52,7 @@ What the patch does:
 - Sets `JOYSTICK_SIZE` to **14 bytes** in the `USB_SERIAL_HID` configuration.
 - Inserts a **custom report descriptor** for:
   - 15 buttons (bits, with 1 padding bit)
-  - 6 axes (16-bit each): X, Y, Z, Rx, Ry, Rz
+  - 6 axes (signed 16-bit each, -32768..32767): X, Y, Z, Rx, Ry, Rz
 - Ensures the `manual_mode` static exists in `usb_joystick.h` for non-64 sizes
   (so the core compiles cleanly).
 
@@ -64,7 +64,7 @@ Patch locations (external to repo):
 - `...\usb_joystick.h`  
   Ensures `manual_mode` exists outside the `JOYSTICK_SIZE == 64` guard.
 
-How to apply on a new machine:
+How to apply on a new machine (run from the `Teensey Gamepad` folder; the command must start with `powershell` the executable, not `Get-ExecutionPolicy`):
 ```
 powershell -ExecutionPolicy Bypass -File scripts/patch-teensy-core.ps1
 python -m platformio run -t clean
@@ -96,7 +96,7 @@ Buttons (15 total):
 - Encoder 4: Button 10, 11, 12
 - Encoder 5: Button 13, 14, 15
 
-Axes (16-bit each):
+Axes (signed 16-bit each, rest = 0):
 - X  = JOYSTICK_X
 - Y  = JOYSTICK_Y
 - Z  = JOYSTICK_Z
@@ -119,8 +119,8 @@ File: `src/main.cpp`
 File: `src/main.cpp`
 
 - `analogReadResolution(12)` reads 0–4095.
-- Scaled to 16-bit (0–65535).
-- Per-axis deadband via `kAxisDeadband` (default 250).
+- Scaled to **signed** 16-bit (≈ -32768..32767), centered at raw 2048 → 0.
+- Center deadband (`kAxisCenterDeadband`, default 1000) zeros small values near 0.
 - Report is only sent if the payload changes (prevents idle jitter).
 
 ## Heartbeat LED
@@ -163,6 +163,57 @@ was dirty at build, the version is `-dirty` suffixed. You can view it with:
 ```
 python -m platformio device monitor
 ```
+
+## Signed Axes and Linux/Chromium
+
+The HID report uses **signed 16-bit axes** (Logical Min -32768, Logical Max 32767)
+with rest at 0. This avoids an asymmetric deadband on Raspberry Pi OS Chromium:
+
+- **Cause:** With unsigned 0..65535, Linux evdev and Chromium normalize axes and
+  apply deadzone assuming a centered rest. If the stack assumes the wrong center
+  (e.g. 32767 or 0), one direction gets a large effective deadzone.
+- **Fix:** Signed centered axes (rest = 0, range ±32767) match what the stack
+  expects, so deadzone is symmetric and full range works both ways.
+
+Firmware maps 12-bit analog 0..4095 to int16_t with center at 2048 → 0, applies a
+small center deadband, and packs little-endian int16_t into the report. Report
+size remains 14 bytes (2 button bytes + 6× int16_t).
+
+## Verify on Raspberry Pi OS
+
+After flashing the firmware and re-running the core patch (signed axes), confirm
+behavior on Raspberry Pi OS as follows.
+
+### A) Linux sees symmetric centered axes
+
+```bash
+sudo apt-get update
+sudo apt-get install -y evtest joystick
+evtest
+```
+
+- Select the gamepad device (e.g. "Teensyduino RawHID" or similar).
+- Check **ABS_X** and **ABS_Y** (and other axes): min/max should be roughly
+  -32768 and 32767; **Value** at rest should be near 0.
+- Move the stick: values should reach both negative and positive; no obvious
+  one-sided deadzone.
+
+### B) Chromium Gamepad API
+
+1. Plug in the gamepad and open a site that uses the Gamepad API (or any page).
+2. Open DevTools (F12) → Console.
+3. Paste and run:
+
+```javascript
+const gp = navigator.getGamepads()[0];
+setInterval(() => {
+  const g = navigator.getGamepads()[0];
+  if (g) console.log(g.axes);
+}, 200);
+```
+
+- **Expected:** At rest, `axes` values near 0 (small drift is ok). Full left/right
+  and up/down should reach about -1 and +1. No obvious one-sided deadzone.
 
 ## Notes
 

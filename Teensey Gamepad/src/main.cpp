@@ -44,7 +44,17 @@ constexpr uint32_t kReportIntervalMs = 5;
 constexpr uint32_t kHeartbeatMs = 500;
 constexpr uint32_t kHeartbeatSlowMs = 500;
 constexpr uint32_t kHeartbeatFastMs = 100;
-constexpr uint16_t kAxisDeadband = 250;
+
+// Center deadband in signed 16-bit units. Linux/evdev and Chromium expect axes
+// centered at 0; applying deadband around 0 avoids small noise/jitter.
+constexpr int16_t kAxisCenterDeadband = 0;
+
+// Boot-time calibration settings for joystick axes only (X/Y/Z).
+// We do this because real sticks rarely center exactly at raw=2048 due to
+// hardware tolerances. If center is biased, deadzones (kernel/app) can feel
+// one-sided. Calibrating the raw center makes rest land near 0.
+constexpr uint16_t kJoyCalSamples = 256;
+constexpr uint16_t kJoyCalDelayUs = 200;
 
 // Set to 1 to output a visible test pattern instead of analog inputs.
 constexpr uint8_t kTestPattern = 0;
@@ -75,11 +85,62 @@ uint32_t lastHeartbeatMs = 0;
 bool heartbeatState = false;
 uint32_t lastSendOkMs = 0;
 bool axesInitialized = false;
-uint16_t lastAxes[6] = {};
+int16_t lastAxes[6] = {};
 uint8_t lastReport[JOYSTICK_SIZE] = {};
+uint32_t lastVersionPrintMs = 0;
 
-static inline uint16_t scaleAnalog(uint16_t raw) {
-  return static_cast<uint16_t>((static_cast<uint32_t>(raw) * 65535u) / 4095u);
+// Boot-calibrated raw centers for joystick X/Y/Z only.
+static int32_t g_centerRawX = 2048;
+static int32_t g_centerRawY = 2048;
+static int32_t g_centerRawZ = 2048;
+
+static inline int32_t clampI32(int32_t v, int32_t lo, int32_t hi) {
+  if (v < lo) return lo;
+  if (v > hi) return hi;
+  return v;
+}
+
+// Measure the true analog center for a joystick axis at boot.
+// Assumption: user is not touching the stick during startup.
+static int32_t calibrateCenterRaw(uint8_t pin, uint16_t samples) {
+  int64_t sum = 0;
+  for (uint16_t i = 0; i < samples; ++i) {
+    sum += analogRead(pin);
+    delayMicroseconds(kJoyCalDelayUs);
+  }
+  return static_cast<int32_t>(sum / samples);
+}
+
+// Map centered 12-bit analog delta to signed 16-bit joystick axis [-32768, 32767].
+// Input is expected to be roughly [-2048..+2047] when using 12-bit ADC.
+// We clamp to be safe, then scale.
+static inline int16_t scaleCentered12ToSigned(int32_t centered) {
+  constexpr int32_t kHalf = 2047; // max positive from center (4095-2048)
+  centered = clampI32(centered, -2048, 2047);
+  // Use 32767 on positive side; allow -32768 on negative extreme.
+  int32_t scaled = (centered * 32767) / kHalf;
+  if (centered <= -2048) scaled = -32768;
+  if (scaled < -32768) scaled = -32768;
+  if (scaled > 32767) scaled = 32767;
+  return static_cast<int16_t>(scaled);
+}
+
+// Map 12-bit analog 0..4095 to signed 16-bit joystick axis [-32768, 32767],
+// centered at 0 using a provided raw center (for X/Y/Z boot calibration).
+static inline int16_t scaleAnalogToSignedWithCenter(uint16_t raw, int32_t rawCenter) {
+  int32_t centered = static_cast<int32_t>(raw) - rawCenter;
+  return scaleCentered12ToSigned(centered);
+}
+
+// Original mapping (still used for Rx/Ry/Rz pots/rocker).
+static inline int16_t scaleAnalogToSigned(uint16_t raw) {
+  constexpr int32_t kCenter = 2048;   // 12-bit analog center
+  constexpr int32_t kHalf = 2047;     // max positive from center (4095-2048)
+  int32_t centered = static_cast<int32_t>(raw) - kCenter;
+  int32_t scaled = (centered * 32767) / kHalf;
+  if (scaled < -32768) scaled = -32768;
+  if (scaled > 32767) scaled = 32767;
+  return static_cast<int16_t>(scaled);
 }
 
 static inline uint8_t readEncoderAB(const EncoderState &enc) {
@@ -88,10 +149,10 @@ static inline uint8_t readEncoderAB(const EncoderState &enc) {
   return static_cast<uint8_t>((a << 1) | b);
 }
 
-static inline uint16_t applyDeadband(uint16_t value, uint16_t last, uint16_t deadband) {
-  if (value > static_cast<uint32_t>(last) + deadband) return value;
-  if (value + deadband < last) return value;
-  return last;
+// Zero out small values near center so Linux/Chromium see a clean rest state.
+static inline int16_t applyCenterDeadband(int16_t value) {
+  if (value > -kAxisCenterDeadband && value < kAxisCenterDeadband) return 0;
+  return value;
 }
 
 void pulseButton(uint8_t index) {
@@ -145,56 +206,52 @@ void updateEncoders(uint32_t nowMs) {
 }
 
 void sendReport() {
-  uint16_t x = 0;
-  uint16_t y = 0;
-  uint16_t z = 0;
-  uint16_t rx = 0;
-  uint16_t ry = 0;
-  uint16_t rz = 0;
+  int16_t x = 0;
+  int16_t y = 0;
+  int16_t z = 0;
+  int16_t rx = 0;
+  int16_t ry = 0;
+  int16_t rz = 0;
 
   if (kTestPattern) {
-    uint16_t sweep = static_cast<uint16_t>((millis() * 37u) & 0xFFFFu);
-    x = sweep;
-    y = static_cast<uint16_t>(0xFFFFu - sweep);
-    z = 0x8000u;
-    rx = 0x4000u;
-    ry = 0xC000u;
-    rz = static_cast<uint16_t>((sweep >> 1) | 0x8000u);
+    uint32_t sweep = (millis() * 37u) & 0xFFFFu;
+    int32_t c = static_cast<int32_t>(sweep) - 32768;
+    x = static_cast<int16_t>(c);
+    y = static_cast<int16_t>(32767 - static_cast<int32_t>(sweep));
+    z = 0;
+    rx = static_cast<int16_t>(16384 - 32768);
+    ry = static_cast<int16_t>(-16384);
+    rz = static_cast<int16_t>((sweep >> 1) - 16384);
 
-    // Pulse button 1 in test mode to prove button updates.
     bool pulse = ((millis() / 250u) % 2u) == 0u;
     buttonStates[0] = pulse;
   } else {
-    x = scaleAnalog(analogRead(JOYSTICK_X));
-    y = scaleAnalog(analogRead(JOYSTICK_Y));
-    z = scaleAnalog(analogRead(JOYSTICK_Z));
-    rx = scaleAnalog(analogRead(FOCUS_POT));
-    ry = scaleAnalog(analogRead(IRIS_POT));
-    rz = scaleAnalog(analogRead(ZOOM_ROCKER));
+    // X/Y/Z: use boot-calibrated centers to ensure rest is ~0 on real hardware.
+    x = scaleAnalogToSignedWithCenter(analogRead(JOYSTICK_X), g_centerRawX);
+    y = scaleAnalogToSignedWithCenter(analogRead(JOYSTICK_Y), g_centerRawY);
+    z = scaleAnalogToSignedWithCenter(analogRead(JOYSTICK_Z), g_centerRawZ);
+
+    // Rx/Ry/Rz: leave as original mapping (no auto-centering per your request).
+    rx = scaleAnalogToSigned(analogRead(FOCUS_POT));
+    ry = scaleAnalogToSigned(analogRead(IRIS_POT));
+    rz = scaleAnalogToSigned(analogRead(ZOOM_ROCKER));
+
+    x = applyCenterDeadband(x);
+    y = applyCenterDeadband(y);
+    z = applyCenterDeadband(z);
+    rx = applyCenterDeadband(rx);
+    ry = applyCenterDeadband(ry);
+    rz = applyCenterDeadband(rz);
   }
 
+  lastAxes[0] = x;
+  lastAxes[1] = y;
+  lastAxes[2] = z;
+  lastAxes[3] = rx;
+  lastAxes[4] = ry;
+  lastAxes[5] = rz;
   if (!axesInitialized) {
-    lastAxes[0] = x;
-    lastAxes[1] = y;
-    lastAxes[2] = z;
-    lastAxes[3] = rx;
-    lastAxes[4] = ry;
-    lastAxes[5] = rz;
     axesInitialized = true;
-  } else {
-    x = applyDeadband(x, lastAxes[0], kAxisDeadband);
-    y = applyDeadband(y, lastAxes[1], kAxisDeadband);
-    z = applyDeadband(z, lastAxes[2], kAxisDeadband);
-    rx = applyDeadband(rx, lastAxes[3], kAxisDeadband);
-    ry = applyDeadband(ry, lastAxes[4], kAxisDeadband);
-    rz = applyDeadband(rz, lastAxes[5], kAxisDeadband);
-
-    lastAxes[0] = x;
-    lastAxes[1] = y;
-    lastAxes[2] = z;
-    lastAxes[3] = rx;
-    lastAxes[4] = ry;
-    lastAxes[5] = rz;
   }
 
   uint16_t buttonsMask = 0;
@@ -209,10 +266,9 @@ void sendReport() {
   raw[0] = static_cast<uint8_t>(buttonsMask & 0xFFu);
   raw[1] = static_cast<uint8_t>((buttonsMask >> 8) & 0xFFu);
 
-  uint16_t axes[6] = {x, y, z, rx, ry, rz};
+  int16_t axes[6] = {x, y, z, rx, ry, rz};
   memcpy(&raw[2], axes, sizeof(axes));
 
-  // Clear any remaining bytes in the transfer buffer.
   for (uint8_t i = 2 + sizeof(axes); i < JOYSTICK_SIZE; ++i) {
     raw[i] = 0;
   }
@@ -245,6 +301,15 @@ void setup() {
 
   analogReadResolution(12);
   delay(50);
+
+  // Boot-time joystick center calibration (X/Y/Z only).
+  // Do this before HID starts sending reports so the first values are stable.
+  if (!kTestPattern) {
+    g_centerRawX = calibrateCenterRaw(JOYSTICK_X, kJoyCalSamples);
+    g_centerRawY = calibrateCenterRaw(JOYSTICK_Y, kJoyCalSamples);
+    g_centerRawZ = calibrateCenterRaw(JOYSTICK_Z, kJoyCalSamples);
+  }
+
   usb_joystick_configure();
   Serial.begin(115200);
   uint32_t serialStart = millis();
@@ -253,6 +318,16 @@ void setup() {
   }
   Serial.print("FW_VERSION=");
   Serial.println(FW_VERSION);
+
+  // Print calibrated centers for debugging (does not change naming/behavior).
+  if (Serial && !kTestPattern) {
+    Serial.print("JOY_CENTER_RAW_X=");
+    Serial.println(g_centerRawX);
+    Serial.print("JOY_CENTER_RAW_Y=");
+    Serial.println(g_centerRawY);
+    Serial.print("JOY_CENTER_RAW_Z=");
+    Serial.println(g_centerRawZ);
+  }
 
   uint32_t nowMs = millis();
   for (uint8_t i = 0; i < kEncoderCount; ++i) {
@@ -271,6 +346,20 @@ void loop() {
     heartbeatState = !heartbeatState;
     digitalWrite(LED_BUILTIN, heartbeatState ? HIGH : LOW);
     lastHeartbeatMs = nowMs;
+  }
+  if (Serial) {
+    if (Serial.available() > 0) {
+      char c = static_cast<char>(Serial.read());
+      if (c == 'v' || c == 'V') {
+        Serial.print("FW_VERSION=");
+        Serial.println(FW_VERSION);
+      }
+    }
+    if (nowMs - lastVersionPrintMs >= 2000u) {
+      Serial.print("FW_VERSION=");
+      Serial.println(FW_VERSION);
+      lastVersionPrintMs = nowMs;
+    }
   }
   updateEncoders(nowMs);
   updatePulseReleases(nowMs);
