@@ -13,7 +13,7 @@ echo "[1/6] Ensuring Plymouth script plugin..."
 if command -v apt-get >/dev/null 2>&1; then
   apt-get update -y
   apt-get install -y plymouth plymouth-themes plymouth-plugin-script
-  apt-get install -y cog wpewebkit
+  apt-get install -y firefox-esr
 fi
 
 echo "[2/6] Installing Plymouth theme..."

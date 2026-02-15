@@ -3,7 +3,7 @@
 This folder contains the scripts and configs to:
 - Hide Raspberry Pi OS boot branding/text
 - Show a custom fade-in HydraVision splash on a dark background
-- Auto-run the Python bridge and open the UI fullscreen in Cog (WPE WebKit)
+- Auto-run the Python bridge and open the UI fullscreen in Firefox ESR
 
 ## Assumptions
 - Raspberry Pi OS Desktop (64-bit) on Pi 5
@@ -33,7 +33,7 @@ sudo reboot
 ## Notes
 - The splash text is rendered by Plymouth itself (no external image file needed).
 - On Wayland (labwc), the kiosk is launched from `~/.config/labwc/autostart`.
-- Cog (WPE WebKit) is used to avoid keyring prompts.
+- Firefox ESR is used to avoid keyring prompts.
 - Labwc kiosk log: `~/.cache/hydravision-kiosk.log`
 - The installer backs up `/boot/firmware/cmdline.txt` and `/boot/firmware/config.txt`
   to `/boot/firmware/backup_hydravision_YYYYMMDD_HHMMSS/`.
