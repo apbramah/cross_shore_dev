@@ -6,31 +6,40 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 THEME_NAME="hydravision"
 PLYMOUTH_DIR="/usr/share/plymouth/themes/${THEME_NAME}"
 AUTOSTART_DIR="/home/admin/.config/autostart"
+LABWC_DIR="/home/admin/.config/labwc"
 SYSTEMD_DIR="/etc/systemd/system"
 
-echo "[1/5] Installing Plymouth theme..."
+echo "[1/6] Ensuring Plymouth script plugin..."
+if command -v apt-get >/dev/null 2>&1; then
+  apt-get update -y
+  apt-get install -y plymouth plymouth-themes plymouth-plugin-script
+fi
+
+echo "[2/6] Installing Plymouth theme..."
 install -d "$PLYMOUTH_DIR"
 cp -a "$SCRIPT_DIR/plymouth/hydravision.plymouth" "$PLYMOUTH_DIR/"
 cp -a "$SCRIPT_DIR/plymouth/hydravision.script" "$PLYMOUTH_DIR/"
 
-echo "[2/5] Updating boot flags..."
+echo "[3/6] Updating boot flags..."
 bash "$SCRIPT_DIR/scripts/pi5_boot_patch.sh"
 
-echo "[3/5] Setting Plymouth default theme..."
+echo "[4/6] Setting Plymouth default theme..."
 if command -v plymouth-set-default-theme >/dev/null 2>&1; then
   plymouth-set-default-theme -R "$THEME_NAME"
 else
   echo "plymouth-set-default-theme not found, skipping Plymouth initramfs rebuild."
 fi
 
-echo "[4/5] Installing systemd service..."
+echo "[5/6] Installing systemd service..."
 cp -a "$SCRIPT_DIR/systemd/mvp_bridge.service" "$SYSTEMD_DIR/"
 systemctl daemon-reload
 systemctl enable --now mvp_bridge.service
 
-echo "[5/5] Installing kiosk autostart..."
+echo "[6/6] Installing kiosk autostart..."
 install -d "$AUTOSTART_DIR"
 cp -a "$SCRIPT_DIR/autostart/hydravision-kiosk.desktop" "$AUTOSTART_DIR/"
+install -d "$LABWC_DIR"
+cp -a "$SCRIPT_DIR/labwc/autostart" "$LABWC_DIR/autostart"
 
 echo "Done. Reboot recommended."
 

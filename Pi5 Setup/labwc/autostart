@@ -1,0 +1,7 @@
+#!/bin/sh
+# Labwc autostart for HydraVision kiosk
+xset s off
+xset -dpms
+xset s noblank
+chromium-browser --kiosk --start-fullscreen --disable-infobars --disable-session-crashed-bubble --disable-features=TranslateUI --noerrdialogs --autoplay-policy=no-user-gesture-required --allow-file-access-from-files file:///home/admin/Dev/cross_shore_dev/apps/controller/mvp_ui.html
+
