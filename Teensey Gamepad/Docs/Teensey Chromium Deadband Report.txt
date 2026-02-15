@@ -1,0 +1,243 @@
+Teensey Gamepad/docs/Chromium_Gamepad_Deadband_Report.txt
+
+Chromium Gamepad Deadband Investigation Report
+Project: Teensy 4.1 Custom HID Gamepad
+Branch: mvp-lite
+Platform exhibiting issue: Raspberry Pi OS + Chromium
+Status: Unresolved — Likely Chromium Gamepad API Behavior
+
+EXECUTIVE SUMMARY
+
+A custom Teensy 4.1 USB HID gamepad (6 axes, 15 buttons) works correctly on:
+
+Windows
+
+Desktop Chrome
+
+However, on Raspberry Pi OS using Chromium, the controller exhibits:
+
+Large apparent deadband
+
+Direction-dependent wake-up threshold
+
+Perceived asymmetric bias
+
+Over the course of investigation, the following were verified and corrected:
+
+HID descriptor updated to signed 16-bit centered axes.
+
+Linux kernel deadzone (Flat = 4095) removed via hwdb override.
+
+Firmware deadband removed (set to zero).
+
+Boot-time auto-centering implemented for joystick X/Y/Z.
+
+Verified clean raw evdev axis behavior.
+
+Confirmed Chromium Gamepad API still applies thresholding behavior.
+
+Conclusion:
+
+All firmware and Linux layers are functioning correctly.
+The remaining deadband appears to originate from Chromium’s Gamepad API implementation on Raspberry Pi OS.
+
+Recommended next step: migrate to WebHID for raw access, or investigate Chromium’s Gamepad processing on ARM builds.
+
+SYSTEM ARCHITECTURE
+
+Device:
+
+Teensy 4.1
+
+Custom USB HID joystick
+
+6 axes (X/Y/Z/Rx/Ry/Rz)
+
+15 buttons
+
+14-byte report:
+
+2 bytes: button bitmask
+
+6 × int16 axes (little-endian)
+
+Host Platform:
+
+Raspberry Pi OS
+
+Chromium (ARM)
+
+Input path: navigator.getGamepads()
+
+INVESTIGATION TIMELINE
+
+HID Descriptor Audit
+
+Initial descriptor used unsigned 0..65535 axes.
+
+Updated to:
+
+Logical Min -32768
+
+Logical Max 32767
+
+Signed int16 packing
+
+Result:
+Descriptor parsed correctly.
+No change in Chromium deadband behavior.
+
+Conclusion:
+Descriptor was not root cause.
+
+Linux evdev Deadzone Discovery
+
+Using evtest:
+
+Flat = 4095
+
+Meaning:
+Linux kernel applied ±4095 deadzone before Chromium saw input.
+
+Fix:
+Added hwdb override:
+
+EVDEV_ABS_00=:::0:0
+...
+EVDEV_ABS_05=:::0:0
+
+Rebuilt hwdb and rebooted.
+
+Result:
+Flat removed.
+Kernel deadzone eliminated.
+Behavior improved but issue persisted.
+
+Firmware Centering Issue
+
+After removing kernel deadzone, evtest showed:
+
+ABS_X ≈ -3000
+ABS_Y ≈ -3000
+
+Implemented:
+
+Boot-time calibration for X/Y/Z
+
+Averaged analog readings at startup
+
+Subtracted calibrated center before scaling
+
+Removed firmware deadband (set to zero)
+
+Result:
+
+evtest shows centered axes
+
+Movement begins immediately at kernel level
+
+Raw device behavior is correct
+
+Chromium Gamepad API Behavior
+
+Tested using:
+
+navigator.getGamepads()[0].axes
+
+Observed:
+
+Axes report exactly 0 at rest
+
+Small motion produces no change
+
+Threshold varies depending on direction
+
+Perceived asymmetric deadband remains
+
+At this stage:
+
+HID descriptor correct
+
+Firmware scaling correct
+
+Firmware deadband removed
+
+Kernel deadzone removed
+
+evdev clean
+
+Remaining filtering occurs inside Chromium.
+
+TECHNICAL CONCLUSION
+
+The remaining deadband and asymmetric behavior appear to originate within Chromium’s Gamepad API processing layer.
+
+Possible causes:
+
+Internal deadzone filtering
+
+Axis normalization heuristics
+
+ARM-specific Gamepad implementation
+
+Composite HID handling differences
+
+Non-configurable clamping near zero
+
+The Gamepad API does not expose a method to disable browser-side deadzone.
+
+Therefore, precision applications are not suitable for Gamepad API on Raspberry Pi Chromium without modification.
+
+RECOMMENDED NEXT ACTIONS
+
+Option A — Use WebHID (Recommended)
+
+Use WebHID instead of Gamepad API to read the raw 14-byte HID report.
+
+Benefits:
+
+Access raw int16 axis values
+
+No browser deadzone filtering
+
+Full control over normalization
+
+True zero deadband possible
+
+This is the cleanest technical solution.
+
+Option B — Investigate Chromium Source
+
+Investigate:
+
+Linux ARM Gamepad backend
+
+evdev → Gamepad normalization path
+
+Internal deadzone implementation
+
+Requires building Chromium with logging.
+Higher effort.
+
+Option C — Emulate Standard Controller Profile
+
+Experiment with:
+
+Using standard gamepad Usage template
+
+Emulating known controller VID/PID
+
+Comparing behavior differences
+
+Not yet attempted.
+
+CURRENT STATUS SUMMARY
+
+HID Descriptor: Correct
+Firmware Scaling: Correct
+Firmware Deadband: Removed
+Firmware Centering: Implemented
+Linux evdev Flat: Removed
+evtest Behavior: Clean
+Chromium Gamepad API: Applies thresholding
+Root Cause: Likely Chromium-specific
