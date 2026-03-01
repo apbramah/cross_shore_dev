@@ -87,3 +87,14 @@ class LensController:
         if self.active_lens is None:
             return
         self.active_lens.periodic(time.ticks_ms())
+
+    def startup_diagnostics(self):
+        if self.active_lens is None:
+            print("[LENS] No active lens")
+            return False
+        print("[LENS] Active lens type:", self.active_lens_type)
+        fn = getattr(self.active_lens, "startup_diagnostics", None)
+        if callable(fn):
+            return bool(fn())
+        print("[LENS] No diagnostics available for lens")
+        return False

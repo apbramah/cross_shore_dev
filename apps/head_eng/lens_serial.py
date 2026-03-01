@@ -4,8 +4,8 @@ BUFFER_SIZE = 1024
 
 # Default lens UART config (separate from BGC UART1)
 DEFAULT_UART_ID = 0
-DEFAULT_TX_PIN = 12
-DEFAULT_RX_PIN = 13
+DEFAULT_TX_PIN = 0
+DEFAULT_RX_PIN = 1
 
 
 class LensSerial:
