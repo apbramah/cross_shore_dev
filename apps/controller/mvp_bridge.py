@@ -23,6 +23,8 @@ control_state = {
     "invert": {"yaw": False, "pitch": False, "roll": False},
     "speed": 1.0,
     "zoom_gain": 60,
+    "lens_type": "fuji",
+    "axis_sources": {"zoom": "pc", "focus": "pc", "iris": "pc"},
 }
 
 
@@ -43,6 +45,8 @@ async def handler(websocket):
                 "invert": control_state["invert"],
                 "speed": control_state["speed"],
                 "zoom_gain": control_state["zoom_gain"],
+                "lens_type": control_state["lens_type"],
+                "axis_sources": control_state["axis_sources"],
             }
         )
     )
@@ -105,6 +109,37 @@ async def handler(websocket):
                     control_state["invert"],
                 )
                 print("Invert flags updated:", control_state["invert"])
+
+            # -----------------
+            # Lens type / sources (UI state only in MVP bridge)
+            # -----------------
+            elif msg_type == "SET_LENS_TYPE":
+                lens_type = str(data.get("lens_type", "")).lower()
+                if lens_type in ("fuji", "canon"):
+                    control_state["lens_type"] = lens_type
+                    await websocket.send(
+                        json.dumps(
+                            {
+                                "type": "CURRENT_LENS_TYPE",
+                                "lens_type": lens_type,
+                            }
+                        )
+                    )
+                    print("Lens type set to:", lens_type)
+            elif msg_type == "SET_LENS_AXIS_SOURCE":
+                axis = str(data.get("axis", "")).lower()
+                source = str(data.get("source", "")).lower()
+                if axis in ("zoom", "focus", "iris") and source in ("pc", "camera", "off"):
+                    control_state["axis_sources"][axis] = source
+                    await websocket.send(
+                        json.dumps(
+                            {
+                                "type": "CURRENT_LENS_AXIS_SOURCES",
+                                "sources": control_state["axis_sources"],
+                            }
+                        )
+                    )
+                    print(f"Axis source set: {axis} -> {source}")
 
     except websockets.ConnectionClosed:
         print("Web client disconnected")

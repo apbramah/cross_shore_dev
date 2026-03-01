@@ -58,6 +58,51 @@
     <span id="zoomGainVal" class="mono">60</span>
   </div>
 
+  <div class="card">
+    <h3 style="margin-top:0;">Lens Control</h3>
+    <div class="row">
+      <label>Lens type:</label>
+      <select id="lensType">
+        <option value="fuji">fuji</option>
+        <option value="canon">canon</option>
+      </select>
+      <button id="applyLensType">Apply lens type</button>
+      <span class="small mono" id="lensTypeState">Current: fuji</span>
+    </div>
+
+    <div class="row">
+      <label>Zoom source:</label>
+      <select id="srcZoom">
+        <option value="pc">pc</option>
+        <option value="camera">camera</option>
+        <option value="off">off</option>
+      </select>
+      <button id="applySrcZoom">Apply zoom source</button>
+    </div>
+    <div class="row">
+      <label>Focus source:</label>
+      <select id="srcFocus">
+        <option value="pc">pc</option>
+        <option value="camera">camera</option>
+        <option value="off">off</option>
+      </select>
+      <button id="applySrcFocus">Apply focus source</button>
+    </div>
+    <div class="row">
+      <label>Iris source:</label>
+      <select id="srcIris">
+        <option value="pc">pc</option>
+        <option value="camera">camera</option>
+        <option value="off">off</option>
+      </select>
+      <button id="applySrcIris">Apply iris source</button>
+    </div>
+
+    <div class="small mono" id="axisState">
+      Current sources: zoom=pc focus=pc iris=pc
+    </div>
+  </div>
+
   <div class="grid">
     <div class="card">
       <h3 style="margin-top:0;">Gamepad</h3>
@@ -112,6 +157,7 @@ const DEFAULT_MAP = { X: 0, Y: 1, Z: 2, Xrotate: 3, Yrotate: 4, Zrotate: 5 };
 
 let axisMap = loadMap();
 let mapperEnabled = true;
+let lensState = { lens_type: "fuji", axis_sources: { zoom: "pc", focus: "pc", iris: "pc" } };
 
 let lastAxes = [];
 let lastSendMs = 0;
@@ -130,6 +176,26 @@ function setGpStatus(text){ $("gpStatus").textContent = text; }
 
 function send(obj){
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
+}
+
+function setLensTypeState(value){
+  const v = String(value || "fuji").toLowerCase();
+  lensState.lens_type = (v === "canon" || v === "fuji") ? v : "fuji";
+  $("lensType").value = lensState.lens_type;
+  $("lensTypeState").textContent = `Current: ${lensState.lens_type}`;
+}
+
+function setAxisSourceState(sources){
+  const src = sources || {};
+  for (const axis of ["zoom", "focus", "iris"]) {
+    const val = String(src[axis] || lensState.axis_sources[axis] || "pc").toLowerCase();
+    lensState.axis_sources[axis] = (val === "pc" || val === "camera" || val === "off") ? val : "pc";
+  }
+  $("srcZoom").value = lensState.axis_sources.zoom;
+  $("srcFocus").value = lensState.axis_sources.focus;
+  $("srcIris").value = lensState.axis_sources.iris;
+  $("axisState").textContent =
+    `Current sources: zoom=${lensState.axis_sources.zoom} focus=${lensState.axis_sources.focus} iris=${lensState.axis_sources.iris}`;
 }
 
 function normDeadzone(v, dz=0.03){
@@ -276,10 +342,19 @@ $("connect").onclick = () => {
 
         $("zoomGain").value = msg.zoom_gain ?? 60;
         $("zoomGainVal").textContent = String(msg.zoom_gain ?? 60);
+
+        setLensTypeState(msg.lens_type || "fuji");
+        setAxisSourceState(msg.axis_sources || {});
       }
       if (msg.type === "SELECTED") {
         state.selected = msg.selected;
         $("heads").value = String(state.selected);
+      }
+      if (msg.type === "CURRENT_LENS_TYPE") {
+        setLensTypeState(msg.lens_type || "fuji");
+      }
+      if (msg.type === "CURRENT_LENS_AXIS_SOURCES") {
+        setAxisSourceState(msg.sources || {});
       }
     } catch {}
   };
@@ -321,6 +396,19 @@ $("zoomGain").oninput = (e) => {
   $("zoomGainVal").textContent = String(v);
   send({type:"SET_ZOOM_GAIN", zoom_gain: v});
 };
+
+$("applyLensType").onclick = () => {
+  const lensType = $("lensType").value;
+  send({type: "SET_LENS_TYPE", lens_type: lensType});
+};
+
+function applyAxisSource(axis, inputId){
+  send({type: "SET_LENS_AXIS_SOURCE", axis, source: $(inputId).value});
+}
+
+$("applySrcZoom").onclick = () => applyAxisSource("zoom", "srcZoom");
+$("applySrcFocus").onclick = () => applyAxisSource("focus", "srcFocus");
+$("applySrcIris").onclick = () => applyAxisSource("iris", "srcIris");
 
 // --- Main loop ---
 function tick(){
