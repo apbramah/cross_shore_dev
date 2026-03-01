@@ -1,0 +1,38 @@
+{
+  "version": "309",
+  "files": {
+    "main.py": {
+    },
+    "bgc.py": {
+    },
+    "camera_sony.py": {
+    },
+    "lens_serial.py": {
+    },
+    "lens_controller.py": {
+    },
+    "canon_protocol.py": {
+    },
+    "fuji_protocol.py": {
+    },
+    "canon_lens.py": {
+    },
+    "fuji_lens.py": {
+    },
+    "logging.py": {
+      "path": "libs/logging.py"
+    },
+    "uwebsockets/client.py": {
+      "path": "libs/uwebsockets/client.py"
+    },
+    "uwebsockets/protocol.py": {
+      "path": "libs/uwebsockets/protocol.py"
+    },
+    "udp_con.py": {
+      "path": "libs/udp_con.py"
+    },
+    "stun_query.py": {
+      "path": "libs/stun_query.py"
+    }
+  }
+}

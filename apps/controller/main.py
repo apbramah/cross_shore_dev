@@ -170,9 +170,12 @@ def run_gui():
 
     # Mode buttons panel (only visible when a UDP connection is active)
     mode_frame = ttk.Frame(root)
+    lens_frame = ttk.LabelFrame(root, text="Lens Control")
     connected = False
     current_mode = None
     previous_mode = None  # Track mode before switching to joystick
+    current_lens_type = "fuji"
+    axis_sources = {"zoom": "pc", "focus": "pc", "iris": "pc"}
 
     def on_mode_pressed(mode: str):
         # GUI thread only: enqueue an event for asyncio thread to handle.
@@ -196,7 +199,42 @@ def run_gui():
     joystick_button.pack(side=tk.LEFT, padx=5, pady=5)
     fixed_button.pack(side=tk.LEFT, padx=5, pady=5)
 
+    ttk.Label(lens_frame, text="Lens Type:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+    lens_type_var = tk.StringVar(value="fuji")
+    lens_type_combo = ttk.Combobox(lens_frame, state="readonly", width=10, textvariable=lens_type_var)
+    lens_type_combo["values"] = ("fuji", "canon")
+    lens_type_combo.grid(row=0, column=1, padx=5, pady=5, sticky="w")
+
+    def on_set_lens_type():
+        lens_type = lens_type_var.get().strip().lower()
+        if lens_type:
+            gui_to_async_queue.put({"type": "SET_LENS_TYPE", "lens_type": lens_type})
+
+    ttk.Button(lens_frame, text="Apply", command=on_set_lens_type).grid(row=0, column=2, padx=5, pady=5, sticky="w")
+
+    axis_vars = {
+        "zoom": tk.StringVar(value="pc"),
+        "focus": tk.StringVar(value="pc"),
+        "iris": tk.StringVar(value="pc"),
+    }
+
+    def on_set_axis_source(axis: str):
+        source = axis_vars[axis].get().strip().lower()
+        gui_to_async_queue.put({"type": "SET_LENS_AXIS_SOURCE", "axis": axis, "source": source})
+
+    for idx, axis in enumerate(("zoom", "focus", "iris"), start=1):
+        ttk.Label(lens_frame, text=f"{axis.capitalize()} Source:").grid(row=idx, column=0, padx=5, pady=5, sticky="w")
+        combo = ttk.Combobox(lens_frame, state="readonly", width=10, textvariable=axis_vars[axis])
+        combo["values"] = ("pc", "camera", "off")
+        combo.grid(row=idx, column=1, padx=5, pady=5, sticky="w")
+        ttk.Button(
+            lens_frame,
+            text="Apply",
+            command=lambda axis_name=axis: on_set_axis_source(axis_name),
+        ).grid(row=idx, column=2, padx=5, pady=5, sticky="w")
+
     mode_panel_visible = False
+    lens_panel_visible = False
 
     def set_mode_panel_visible(visible: bool):
         nonlocal mode_panel_visible
@@ -207,6 +245,15 @@ def run_gui():
             mode_frame.pack_forget()
             mode_panel_visible = False
 
+    def set_lens_panel_visible(visible: bool):
+        nonlocal lens_panel_visible
+        if visible and not lens_panel_visible:
+            lens_frame.pack(side=tk.TOP, fill=tk.X, padx=10, pady=5)
+            lens_panel_visible = True
+        elif not visible and lens_panel_visible:
+            lens_frame.pack_forget()
+            lens_panel_visible = False
+
     def process_async_to_gui_events():
         # GUI thread: apply state changes driven by asyncio thread events.
         try:
@@ -216,8 +263,21 @@ def run_gui():
                     nonlocal connected, current_mode
                     connected = bool(event.get("connected"))
                     set_mode_panel_visible(connected)
+                    set_lens_panel_visible(connected)
                     if not connected:
                         current_mode = None
+                elif isinstance(event, dict) and event.get("type") == "CURRENT_LENS_TYPE":
+                    lens_type = str(event.get("lens_type", "")).lower()
+                    if lens_type in ("canon", "fuji"):
+                        current_lens_type = lens_type
+                        lens_type_var.set(lens_type)
+                elif isinstance(event, dict) and event.get("type") == "CURRENT_LENS_AXIS_SOURCES":
+                    sources = event.get("sources", {}) or {}
+                    for axis_name in ("zoom", "focus", "iris"):
+                        source = str(sources.get(axis_name, "")).lower()
+                        if source in ("pc", "camera", "off"):
+                            axis_sources[axis_name] = source
+                            axis_vars[axis_name].set(source)
                 elif isinstance(event, dict) and event.get("type") == "HEADS_LIST":
                     update_dropdown(event.get("heads", []))
         except queue.Empty:
@@ -678,6 +738,16 @@ async def websocket_client(ws_connection, server_url=None):
                         await write_to_com_port(target, data)
                     except Exception as e:
                         print(f"Error forwarding COM_DATA from {from_uid} to COM port: {e}")
+                elif my_dict["type"] == "CURRENT_LENS_TYPE":
+                    async_to_gui_queue.put({
+                        "type": "CURRENT_LENS_TYPE",
+                        "lens_type": my_dict.get("lens_type"),
+                    })
+                elif my_dict["type"] == "CURRENT_LENS_AXIS_SOURCES":
+                    async_to_gui_queue.put({
+                        "type": "CURRENT_LENS_AXIS_SOURCES",
+                        "sources": my_dict.get("sources", {}),
+                    })
                                         
             except Exception as e:
                 print("Error processing message:", e)
@@ -738,6 +808,21 @@ async def gui_event_pump_task():
                     else:
                         await _stop_slider_send_task_if_running(current_udp_connection)
                     msg = {"type": "SET_MODE", "mode": mode}
+                    channel = getattr(current_udp_connection, "reliable_channel", None)
+                    if channel:
+                        await channel.send(json.dumps(msg).encode("utf-8"))
+            elif isinstance(event, dict) and event.get("type") == "SET_LENS_TYPE":
+                lens_type = str(event.get("lens_type", "")).lower()
+                if current_udp_connection and lens_type in ("canon", "fuji"):
+                    msg = {"type": "SET_LENS_TYPE", "lens_type": lens_type}
+                    channel = getattr(current_udp_connection, "reliable_channel", None)
+                    if channel:
+                        await channel.send(json.dumps(msg).encode("utf-8"))
+            elif isinstance(event, dict) and event.get("type") == "SET_LENS_AXIS_SOURCE":
+                axis = str(event.get("axis", "")).lower()
+                source = str(event.get("source", "")).lower()
+                if current_udp_connection and axis in ("zoom", "focus", "iris") and source in ("pc", "camera", "off"):
+                    msg = {"type": "SET_LENS_AXIS_SOURCE", "axis": axis, "source": source}
                     channel = getattr(current_udp_connection, "reliable_channel", None)
                     if channel:
                         await channel.send(json.dumps(msg).encode("utf-8"))

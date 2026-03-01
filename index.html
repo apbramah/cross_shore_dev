@@ -117,6 +117,14 @@
             updateHeadButtons(msg.uid, msg.mode);
             appendHeadLog(msg.uid, event.data)
             break;
+          case "CURRENT_LENS_TYPE":
+            updateHeadLensType(msg.uid, msg.lens_type);
+            appendHeadLog(msg.uid, event.data);
+            break;
+          case "CURRENT_LENS_AXIS_SOURCES":
+            updateHeadLensAxisSources(msg.uid, msg.sources || {});
+            appendHeadLog(msg.uid, event.data);
+            break;
 
           case "PRINTF":
             if (msg.uid) {
@@ -194,6 +202,55 @@
         `
         : ``;
 
+      const lensHtml = (device_type === "head")
+        ? `
+        <div style="margin:10px 0; padding:8px; border:1px solid #ddd; border-radius:6px;">
+          <p>Lens type: <strong><span id="lens_type_${uid}">unknown</span></strong></p>
+          <label for="lens_type_sel_${uid}">Set Lens Type:</label>
+          <select id="lens_type_sel_${uid}">
+            <option value="fuji">fuji</option>
+            <option value="canon">canon</option>
+          </select>
+          <button onclick="setLensType('${uid}')">Apply</button>
+
+          <div style="margin-top:8px;">
+            <strong>Axis Sources</strong>
+            <div>Zoom: <span id="lens_src_zoom_${uid}">unknown</span></div>
+            <div>Focus: <span id="lens_src_focus_${uid}">unknown</span></div>
+            <div>Iris: <span id="lens_src_iris_${uid}">unknown</span></div>
+          </div>
+
+          <div style="margin-top:8px;">
+            <label>Zoom source:</label>
+            <select id="lens_src_zoom_sel_${uid}">
+              <option value="pc">pc</option>
+              <option value="camera">camera</option>
+              <option value="off">off</option>
+            </select>
+            <button onclick="setLensAxisSource('${uid}', 'zoom')">Apply</button>
+          </div>
+          <div style="margin-top:6px;">
+            <label>Focus source:</label>
+            <select id="lens_src_focus_sel_${uid}">
+              <option value="pc">pc</option>
+              <option value="camera">camera</option>
+              <option value="off">off</option>
+            </select>
+            <button onclick="setLensAxisSource('${uid}', 'focus')">Apply</button>
+          </div>
+          <div style="margin-top:6px;">
+            <label>Iris source:</label>
+            <select id="lens_src_iris_sel_${uid}">
+              <option value="pc">pc</option>
+              <option value="camera">camera</option>
+              <option value="off">off</option>
+            </select>
+            <button onclick="setLensAxisSource('${uid}', 'iris')">Apply</button>
+          </div>
+        </div>
+        `
+        : ``;
+
       div.innerHTML = `
         <h3><a href="simplebgc://${ip}:8080">Head UID: ${uid}</a></h3>
         <p>IP: ${ip}</p>
@@ -213,6 +270,7 @@
           <button onclick="setAppPath('${uid}')">Save</button>
         </p>
         ${networkConfigsHtml}
+        ${lensHtml}
         ${identifyHtml}
         <button class="inactive" onclick="reboot('${uid}')" id="reboot_${uid}">
           Reboot
@@ -238,11 +296,48 @@
       modeEl.textContent = mode || "unknown";
     }
 
+    function updateHeadLensType(uid, lensType) {
+      const value = (lensType || "unknown").toLowerCase();
+      const el = document.getElementById("lens_type_" + uid);
+      if (el) el.textContent = value;
+      const sel = document.getElementById("lens_type_sel_" + uid);
+      if (sel && (value === "fuji" || value === "canon")) {
+        sel.value = value;
+      }
+    }
+
+    function updateHeadLensAxisSources(uid, sources) {
+      const axes = ["zoom", "focus", "iris"];
+      axes.forEach(axis => {
+        const value = String((sources && sources[axis]) || "unknown").toLowerCase();
+        const lbl = document.getElementById(`lens_src_${axis}_${uid}`);
+        if (lbl) lbl.textContent = value;
+        const sel = document.getElementById(`lens_src_${axis}_sel_${uid}`);
+        if (sel && (value === "pc" || value === "camera" || value === "off")) {
+          sel.value = value;
+        }
+      });
+    }
+
     // -------------------------
     // SEND MESSAGES
     // -------------------------
     function sendMode(uid, mode) {
       const obj = {type: "SET_MODE", uid: uid, mode: mode};
+      appendHeadLog(uid, "Sending: " + JSON.stringify(obj));
+      ws.send(JSON.stringify(obj));
+    }
+    function setLensType(uid) {
+      const input = document.getElementById("lens_type_sel_" + uid);
+      if (!input) return;
+      const obj = {type: "SET_LENS_TYPE", uid: uid, lens_type: input.value};
+      appendHeadLog(uid, "Sending: " + JSON.stringify(obj));
+      ws.send(JSON.stringify(obj));
+    }
+    function setLensAxisSource(uid, axis) {
+      const input = document.getElementById(`lens_src_${axis}_sel_${uid}`);
+      if (!input) return;
+      const obj = {type: "SET_LENS_AXIS_SOURCE", uid: uid, axis: axis, source: input.value};
       appendHeadLog(uid, "Sending: " + JSON.stringify(obj));
       ws.send(JSON.stringify(obj));
     }
