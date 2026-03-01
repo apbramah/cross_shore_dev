@@ -1,3 +1,124 @@
+"""
+Hydravision Lite - MVP Controller Bridge
+Runs on PC or Raspberry Pi (normal Python)
+WebSocket <-> UDP bridge, using shared MVP protocol helpers.
+"""
+
+import asyncio
+import json
+
+import websockets
+
+import mvp_protocol
+
+
+WS_PORT = 8765
+
+# Heads configuration (loaded from mvp_protocol.HEADS_FILE)
+heads = mvp_protocol.load_heads()
+selected_index = 0
+
+# Default control state (shared structure with desktop app)
+control_state = {
+    "invert": {"yaw": False, "pitch": False, "roll": False},
+    "speed": 1.0,
+    "zoom_gain": 60,
+}
+
+
+async def handler(websocket):
+    """
+    WebSocket handler for browser clients (e.g. mvp_ui.html).
+    Receives GAMEPAD / control messages and forwards as UDP packets.
+    """
+    global selected_index
+
+    # Send initial STATE
+    await websocket.send(
+        json.dumps(
+            {
+                "type": "STATE",
+                "heads": heads,
+                "selected": selected_index,
+                "invert": control_state["invert"],
+                "speed": control_state["speed"],
+                "zoom_gain": control_state["zoom_gain"],
+            }
+        )
+    )
+
+    print("Web client connected")
+
+    try:
+        async for message in websocket:
+            data = json.loads(message)
+            msg_type = data.get("type")
+
+            # -----------------
+            # GAMEPAD streaming
+            # -----------------
+            if msg_type == "GAMEPAD":
+                packet = mvp_protocol.build_udp_packet(
+                    data.get("axes", {}),
+                    control_state,
+                )
+                if heads:
+                    mvp_protocol.send_udp(packet, heads[selected_index])
+
+            # -----------------
+            # Select head
+            # -----------------
+            elif msg_type == "SELECT_HEAD":
+                idx = int(data.get("index", 0))
+                if 0 <= idx < len(heads):
+                    selected_index = idx
+                    print("Selected head:", heads[idx]["name"])
+                    await websocket.send(
+                        json.dumps(
+                            {
+                                "type": "SELECTED",
+                                "selected": selected_index,
+                            }
+                        )
+                    )
+
+            # -----------------
+            # Speed adjust
+            # -----------------
+            elif msg_type == "SET_SPEED":
+                control_state["speed"] = float(data.get("speed", 1.0))
+                print("Speed set to:", control_state["speed"])
+
+            # -----------------
+            # Zoom gain
+            # -----------------
+            elif msg_type == "SET_ZOOM_GAIN":
+                control_state["zoom_gain"] = float(data.get("zoom_gain", 60))
+                print("Zoom gain set to:", control_state["zoom_gain"])
+
+            # -----------------
+            # Invert flags
+            # -----------------
+            elif msg_type == "SET_INVERT":
+                control_state["invert"] = data.get(
+                    "invert",
+                    control_state["invert"],
+                )
+                print("Invert flags updated:", control_state["invert"])
+
+    except websockets.ConnectionClosed:
+        print("Web client disconnected")
+
+
+async def main():
+    print(f"WebSocket server starting on ws://127.0.0.1:{WS_PORT}")
+    async with websockets.serve(handler, "0.0.0.0", WS_PORT):
+        await asyncio.Future()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+
 # ==========================================
 # Hydravision Lite - MVP Controller Bridge
 # Runs on PC or Raspberry Pi (normal Python)
