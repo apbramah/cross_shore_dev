@@ -52,6 +52,9 @@ class BGC:
             return None
 
         data_type = data[1]
+        ctrl0 = data[14]
+        ctrl1 = data[15]
+        lens_control = _decode_lens_control(ctrl0, ctrl1)
 
         if data_type == 0xFD:
             zoom, focus, iris, yaw, pitch, roll, _ = struct.unpack("<h5H2s", data[2:16])
@@ -62,6 +65,7 @@ class BGC:
                 "yaw": yaw,
                 "pitch": pitch,
                 "roll": roll,
+                "lens_control": lens_control,
             }
         elif data_type == 0xF3:
             pitch, roll, yaw, zoom, focus, iris, _ = struct.unpack("<6H2s", data[2:16])
@@ -72,6 +76,7 @@ class BGC:
                 "yaw": yaw,
                 "pitch": pitch,
                 "roll": roll,
+                "lens_control": lens_control,
             }
 
     @staticmethod
@@ -120,3 +125,30 @@ class BGC:
     def send_joystick_control(self, yaw, pitch, roll):
         payload = struct.pack(">3H", yaw, pitch, roll)
         self.send_cmd(CMD_API_VIRT_CH_CONTROL, payload)
+
+
+def _decode_lens_control(ctrl0: int, ctrl1: int):
+    if ctrl1 != 0xA5:
+        return None
+
+    lens_bits = ctrl0 & 0x03
+    zoom_bits = (ctrl0 >> 2) & 0x03
+    focus_bits = (ctrl0 >> 4) & 0x03
+    iris_bits = (ctrl0 >> 6) & 0x03
+
+    def decode_src(bits: int):
+        if bits == 1:
+            return "camera"
+        if bits == 2:
+            return "off"
+        return "pc"
+
+    lens_type = "canon" if lens_bits == 1 else "fuji"
+    return {
+        "lens_type": lens_type,
+        "axis_sources": {
+            "zoom": decode_src(zoom_bits),
+            "focus": decode_src(focus_bits),
+            "iris": decode_src(iris_bits),
+        },
+    }

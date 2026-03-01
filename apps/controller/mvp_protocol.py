@@ -141,7 +141,12 @@ def build_udp_packet(axes: Dict[str, Any], control_state: Dict[str, Any]) -> byt
     focus_i = map_focus(focus_i)
     iris_i = map_iris(iris_i)
 
-    # Pack EXACTLY like original send_udp_message() byte order
+    # Optional lens control sideband for MVP head_eng.
+    ctrl0, ctrl1 = _encode_lens_control(control_state)
+
+    # Pack EXACTLY like original send_udp_message() byte order.
+    # Last 2 bytes were historically reserved (0x00, 0x00). We now use them
+    # for optional lens control sideband with marker ctrl1=0xA5.
     msg = bytes(
         [
             0xDE,
@@ -158,10 +163,43 @@ def build_udp_packet(axes: Dict[str, Any], control_state: Dict[str, Any]) -> byt
             tilt_i & 0xFF,
             (roll_i >> 8) & 0xFF,
             roll_i & 0xFF,
-            0x00,
-            0x00,
+            ctrl0 & 0xFF,
+            ctrl1 & 0xFF,
         ]
     )
 
     return msg
+
+
+def _encode_lens_control(control_state: Dict[str, Any]) -> tuple[int, int]:
+    """
+    Sideband encoding in bytes 14..15:
+      ctrl0:
+        b1..b0 lens type: 0=fuji, 1=canon
+        b3..b2 zoom source: 0=pc, 1=camera, 2=off
+        b5..b4 focus source: 0=pc, 1=camera, 2=off
+        b7..b6 iris source: 0=pc, 1=camera, 2=off
+      ctrl1:
+        marker 0xA5 means sideband is valid.
+    """
+    lens_type = str(control_state.get("lens_type", "fuji")).lower()
+    axis_sources = control_state.get("axis_sources", {}) or {}
+
+    lens_bits = 1 if lens_type == "canon" else 0
+
+    def src_bits(axis_name: str) -> int:
+        v = str(axis_sources.get(axis_name, "pc")).lower()
+        if v == "camera":
+            return 1
+        if v == "off":
+            return 2
+        return 0
+
+    ctrl0 = (
+        (lens_bits & 0x03)
+        | ((src_bits("zoom") & 0x03) << 2)
+        | ((src_bits("focus") & 0x03) << 4)
+        | ((src_bits("iris") & 0x03) << 6)
+    )
+    return ctrl0, 0xA5
 
