@@ -56,6 +56,10 @@
     <label style="margin-left:20px;">Zoom gain:</label>
     <input type="range" id="zoomGain" min="10" max="150" value="60" step="1">
     <span id="zoomGainVal" class="mono">60</span>
+
+    <label style="margin-left:20px;">Fast Hz:</label>
+    <input type="range" id="fastHz" min="25" max="100" value="50" step="1">
+    <span id="fastHzVal" class="mono">50</span>
   </div>
 
   <div class="card">
@@ -100,6 +104,32 @@
 
     <div class="small mono" id="axisState">
       Current sources: zoom=pc focus=pc iris=pc
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0;">Slow Control (Dual Channel)</h3>
+    <div class="row">
+      <label>Motors:</label>
+      <select id="slowMotorsOn">
+        <option value="1">on</option>
+        <option value="0">off</option>
+      </select>
+      <button id="applySlowMotorsOn">Apply motors</button>
+
+      <label style="margin-left:20px;">Control mode:</label>
+      <select id="slowControlMode">
+        <option value="speed">speed</option>
+        <option value="angle">angle</option>
+      </select>
+      <button id="applySlowControlMode">Apply mode</button>
+    </div>
+
+    <div class="small mono" id="slowState">
+      Slow state: motors_on=1 control_mode=speed lens_select=fuji source_zoom=pc source_focus=pc source_iris=pc
+    </div>
+    <div class="small mono" id="telemState">
+      Telem: awaiting data
     </div>
   </div>
 
@@ -158,6 +188,15 @@ const DEFAULT_MAP = { X: 0, Y: 1, Z: 2, Xrotate: 3, Yrotate: 4, Zrotate: 5 };
 let axisMap = loadMap();
 let mapperEnabled = true;
 let lensState = { lens_type: "fuji", axis_sources: { zoom: "pc", focus: "pc", iris: "pc" } };
+let slowState = {
+  motors_on: 1,
+  control_mode: "speed",
+  lens_select: "fuji",
+  source_zoom: "pc",
+  source_focus: "pc",
+  source_iris: "pc",
+};
+let slowTelem = null;
 
 let lastAxes = [];
 let lastSendMs = 0;
@@ -196,6 +235,45 @@ function setAxisSourceState(sources){
   $("srcIris").value = lensState.axis_sources.iris;
   $("axisState").textContent =
     `Current sources: zoom=${lensState.axis_sources.zoom} focus=${lensState.axis_sources.focus} iris=${lensState.axis_sources.iris}`;
+}
+
+function setSlowState(partial){
+  const src = partial || {};
+  for (const k of Object.keys(src)) {
+    slowState[k] = src[k];
+  }
+  // Keep legacy lens section mirrored with slow table values.
+  setLensTypeState(slowState.lens_select || lensState.lens_type || "fuji");
+  setAxisSourceState({
+    zoom: slowState.source_zoom || lensState.axis_sources.zoom,
+    focus: slowState.source_focus || lensState.axis_sources.focus,
+    iris: slowState.source_iris || lensState.axis_sources.iris,
+  });
+
+  $("slowMotorsOn").value = String(Number(!!slowState.motors_on));
+  $("slowControlMode").value = String(slowState.control_mode || "speed");
+  $("slowState").textContent =
+    `Slow state: motors_on=${slowState.motors_on} control_mode=${slowState.control_mode} ` +
+    `lens_select=${slowState.lens_select} source_zoom=${slowState.source_zoom} ` +
+    `source_focus=${slowState.source_focus} source_iris=${slowState.source_iris}`;
+}
+
+function setSlowTelem(msg){
+  slowTelem = msg || null;
+  if (!slowTelem) {
+    $("telemState").textContent = "Telem: awaiting data";
+    return;
+  }
+  const zoom = slowTelem.zoom_position ?? 0;
+  const focus = slowTelem.focus_position ?? 0;
+  const iris = slowTelem.iris_position ?? 0;
+  const mode = slowTelem.control_mode ?? "-";
+  const lens = slowTelem.lens_select ?? "-";
+  const srcZ = slowTelem.source_zoom ?? "-";
+  const srcF = slowTelem.source_focus ?? "-";
+  const srcI = slowTelem.source_iris ?? "-";
+  $("telemState").textContent =
+    `Telem: lens=${lens} mode=${mode} zoom=${zoom} focus=${focus} iris=${iris} src=${srcZ}/${srcF}/${srcI}`;
 }
 
 function normDeadzone(v, dz=0.03){
@@ -342,9 +420,17 @@ $("connect").onclick = () => {
 
         $("zoomGain").value = msg.zoom_gain ?? 60;
         $("zoomGainVal").textContent = String(msg.zoom_gain ?? 60);
+        $("fastHz").value = msg.fast_hz ?? 50;
+        $("fastHzVal").textContent = String(msg.fast_hz ?? 50);
 
         setLensTypeState(msg.lens_type || "fuji");
         setAxisSourceState(msg.axis_sources || {});
+        if (msg.slow_control) {
+          setSlowState(msg.slow_control);
+        }
+        if (msg.slow_telem) {
+          setSlowTelem(msg.slow_telem);
+        }
       }
       if (msg.type === "SELECTED") {
         state.selected = msg.selected;
@@ -355,6 +441,16 @@ $("connect").onclick = () => {
       }
       if (msg.type === "CURRENT_LENS_AXIS_SOURCES") {
         setAxisSourceState(msg.sources || {});
+      }
+      if (msg.type === "FAST_HZ") {
+        $("fastHz").value = msg.fast_hz ?? 50;
+        $("fastHzVal").textContent = String(msg.fast_hz ?? 50);
+      }
+      if (msg.type === "SLOW_CONTROL_STATE") {
+        setSlowState(msg.slow_control || {});
+      }
+      if (msg.type === "SLOW_TELEMETRY") {
+        setSlowTelem(msg);
       }
     } catch {}
   };
@@ -396,19 +492,34 @@ $("zoomGain").oninput = (e) => {
   $("zoomGainVal").textContent = String(v);
   send({type:"SET_ZOOM_GAIN", zoom_gain: v});
 };
+$("fastHz").oninput = (e) => {
+  const v = parseInt(e.target.value, 10) || 50;
+  $("fastHzVal").textContent = String(v);
+  send({type: "SET_FAST_HZ", fast_hz: v});
+};
 
 $("applyLensType").onclick = () => {
   const lensType = $("lensType").value;
+  send({type: "SET_SLOW_CONTROL", key: "lens_select", value: lensType});
   send({type: "SET_LENS_TYPE", lens_type: lensType});
 };
 
 function applyAxisSource(axis, inputId){
+  send({type: "SET_SLOW_CONTROL", key: `source_${axis}`, value: $(inputId).value});
   send({type: "SET_LENS_AXIS_SOURCE", axis, source: $(inputId).value});
 }
 
 $("applySrcZoom").onclick = () => applyAxisSource("zoom", "srcZoom");
 $("applySrcFocus").onclick = () => applyAxisSource("focus", "srcFocus");
 $("applySrcIris").onclick = () => applyAxisSource("iris", "srcIris");
+$("applySlowMotorsOn").onclick = () => {
+  const v = parseInt($("slowMotorsOn").value, 10) ? 1 : 0;
+  send({type: "SET_SLOW_CONTROL", key: "motors_on", value: v});
+};
+$("applySlowControlMode").onclick = () => {
+  const v = $("slowControlMode").value === "angle" ? "angle" : "speed";
+  send({type: "SET_SLOW_CONTROL", key: "control_mode", value: v});
+};
 
 // --- Main loop ---
 function tick(){
