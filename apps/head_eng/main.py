@@ -14,8 +14,9 @@ from lens_controller import LensController, LENS_FUJI
 # Local debug override when running MVP without websocket source controls.
 # Set to one of: "pc", "camera", "off"
 TEST_FUJI_SOURCE_MODE = "pc"
-ENABLE_DUAL_CHANNEL = False  # Gate 2: keep disabled to preserve baseline behavior.
-ENABLE_SLOW_CHANNEL = True   # Gate 3: receive/apply slow controls with legacy fast path.
+FAST_CHANNEL_MODE = "v2"  # Set to "legacy" for immediate rollback.
+ENABLE_DUAL_CHANNEL = FAST_CHANNEL_MODE == "v2"
+ENABLE_SLOW_CHANNEL = True   # Slow receive/apply remains active in both modes.
 
 # ---------- LED ----------
 led = machine.Pin("LED", machine.Pin.OUT)
@@ -118,6 +119,7 @@ if ENABLE_SLOW_CHANNEL:
     sock_slow.setblocking(False)
 
 print("Listening FAST UDP on", FAST_UDP_PORT)
+print("Fast channel mode:", FAST_CHANNEL_MODE)
 if ENABLE_SLOW_CHANNEL:
     print("Listening SLOW UDP on", SLOW_UDP_PORT)
 

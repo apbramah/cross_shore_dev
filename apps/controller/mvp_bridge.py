@@ -13,8 +13,9 @@ import mvp_protocol
 
 
 WS_PORT = 8765
-ENABLE_DUAL_CHANNEL = False  # Gate 1: must stay False to preserve baseline behavior.
-ENABLE_SLOW_CHANNEL = True   # Gate 3: slow control runs while fast stays legacy.
+FAST_CHANNEL_MODE = "v2"  # Set to "legacy" for immediate rollback.
+ENABLE_DUAL_CHANNEL = FAST_CHANNEL_MODE == "v2"
+ENABLE_SLOW_CHANNEL = True   # Slow control stays active in both modes.
 SLOW_SEND_INTERVAL_S = 0.5
 
 # Heads configuration (loaded from mvp_protocol.HEADS_FILE)
@@ -223,6 +224,7 @@ async def handler(websocket):
 
 async def main():
     print(f"WebSocket server starting on ws://127.0.0.1:{WS_PORT}")
+    print(f"Fast channel mode: {FAST_CHANNEL_MODE}")
     if ENABLE_SLOW_CHANNEL:
         print(f"Slow control sender running at {1.0 / SLOW_SEND_INTERVAL_S:.1f} Hz")
         asyncio.create_task(slow_sender_task())
