@@ -36,6 +36,13 @@ ZOOM_DEADBAND = 1
 AXIS_HOLD_THRESHOLD = 128
 FUJI_DEBUG = True
 FUJI_ZOOM_DEBUG = True
+FUJI_FOCUS_DEBUG = True
+ZOOM_ACTIVE_WINDOW_MS = 300
+FOCUS_ACTIVE_WINDOW_MS = 300
+SW4_KEEPALIVE_MS = 250
+SW4_KEEPALIVE_DEFER_MS = 100
+POLL_INTERVAL_MS_IDLE = 500
+POLL_INTERVAL_MS_ACTIVE_ZOOM = 700
 
 
 class FujiLens:
@@ -56,6 +63,9 @@ class FujiLens:
         self._last_sw4_readback = None
         self._next_sw4_reassert_ms = 0
         self._last_zoom_feedback = None
+        self._last_focus_feedback = None
+        self._zoom_active_until_ms = 0
+        self._focus_active_until_ms = 0
 
     def on_activate(self):
         self.transport.write(build_connect(True))
@@ -95,12 +105,14 @@ class FujiLens:
         d = int(delta)
         if -ZOOM_DEADBAND <= d <= ZOOM_DEADBAND:
             return
+        now_ms = _ticks_ms()
+        self._zoom_active_until_ms = now_ms + ZOOM_ACTIVE_WINDOW_MS
         self.zoom = _clamp_u16(self.zoom + (d * ZOOM_DELTA_SCALE))
         self.transport.write(build_zoom_control(self.zoom))
         if FUJI_ZOOM_DEBUG:
             print(
                 "[LENS][Fuji][ZOOM] TX t={} delta={} target={}".format(
-                    _ticks_ms(), d, self.zoom
+                    now_ms, d, self.zoom
                 )
             )
 
@@ -110,8 +122,16 @@ class FujiLens:
         v = _normalize_input(raw_value, 0xFFFF)
         if abs(v - self.focus) < AXIS_HOLD_THRESHOLD:
             return
+        now_ms = _ticks_ms()
+        self._focus_active_until_ms = now_ms + FOCUS_ACTIVE_WINDOW_MS
         self.focus = v
         self.transport.write(build_focus_control(self.focus))
+        if FUJI_FOCUS_DEBUG:
+            print(
+                "[LENS][Fuji][FOCUS] TX t={} target={}".format(
+                    now_ms, self.focus
+                )
+            )
 
     def set_iris_input(self, raw_value):
         if self.axis_sources["iris"] != SOURCE_PC:
@@ -126,16 +146,27 @@ class FujiLens:
         for frame in self._poll_frames():
             self._handle_runtime_frame(frame, now_ms)
 
+        zoom_active = not _time_after(now_ms, self._zoom_active_until_ms)
+
         if _time_after(now_ms, self._next_keepalive_ms):
-            self._send_switch4()
-            self._next_keepalive_ms = now_ms + 250
+            # During active zoom, avoid periodic SW4 writes competing for UART slots.
+            # Source changes still call _send_switch4() immediately, and mismatch
+            # watchdog reassert remains active in _handle_runtime_frame().
+            if not zoom_active:
+                self._send_switch4()
+                self._next_keepalive_ms = now_ms + SW4_KEEPALIVE_MS
+            else:
+                self._next_keepalive_ms = now_ms + SW4_KEEPALIVE_DEFER_MS
         if _time_after(now_ms, self._next_poll_ms):
-            # Match tester behavior: keep light polling alive while owning controls.
+            # During active zoom, reduce poll traffic to avoid stealing UART slots.
             self.transport.write(build_switch4_position_request())
             self.transport.write(build_position_request_zoom())
-            self.transport.write(build_position_request_focus())
-            self.transport.write(build_position_request_iris())
-            self._next_poll_ms = now_ms + 500
+            if not zoom_active:
+                self.transport.write(build_position_request_focus())
+                self.transport.write(build_position_request_iris())
+                self._next_poll_ms = now_ms + POLL_INTERVAL_MS_IDLE
+            else:
+                self._next_poll_ms = now_ms + POLL_INTERVAL_MS_ACTIVE_ZOOM
 
     def startup_diagnostics(self):
         print("[LENS][Fuji] startup diagnostics begin")
@@ -327,6 +358,17 @@ class FujiLens:
                     )
                 )
             self._last_zoom_feedback = value
+        elif func == FUNC_FOCUS_POSITION and payload:
+            value = decode_position_response(payload)
+            if value is None:
+                return
+            if FUJI_FOCUS_DEBUG and value != self._last_focus_feedback:
+                print(
+                    "[LENS][Fuji][FOCUS] RX t={} pos={}".format(
+                        _ticks_ms(), value
+                    )
+                )
+            self._last_focus_feedback = value
 
 
 def _clamp_u16(v):
