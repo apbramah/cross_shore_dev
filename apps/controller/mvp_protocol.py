@@ -1,10 +1,21 @@
 import json
 import os
 import socket
-from typing import Dict, Any, List
+import struct
+from typing import Dict, Any, List, Optional
 
 
 UDP_DEFAULT_PORT = 8888
+FAST_PORT = 8888
+SLOW_CMD_PORT = 8890
+SLOW_TELEM_PORT = 8891
+
+PKT_MAGIC = 0xDE
+PKT_VER = 0x01
+PKT_FAST_CTRL = 0x10
+PKT_SLOW_CMD = 0x20
+PKT_SLOW_ACK = 0x21
+PKT_SLOW_TELEM = 0x30
 
 # Resolve heads.json relative to this file so it works from any CWD
 HEADS_FILE = os.path.join(os.path.dirname(__file__), "heads.json")
@@ -41,7 +52,11 @@ def send_udp(packet: bytes, head: Dict[str, Any]) -> None:
         return
 
     port = int(head.get("port", UDP_DEFAULT_PORT))
-    _udp_sock.sendto(packet, (ip, port))
+    send_udp_to(ip, port, packet)
+
+
+def send_udp_to(ip: str, port: int, packet: bytes) -> None:
+    _udp_sock.sendto(packet, (ip, int(port)))
 
 
 def build_udp_packet(axes: Dict[str, Any], control_state: Dict[str, Any]) -> bytes:
@@ -202,4 +217,75 @@ def _encode_lens_control(control_state: Dict[str, Any]) -> tuple[int, int]:
         | ((src_bits("iris") & 0x03) << 6)
     )
     return ctrl0, 0xA5
+
+
+# -------------------------------
+# Gate 1 dual-channel scaffolding
+# -------------------------------
+# These helpers are intentionally additive and are not used by default.
+# The legacy build_udp_packet() path remains the active runtime path.
+
+def build_fast_packet_v2(axes: Dict[str, Any], control_state: Dict[str, Any], seq: int) -> bytes:
+    """Versioned fast packet helper for staged migration (inactive by default)."""
+    legacy = build_udp_packet(axes, control_state)
+    fields = decode_legacy_fast_fields(legacy)
+    if not fields:
+        fields = {"zoom": 0, "focus": 0, "iris": 0, "yaw": 0, "pitch": 0, "roll": 0}
+    return struct.pack(
+        "<BBBHhHHHHHH",
+        PKT_MAGIC,
+        PKT_VER,
+        PKT_FAST_CTRL,
+        int(seq) & 0xFFFF,
+        int(fields["zoom"]),
+        int(fields["focus"]) & 0xFFFF,
+        int(fields["iris"]) & 0xFFFF,
+        int(fields["yaw"]) & 0xFFFF,
+        int(fields["pitch"]) & 0xFFFF,
+        int(fields["roll"]) & 0xFFFF,
+        0,
+    )
+
+
+def decode_fast_packet_v2(packet: bytes) -> Optional[Dict[str, Any]]:
+    if len(packet) != 19:
+        return None
+    try:
+        magic, ver, pkt_type, seq, zoom, focus, iris, yaw, pitch, roll, _ = struct.unpack("<BBBHhHHHHHH", packet)
+    except Exception:
+        return None
+    if magic != PKT_MAGIC or ver != PKT_VER or pkt_type != PKT_FAST_CTRL:
+        return None
+    return {"seq": seq, "zoom": zoom, "focus": focus, "iris": iris, "yaw": yaw, "pitch": pitch, "roll": roll}
+
+
+def build_slow_cmd_packet(seq: int, apply_id: int, key_id: int, value: int) -> bytes:
+    return struct.pack("<BBBHHBi", PKT_MAGIC, PKT_VER, PKT_SLOW_CMD, int(seq) & 0xFFFF, int(apply_id) & 0xFFFF, int(key_id) & 0xFF, int(value))
+
+
+def build_slow_ack_packet(seq: int, apply_id: int, key_id: int, status: int) -> bytes:
+    return struct.pack("<BBBHHBB", PKT_MAGIC, PKT_VER, PKT_SLOW_ACK, int(seq) & 0xFFFF, int(apply_id) & 0xFFFF, int(key_id) & 0xFF, int(status) & 0xFF)
+
+
+def decode_slow_ack_packet(packet: bytes) -> Optional[Dict[str, Any]]:
+    if len(packet) != 9:
+        return None
+    try:
+        magic, ver, pkt_type, seq, apply_id, key_id, status = struct.unpack("<BBBHHBB", packet)
+    except Exception:
+        return None
+    if magic != PKT_MAGIC or ver != PKT_VER or pkt_type != PKT_SLOW_ACK:
+        return None
+    return {"seq": seq, "apply_id": apply_id, "key_id": key_id, "status": status}
+
+
+def decode_legacy_fast_fields(packet: bytes) -> Optional[Dict[str, Any]]:
+    """Decode existing 16-byte MVP packet for compatibility helpers."""
+    if len(packet) != 16 or packet[0] != 0xDE or packet[1] != 0xFD:
+        return None
+    try:
+        zoom, focus, iris, yaw, pitch, roll, _ = struct.unpack("<h5H2s", packet[2:16])
+    except Exception:
+        return None
+    return {"zoom": zoom, "focus": focus, "iris": iris, "yaw": yaw, "pitch": pitch, "roll": roll}
 

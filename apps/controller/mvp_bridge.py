@@ -13,6 +13,7 @@ import mvp_protocol
 
 
 WS_PORT = 8765
+ENABLE_DUAL_CHANNEL = False  # Gate 1: must stay False to preserve baseline behavior.
 
 # Heads configuration (loaded from mvp_protocol.HEADS_FILE)
 heads = mvp_protocol.load_heads()
@@ -26,6 +27,15 @@ control_state = {
     "lens_type": "fuji",
     "axis_sources": {"zoom": "pc", "focus": "pc", "iris": "pc"},
 }
+dual_fast_seq = 0
+dual_slow_state = {
+    "motors_on": 1,
+    "control_mode": "speed",
+    "lens_select": "fuji",
+    "source_zoom": "pc",
+    "source_focus": "pc",
+    "source_iris": "pc",
+}
 
 
 async def handler(websocket):
@@ -33,7 +43,7 @@ async def handler(websocket):
     WebSocket handler for browser clients (e.g. mvp_ui.html).
     Receives GAMEPAD / control messages and forwards as UDP packets.
     """
-    global selected_index
+    global selected_index, dual_fast_seq
 
     # Send initial STATE
     await websocket.send(
@@ -62,12 +72,27 @@ async def handler(websocket):
             # GAMEPAD streaming
             # -----------------
             if msg_type == "GAMEPAD":
-                packet = mvp_protocol.build_udp_packet(
-                    data.get("axes", {}),
-                    control_state,
-                )
-                if heads:
-                    mvp_protocol.send_udp(packet, heads[selected_index])
+                if ENABLE_DUAL_CHANNEL:
+                    dual_fast_seq = (dual_fast_seq + 1) & 0xFFFF
+                    packet = mvp_protocol.build_fast_packet_v2(
+                        data.get("axes", {}),
+                        control_state,
+                        dual_fast_seq,
+                    )
+                    if heads:
+                        head = heads[selected_index]
+                        mvp_protocol.send_udp_to(
+                            head.get("ip"),
+                            int(head.get("port_fast", mvp_protocol.FAST_PORT)),
+                            packet,
+                        )
+                else:
+                    packet = mvp_protocol.build_udp_packet(
+                        data.get("axes", {}),
+                        control_state,
+                    )
+                    if heads:
+                        mvp_protocol.send_udp(packet, heads[selected_index])
 
             # -----------------
             # Select head
@@ -140,6 +165,12 @@ async def handler(websocket):
                         )
                     )
                     print(f"Axis source set: {axis} -> {source}")
+            elif msg_type == "SET_SLOW_CONTROL":
+                # Gate 1 scaffolding only: no runtime behavior change while disabled.
+                if ENABLE_DUAL_CHANNEL:
+                    key = str(data.get("key", "")).strip()
+                    if key in dual_slow_state:
+                        dual_slow_state[key] = data.get("value")
 
     except websockets.ConnectionClosed:
         print("Web client disconnected")
