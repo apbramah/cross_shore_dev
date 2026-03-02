@@ -14,6 +14,8 @@ import mvp_protocol
 
 WS_PORT = 8765
 ENABLE_DUAL_CHANNEL = False  # Gate 1: must stay False to preserve baseline behavior.
+ENABLE_SLOW_CHANNEL = True   # Gate 3: slow control runs while fast stays legacy.
+SLOW_SEND_INTERVAL_S = 0.5
 
 # Heads configuration (loaded from mvp_protocol.HEADS_FILE)
 heads = mvp_protocol.load_heads()
@@ -28,6 +30,8 @@ control_state = {
     "axis_sources": {"zoom": "pc", "focus": "pc", "iris": "pc"},
 }
 dual_fast_seq = 0
+slow_seq = 0
+slow_apply_id = 0
 dual_slow_state = {
     "motors_on": 1,
     "control_mode": "speed",
@@ -36,6 +40,46 @@ dual_slow_state = {
     "source_focus": "pc",
     "source_iris": "pc",
 }
+
+
+def _normalize_slow_value(key, value):
+    key = str(key).strip()
+    if key == "motors_on":
+        return 1 if bool(value) else 0
+    if key == "control_mode":
+        s = str(value).lower().strip()
+        return "angle" if s == "angle" else "speed"
+    if key == "lens_select":
+        s = str(value).lower().strip()
+        return "canon" if s == "canon" else "fuji"
+    if key in ("source_zoom", "source_focus", "source_iris"):
+        s = str(value).lower().strip()
+        if s in ("pc", "camera", "off"):
+            return s
+        return "pc"
+    return value
+
+
+async def slow_sender_task():
+    global slow_seq, slow_apply_id
+    while True:
+        await asyncio.sleep(SLOW_SEND_INTERVAL_S)
+        if not ENABLE_SLOW_CHANNEL or not heads:
+            continue
+        head = heads[selected_index]
+        ip = head.get("ip")
+        if not ip:
+            continue
+        port = int(head.get("port_slow_cmd", mvp_protocol.SLOW_CMD_PORT))
+        slow_apply_id = (slow_apply_id + 1) & 0xFFFF
+        for key, key_id in mvp_protocol.SLOW_KEY_IDS.items():
+            raw = dual_slow_state.get(key)
+            enc = mvp_protocol.encode_slow_value(key, raw)
+            if enc is None:
+                continue
+            slow_seq = (slow_seq + 1) & 0xFFFF
+            pkt = mvp_protocol.build_slow_cmd_packet(slow_seq, slow_apply_id, key_id, enc)
+            mvp_protocol.send_udp_to(ip, port, pkt)
 
 
 async def handler(websocket):
@@ -57,6 +101,7 @@ async def handler(websocket):
                 "zoom_gain": control_state["zoom_gain"],
                 "lens_type": control_state["lens_type"],
                 "axis_sources": control_state["axis_sources"],
+                "slow_controls": dual_slow_state,
             }
         )
     )
@@ -142,6 +187,7 @@ async def handler(websocket):
                 lens_type = str(data.get("lens_type", "")).lower()
                 if lens_type in ("fuji", "canon"):
                     control_state["lens_type"] = lens_type
+                    dual_slow_state["lens_select"] = lens_type
                     await websocket.send(
                         json.dumps(
                             {
@@ -156,6 +202,7 @@ async def handler(websocket):
                 source = str(data.get("source", "")).lower()
                 if axis in ("zoom", "focus", "iris") and source in ("pc", "camera", "off"):
                     control_state["axis_sources"][axis] = source
+                    dual_slow_state[f"source_{axis}"] = source
                     await websocket.send(
                         json.dumps(
                             {
@@ -166,11 +213,9 @@ async def handler(websocket):
                     )
                     print(f"Axis source set: {axis} -> {source}")
             elif msg_type == "SET_SLOW_CONTROL":
-                # Gate 1 scaffolding only: no runtime behavior change while disabled.
-                if ENABLE_DUAL_CHANNEL:
-                    key = str(data.get("key", "")).strip()
-                    if key in dual_slow_state:
-                        dual_slow_state[key] = data.get("value")
+                key = str(data.get("key", "")).strip()
+                if key in dual_slow_state:
+                    dual_slow_state[key] = _normalize_slow_value(key, data.get("value"))
 
     except websockets.ConnectionClosed:
         print("Web client disconnected")
@@ -178,6 +223,9 @@ async def handler(websocket):
 
 async def main():
     print(f"WebSocket server starting on ws://127.0.0.1:{WS_PORT}")
+    if ENABLE_SLOW_CHANNEL:
+        print(f"Slow control sender running at {1.0 / SLOW_SEND_INTERVAL_S:.1f} Hz")
+        asyncio.create_task(slow_sender_task())
     async with websockets.serve(handler, "0.0.0.0", WS_PORT):
         await asyncio.Future()
 

@@ -17,6 +17,22 @@ PKT_SLOW_CMD = 0x20
 PKT_SLOW_ACK = 0x21
 PKT_SLOW_TELEM = 0x30
 
+SLOW_KEY_MOTORS_ON = 1
+SLOW_KEY_CONTROL_MODE = 2
+SLOW_KEY_LENS_SELECT = 3
+SLOW_KEY_SOURCE_ZOOM = 4
+SLOW_KEY_SOURCE_FOCUS = 5
+SLOW_KEY_SOURCE_IRIS = 6
+
+SLOW_KEY_IDS = {
+    "motors_on": SLOW_KEY_MOTORS_ON,
+    "control_mode": SLOW_KEY_CONTROL_MODE,
+    "lens_select": SLOW_KEY_LENS_SELECT,
+    "source_zoom": SLOW_KEY_SOURCE_ZOOM,
+    "source_focus": SLOW_KEY_SOURCE_FOCUS,
+    "source_iris": SLOW_KEY_SOURCE_IRIS,
+}
+
 # Resolve heads.json relative to this file so it works from any CWD
 HEADS_FILE = os.path.join(os.path.dirname(__file__), "heads.json")
 
@@ -288,4 +304,28 @@ def decode_legacy_fast_fields(packet: bytes) -> Optional[Dict[str, Any]]:
     except Exception:
         return None
     return {"zoom": zoom, "focus": focus, "iris": iris, "yaw": yaw, "pitch": pitch, "roll": roll}
+
+
+def encode_slow_value(key: str, value: Any) -> Optional[int]:
+    """Convert slow-control UI value to wire int value."""
+    key = str(key).strip()
+    if key == "motors_on":
+        return 1 if bool(value) else 0
+    if key == "control_mode":
+        s = str(value).lower().strip()
+        return 1 if s == "angle" else 0
+    if key == "lens_select":
+        s = str(value).lower().strip()
+        return 1 if s == "canon" else 0
+    if key in ("source_zoom", "source_focus", "source_iris"):
+        s = str(value).lower().strip()
+        if s == "camera":
+            return 1
+        if s == "off":
+            return 2
+        return 0
+    try:
+        return int(value)
+    except Exception:
+        return None
 

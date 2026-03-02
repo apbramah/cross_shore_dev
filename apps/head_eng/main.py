@@ -15,6 +15,7 @@ from lens_controller import LensController, LENS_FUJI
 # Set to one of: "pc", "camera", "off"
 TEST_FUJI_SOURCE_MODE = "pc"
 ENABLE_DUAL_CHANNEL = False  # Gate 2: keep disabled to preserve baseline behavior.
+ENABLE_SLOW_CHANNEL = True   # Gate 3: receive/apply slow controls with legacy fast path.
 
 # ---------- LED ----------
 led = machine.Pin("LED", machine.Pin.OUT)
@@ -99,19 +100,25 @@ PKT_MAGIC = 0xDE
 PKT_VER = 0x01
 PKT_FAST_CTRL = 0x10
 PKT_SLOW_CMD = 0x20
+SLOW_KEY_MOTORS_ON = 1
+SLOW_KEY_CONTROL_MODE = 2
+SLOW_KEY_LENS_SELECT = 3
+SLOW_KEY_SOURCE_ZOOM = 4
+SLOW_KEY_SOURCE_FOCUS = 5
+SLOW_KEY_SOURCE_IRIS = 6
 
 sock_fast = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 sock_fast.bind(("0.0.0.0", FAST_UDP_PORT))
 sock_fast.setblocking(False)
 
 sock_slow = None
-if ENABLE_DUAL_CHANNEL:
+if ENABLE_SLOW_CHANNEL:
     sock_slow = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock_slow.bind(("0.0.0.0", SLOW_UDP_PORT))
     sock_slow.setblocking(False)
 
 print("Listening FAST UDP on", FAST_UDP_PORT)
-if ENABLE_DUAL_CHANNEL:
+if ENABLE_SLOW_CHANNEL:
     print("Listening SLOW UDP on", SLOW_UDP_PORT)
 
 
@@ -155,8 +162,8 @@ def decode_slow_cmd_packet(packet):
 
 
 def poll_slow_command_once():
-    """Gate 2 scaffold: parse a slow command but do not apply behavior changes yet."""
-    if not ENABLE_DUAL_CHANNEL or sock_slow is None:
+    """Read one slow command packet if available."""
+    if not ENABLE_SLOW_CHANNEL or sock_slow is None:
         return None
     try:
         data, _addr = sock_slow.recvfrom(256)
@@ -166,10 +173,71 @@ def poll_slow_command_once():
         return None
     return decode_slow_cmd_packet(data)
 
+
+def _decode_lens_select(v):
+    return "canon" if int(v) == 1 else "fuji"
+
+
+def _decode_source(v):
+    iv = int(v)
+    if iv == 1:
+        return "camera"
+    if iv == 2:
+        return "off"
+    return "pc"
+
+
+def apply_slow_command(cmd):
+    global last_applied_lens_type, last_applied_sources
+    key = cmd.get("key_id")
+    value = cmd.get("value")
+    if key == SLOW_KEY_LENS_SELECT:
+        requested_type = _decode_lens_select(value)
+        if requested_type != last_applied_lens_type:
+            changed = lens.set_lens_type(requested_type)
+            if changed:
+                last_applied_lens_type = requested_type
+                print("Slow apply lens_select ->", requested_type)
+        return
+
+    if key == SLOW_KEY_SOURCE_ZOOM:
+        src = _decode_source(value)
+        if src != last_applied_sources.get("zoom"):
+            if lens.set_axis_source("zoom", src):
+                last_applied_sources["zoom"] = src
+                print("Slow apply source_zoom ->", src)
+        return
+
+    if key == SLOW_KEY_SOURCE_FOCUS:
+        src = _decode_source(value)
+        if src != last_applied_sources.get("focus"):
+            if lens.set_axis_source("focus", src):
+                last_applied_sources["focus"] = src
+                print("Slow apply source_focus ->", src)
+        return
+
+    if key == SLOW_KEY_SOURCE_IRIS:
+        src = _decode_source(value)
+        if src != last_applied_sources.get("iris"):
+            if lens.set_axis_source("iris", src):
+                last_applied_sources["iris"] = src
+                print("Slow apply source_iris ->", src)
+        return
+
+    if key == SLOW_KEY_MOTORS_ON:
+        # BGC slow keys are accepted on wire in Gate 3 but not applied yet.
+        return
+
+    if key == SLOW_KEY_CONTROL_MODE:
+        # BGC slow keys are accepted on wire in Gate 3 but not applied yet.
+        return
+
 # ---------- Main Loop ----------
 while True:
     pulse_update()
     _slow_cmd = poll_slow_command_once()
+    if _slow_cmd:
+        apply_slow_command(_slow_cmd)
 
     try:
         data, addr = sock_fast.recvfrom(1024)
