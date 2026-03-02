@@ -6,6 +6,7 @@ import network
 import machine
 import time
 import socket
+import struct
 
 from bgc import BGC
 from lens_controller import LensController, LENS_FUJI
@@ -13,6 +14,7 @@ from lens_controller import LensController, LENS_FUJI
 # Local debug override when running MVP without websocket source controls.
 # Set to one of: "pc", "camera", "off"
 TEST_FUJI_SOURCE_MODE = "pc"
+ENABLE_DUAL_CHANNEL = False  # Gate 2: keep disabled to preserve baseline behavior.
 
 # ---------- LED ----------
 led = machine.Pin("LED", machine.Pin.OUT)
@@ -90,19 +92,87 @@ def apply_fuji_source_override():
 apply_fuji_source_override()
 
 # ---------- UDP ----------
-UDP_PORT = 8888
-sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-sock.bind(("0.0.0.0", UDP_PORT))
-sock.setblocking(False)
+FAST_UDP_PORT = 8888
+SLOW_UDP_PORT = 8890
 
-print("Listening UDP on", UDP_PORT)
+PKT_MAGIC = 0xDE
+PKT_VER = 0x01
+PKT_FAST_CTRL = 0x10
+PKT_SLOW_CMD = 0x20
+
+sock_fast = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+sock_fast.bind(("0.0.0.0", FAST_UDP_PORT))
+sock_fast.setblocking(False)
+
+sock_slow = None
+if ENABLE_DUAL_CHANNEL:
+    sock_slow = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock_slow.bind(("0.0.0.0", SLOW_UDP_PORT))
+    sock_slow.setblocking(False)
+
+print("Listening FAST UDP on", FAST_UDP_PORT)
+if ENABLE_DUAL_CHANNEL:
+    print("Listening SLOW UDP on", SLOW_UDP_PORT)
+
+
+def decode_fast_packet_v2(packet):
+    # <BBBHhHHHHHH => magic, ver, type, seq, zoom, focus, iris, yaw, pitch, roll, reserved
+    if len(packet) != 19:
+        return None
+    try:
+        magic, ver, pkt_type, seq, zoom, focus, iris, yaw, pitch, roll, _ = struct.unpack("<BBBHhHHHHHH", packet)
+    except Exception:
+        return None
+    if magic != PKT_MAGIC or ver != PKT_VER or pkt_type != PKT_FAST_CTRL:
+        return None
+    return {
+        "seq": seq,
+        "zoom": zoom,
+        "focus": focus,
+        "iris": iris,
+        "yaw": yaw,
+        "pitch": pitch,
+        "roll": roll,
+    }
+
+
+def decode_slow_cmd_packet(packet):
+    # <BBBHHBi => magic, ver, type, seq, apply_id, key_id, value
+    if len(packet) != 12:
+        return None
+    try:
+        magic, ver, pkt_type, seq, apply_id, key_id, value = struct.unpack("<BBBHHBi", packet)
+    except Exception:
+        return None
+    if magic != PKT_MAGIC or ver != PKT_VER or pkt_type != PKT_SLOW_CMD:
+        return None
+    return {
+        "seq": seq,
+        "apply_id": apply_id,
+        "key_id": key_id,
+        "value": value,
+    }
+
+
+def poll_slow_command_once():
+    """Gate 2 scaffold: parse a slow command but do not apply behavior changes yet."""
+    if not ENABLE_DUAL_CHANNEL or sock_slow is None:
+        return None
+    try:
+        data, _addr = sock_slow.recvfrom(256)
+    except OSError:
+        return None
+    if not data:
+        return None
+    return decode_slow_cmd_packet(data)
 
 # ---------- Main Loop ----------
 while True:
     pulse_update()
+    _slow_cmd = poll_slow_command_once()
 
     try:
-        data, addr = sock.recvfrom(1024)
+        data, addr = sock_fast.recvfrom(1024)
     except OSError:
         # Keep lens ownership/keepalive alive even without incoming UDP packets.
         lens.periodic()
@@ -113,7 +183,13 @@ while True:
         lens.periodic()
         continue
 
-    fields = BGC.decode_udp_packet(data)
+    if ENABLE_DUAL_CHANNEL:
+        fields = decode_fast_packet_v2(data)
+        if not fields:
+            lens.periodic()
+            continue
+    else:
+        fields = BGC.decode_udp_packet(data)
     if not fields:
         lens.periodic()
         continue
