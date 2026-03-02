@@ -208,7 +208,7 @@ def build_fast_packet(axes: Dict[str, Any], control_state: Dict[str, Any], seq: 
     zoom_i = map_zoom(zoom_i)
 
     return struct.pack(
-        "<BBBHhHHhhhH",
+        "<BBBHhHHHHHH",
         PKT_MAGIC,
         PKT_VER,
         PKT_FAST_CTRL,
@@ -216,9 +216,9 @@ def build_fast_packet(axes: Dict[str, Any], control_state: Dict[str, Any], seq: 
         int(zoom_i),
         int(focus_i) & 0xFFFF,
         int(iris_i) & 0xFFFF,
-        int(pan_i),
-        int(tilt_i),
-        int(roll_i),
+        int(pan_i) & 0xFFFF,
+        int(tilt_i) & 0xFFFF,
+        int(roll_i) & 0xFFFF,
         0,  # reserved
     )
 
@@ -226,7 +226,7 @@ def build_fast_packet(axes: Dict[str, Any], control_state: Dict[str, Any], seq: 
 def decode_fast_packet(packet: bytes) -> Optional[Dict[str, Any]]:
     if len(packet) != 19:
         return None
-    magic, ver, pkt_type, seq, zoom, focus, iris, yaw, pitch, roll, _ = struct.unpack("<BBBHhHHhhhH", packet)
+    magic, ver, pkt_type, seq, zoom, focus, iris, yaw, pitch, roll, _ = struct.unpack("<BBBHhHHHHHH", packet)
     if magic != PKT_MAGIC or ver != PKT_VER or pkt_type != PKT_FAST_CTRL:
         return None
     return {

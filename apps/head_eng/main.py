@@ -113,7 +113,7 @@ def decode_fast_packet(data):
     if len(data) != 19:
         return None
     try:
-        magic, ver, pkt_type, seq, zoom, focus, iris, yaw, pitch, roll, _ = struct.unpack("<BBBHhHHhhhH", data)
+        magic, ver, pkt_type, seq, zoom, focus, iris, yaw, pitch, roll, _ = struct.unpack("<BBBHhHHHHHH", data)
     except Exception:
         return None
     if magic != PKT_MAGIC or ver != PKT_VER or pkt_type != PKT_FAST_CTRL:
@@ -285,8 +285,9 @@ def build_telem_packet(seq):
     )
 
 
-def _to_u16_signed(v):
-    return int(v) & 0xFFFF
+def _u16_to_s16(v):
+    iv = int(v) & 0xFFFF
+    return iv - 0x10000 if iv & 0x8000 else iv
 
 
 # ---------- Main Loop ----------
@@ -313,9 +314,9 @@ while True:
         print(
             "CTRL seq/YPRZFI:",
             last_fast_seq,
-            last_fast_fields["yaw"],
-            last_fast_fields["pitch"],
-            last_fast_fields["roll"],
+            _u16_to_s16(last_fast_fields["yaw"]),
+            _u16_to_s16(last_fast_fields["pitch"]),
+            _u16_to_s16(last_fast_fields["roll"]),
             last_fast_fields["zoom"],
             last_fast_fields["focus"],
             last_fast_fields["iris"],
@@ -345,11 +346,7 @@ while True:
         last_fast_fields = stale
 
     # Apply motion paths.
-    bgc.send_joystick_control(
-        _to_u16_signed(last_fast_fields["yaw"]),
-        _to_u16_signed(last_fast_fields["pitch"]),
-        _to_u16_signed(last_fast_fields["roll"]),
-    )
+    bgc.send_joystick_control(last_fast_fields["yaw"], last_fast_fields["pitch"], last_fast_fields["roll"])
     if bit_ok:
         lens.move_zoom(last_fast_fields["zoom"])
         lens.set_focus_input(last_fast_fields["focus"])
