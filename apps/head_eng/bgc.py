@@ -125,8 +125,12 @@ class BGC:
     def send_joystick_control(self, yaw, pitch, roll):
         # BGC virtual channels are 16-bit values; allow signed caller values
         # and convert to two's-complement u16 on transmit.
-        payload = struct.pack(">3H", int(yaw) & 0xFFFF, int(pitch) & 0xFFFF, int(roll) & 0xFFFF)
+        y_u16 = int(yaw) & 0xFFFF
+        p_u16 = int(pitch) & 0xFFFF
+        r_u16 = int(roll) & 0xFFFF
+        payload = struct.pack(">3H", y_u16, p_u16, r_u16)
         self.send_cmd(CMD_API_VIRT_CH_CONTROL, payload)
+        return y_u16, p_u16, r_u16, payload
 
 
 def _decode_lens_control(ctrl0: int, ctrl1: int):

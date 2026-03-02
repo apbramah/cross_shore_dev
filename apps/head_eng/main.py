@@ -24,6 +24,7 @@ SLOW_TELEM_DST_PORT = 8892
 
 FAST_WATCHDOG_MS = 250
 TELEMETRY_PERIOD_MS = 500  # 2Hz
+DEBUG_BGC_NUMBERS = True
 
 KEY_MOTORS_ON = 1
 KEY_CONTROL_MODE = 13
@@ -100,6 +101,10 @@ slow_sock.setblocking(False)
 
 print("Listening FAST UDP on", FAST_PORT)
 print("Listening SLOW UDP on", SLOW_CMD_PORT)
+if DEBUG_BGC_NUMBERS:
+    print("[BGC DBG] Expected BaseCam UART channel value range: u16 0..65535")
+    print("[BGC DBG] Controller nominal signed demand: -512..+512 (encoded as u16 two's complement)")
+    print("[BGC DBG] Example mapping: -512->65024, -1->65535, 0->0, +1->1, +512->512")
 
 last_fast_ms = time.ticks_ms()
 last_fast_fields = {"yaw": 0, "pitch": 0, "roll": 0, "zoom": 0, "focus": 0, "iris": 0}
@@ -290,6 +295,10 @@ def _u16_to_s16(v):
     return iv - 0x10000 if iv & 0x8000 else iv
 
 
+def _u16(v):
+    return int(v) & 0xFFFF
+
+
 # ---------- Main Loop ----------
 while True:
     pulse_update()
@@ -312,15 +321,37 @@ while True:
 
     if got_fast:
         print(
-            "CTRL seq/YPRZFI:",
+            "CTRL RX(raw_u16) seq/YPRZFI:",
             last_fast_seq,
-            _u16_to_s16(last_fast_fields["yaw"]),
-            _u16_to_s16(last_fast_fields["pitch"]),
-            _u16_to_s16(last_fast_fields["roll"]),
+            last_fast_fields["yaw"],
+            last_fast_fields["pitch"],
+            last_fast_fields["roll"],
             last_fast_fields["zoom"],
             last_fast_fields["focus"],
             last_fast_fields["iris"],
         )
+        if DEBUG_BGC_NUMBERS:
+            yaw_in_u16 = _u16(last_fast_fields["yaw"])
+            pitch_in_u16 = _u16(last_fast_fields["pitch"])
+            roll_in_u16 = _u16(last_fast_fields["roll"])
+            # Current code path sends these values directly to BGC.
+            yaw_tx_u16 = yaw_in_u16
+            pitch_tx_u16 = pitch_in_u16
+            roll_tx_u16 = roll_in_u16
+            print(
+                "[BGC DBG] IN(raw_u16):",
+                yaw_in_u16,
+                pitch_in_u16,
+                roll_in_u16,
+                "IN(as_s16):",
+                _u16_to_s16(yaw_in_u16),
+                _u16_to_s16(pitch_in_u16),
+                _u16_to_s16(roll_in_u16),
+                "TX(u16):",
+                yaw_tx_u16,
+                pitch_tx_u16,
+                roll_tx_u16,
+            )
         pulse(15)
 
     # Read all pending slow command packets and ACK each apply.
@@ -346,7 +377,18 @@ while True:
         last_fast_fields = stale
 
     # Apply motion paths.
-    bgc.send_joystick_control(last_fast_fields["yaw"], last_fast_fields["pitch"], last_fast_fields["roll"])
+    y_tx_u16, p_tx_u16, r_tx_u16, tx_payload = bgc.send_joystick_control(
+        last_fast_fields["yaw"], last_fast_fields["pitch"], last_fast_fields["roll"]
+    )
+    if got_fast and DEBUG_BGC_NUMBERS:
+        print(
+            "[BGC DBG] UART TX(u16):",
+            y_tx_u16,
+            p_tx_u16,
+            r_tx_u16,
+            "payload_hex:",
+            " ".join("{:02X}".format(b) for b in tx_payload),
+        )
     if bit_ok:
         lens.move_zoom(last_fast_fields["zoom"])
         lens.set_focus_input(last_fast_fields["focus"])
