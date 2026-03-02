@@ -29,6 +29,25 @@ const state = {
     // Parameters
     speed: 1.0,
     zoomGain: 60,
+    fastHz: 50,
+    slowControl: {
+        motors_on: 1,
+        control_mode: 'speed',
+        lens_select: 'fuji',
+        source_zoom: 'pc',
+        source_focus: 'pc',
+        source_iris: 'pc'
+    },
+    slowTelem: null,
+    slowFieldOrder: [
+        'lens_select',
+        'source_zoom',
+        'source_focus',
+        'source_iris',
+        'control_mode',
+        'motors_on'
+    ],
+    selectedSlowField: 0,
     
     // Gamepad axes (semantic)
     axes: {
@@ -159,6 +178,17 @@ function handleIncomingMessage(message) {
                 state.zoomGain = message.zoom_gain;
                 updateZoomGainUI();
             }
+            if (message.fast_hz !== undefined) {
+                state.fastHz = message.fast_hz;
+            }
+            if (message.slow_control) {
+                state.slowControl = { ...state.slowControl, ...message.slow_control };
+                updateSlowControlUI();
+            }
+            if (message.slow_telem) {
+                state.slowTelem = message.slow_telem;
+                updateSlowTelemetryUI();
+            }
             break;
             
         case 'SELECTED':
@@ -168,6 +198,18 @@ function handleIncomingMessage(message) {
                 updateHeadSelector();
                 updateHeadInfo();
             }
+            break;
+
+        case 'SLOW_CONTROL_STATE':
+            if (message.slow_control) {
+                state.slowControl = { ...state.slowControl, ...message.slow_control };
+                updateSlowControlUI();
+            }
+            break;
+
+        case 'SLOW_TELEMETRY':
+            state.slowTelem = message;
+            updateSlowTelemetryUI();
             break;
     }
     
@@ -326,21 +368,21 @@ function handleEncoderEvent(buttonIndex) {
             
         case 4: // MENU/NAV
             if (action === 0) { // CW
-                moveFocus(1);
+                cycleSlowField(1);
             } else if (action === 1) { // CCW
-                moveFocus(-1);
+                cycleSlowField(-1);
             } else if (action === 2) { // Push
-                toggleConnectionOverlay();
+                toggleSlowFieldEdit();
             }
             break;
             
         case 5: // CONFIRM/BACK
             if (action === 0) { // CW
-                // Optional quick actions
+                adjustSelectedSlowField(1);
             } else if (action === 1) { // CCW
-                // Optional quick actions
+                adjustSelectedSlowField(-1);
             } else if (action === 2) { // Push (short press, long press handled separately)
-                confirmAction();
+                sendSelectedSlowField();
             }
             break;
     }
@@ -440,6 +482,55 @@ function confirmAction() {
 function toggleConnectionOverlay() {
     const overlay = document.getElementById('connectionOverlay');
     overlay.classList.toggle('active');
+}
+
+function cycleSlowField(direction) {
+    const total = state.slowFieldOrder.length;
+    state.selectedSlowField = (state.selectedSlowField + direction + total) % total;
+    updateSlowControlUI();
+}
+
+function toggleSlowFieldEdit() {
+    if (state.editingEncoder === 5) {
+        state.editingEncoder = null;
+    } else {
+        state.editingEncoder = 5;
+    }
+    updateEncoderFocus();
+}
+
+function adjustSelectedSlowField(direction) {
+    const key = state.slowFieldOrder[state.selectedSlowField];
+    if (!key) return;
+    const current = state.slowControl[key];
+    let next = current;
+
+    if (key === 'lens_select') {
+        next = current === 'fuji' ? 'canon' : 'fuji';
+    } else if (key === 'control_mode') {
+        next = current === 'speed' ? 'angle' : 'speed';
+    } else if (key === 'motors_on') {
+        next = current ? 0 : 1;
+    } else if (key.startsWith('source_')) {
+        const options = ['pc', 'camera', 'off'];
+        const idx = options.indexOf(current);
+        const start = idx === -1 ? 0 : idx;
+        next = options[(start + direction + options.length) % options.length];
+    }
+
+    state.slowControl[key] = next;
+    updateSlowControlUI();
+}
+
+function sendSelectedSlowField() {
+    const key = state.slowFieldOrder[state.selectedSlowField];
+    if (!key) return;
+    const value = state.slowControl[key];
+    sendWebSocketMessage({
+        type: 'SET_SLOW_CONTROL',
+        key,
+        value
+    });
 }
 
 // =======================
@@ -608,6 +699,32 @@ function updateZoomGainUI() {
     // Calculate slider fill (10 to 150 maps to 0% to 100%)
     const percentage = ((state.zoomGain - 10) / (150 - 10)) * 100;
     zoomGainSlider.style.width = percentage + '%';
+}
+
+function updateSlowControlUI() {
+    const key = state.slowFieldOrder[state.selectedSlowField] || 'lens_select';
+    const value = state.slowControl[key];
+    const slowFieldName = document.getElementById('slowFieldName');
+    const slowFieldValue = document.getElementById('slowFieldValue');
+    if (slowFieldName) {
+        slowFieldName.textContent = key;
+    }
+    if (slowFieldValue) {
+        slowFieldValue.textContent = String(value);
+    }
+}
+
+function updateSlowTelemetryUI() {
+    const line = document.getElementById('slowTelemLine');
+    if (!line) return;
+    if (!state.slowTelem) {
+        line.textContent = 'no telemetry';
+        return;
+    }
+    const t = state.slowTelem;
+    const lens = t.lens_select || 'n/a';
+    const src = `${t.source_zoom || '-'} / ${t.source_focus || '-'} / ${t.source_iris || '-'}`;
+    line.textContent = `${lens} | src ${src}`;
 }
 
 function updateInvertToggles() {
@@ -824,6 +941,8 @@ document.addEventListener('DOMContentLoaded', () => {
     updateHeadInfo();
     updateSpeedUI();
     updateZoomGainUI();
+    updateSlowControlUI();
+    updateSlowTelemetryUI();
     updateInvertToggles();
     updateEncoderFocus();
 });

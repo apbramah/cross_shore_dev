@@ -1,330 +1,144 @@
 """
 Hydravision Lite - MVP Controller Bridge
-Runs on PC or Raspberry Pi (normal Python)
-WebSocket <-> UDP bridge, using shared MVP protocol helpers.
+WebSocket UI bridge with dual-channel UDP:
+  - Fast motion UDP (25-100Hz, send-on-change)
+  - Slow control UDP (~2Hz + immediate-on-change + ack/retry)
 """
 
 import asyncio
 import json
+import socket
+import time
+from typing import Any, Dict, Optional, Set
 
 import websockets
 
 import mvp_protocol
 
-
 WS_PORT = 8765
+FAST_HEARTBEAT_MS = 500
+SLOW_HZ = 2.0
+SLOW_RETRY_MS = 350
+SLOW_MAX_RETRIES = 5
 
-# Heads configuration (loaded from mvp_protocol.HEADS_FILE)
 heads = mvp_protocol.load_heads()
 selected_index = 0
+clients: Set[Any] = set()
 
-# Default control state (shared structure with desktop app)
-control_state = {
+control_state: Dict[str, Any] = {
     "invert": {"yaw": False, "pitch": False, "roll": False},
     "speed": 1.0,
-    "zoom_gain": 60,
-    "lens_type": "fuji",
-    "axis_sources": {"zoom": "pc", "focus": "pc", "iris": "pc"},
+    "zoom_gain": 60.0,
 }
 
+fast_hz = 50.0
+last_axes: Dict[str, float] = {"X": 0.0, "Y": 0.0, "Z": 0.0, "Xrotate": 0.0, "Yrotate": 0.0, "Zrotate": 0.0}
+fast_seq = 0
+slow_seq = 0
+next_apply_id = 1
 
-async def handler(websocket):
-    """
-    WebSocket handler for browser clients (e.g. mvp_ui.html).
-    Receives GAMEPAD / control messages and forwards as UDP packets.
-    """
-    global selected_index
-
-    # Send initial STATE
-    await websocket.send(
-        json.dumps(
-            {
-                "type": "STATE",
-                "heads": heads,
-                "selected": selected_index,
-                "invert": control_state["invert"],
-                "speed": control_state["speed"],
-                "zoom_gain": control_state["zoom_gain"],
-                "lens_type": control_state["lens_type"],
-                "axis_sources": control_state["axis_sources"],
-            }
-        )
-    )
-
-    print("Web client connected")
-
-    try:
-        async for message in websocket:
-            data = json.loads(message)
-            msg_type = data.get("type")
-
-            # -----------------
-            # GAMEPAD streaming
-            # -----------------
-            if msg_type == "GAMEPAD":
-                packet = mvp_protocol.build_udp_packet(
-                    data.get("axes", {}),
-                    control_state,
-                )
-                if heads:
-                    mvp_protocol.send_udp(packet, heads[selected_index])
-
-            # -----------------
-            # Select head
-            # -----------------
-            elif msg_type == "SELECT_HEAD":
-                idx = int(data.get("index", 0))
-                if 0 <= idx < len(heads):
-                    selected_index = idx
-                    print("Selected head:", heads[idx]["name"])
-                    await websocket.send(
-                        json.dumps(
-                            {
-                                "type": "SELECTED",
-                                "selected": selected_index,
-                            }
-                        )
-                    )
-
-            # -----------------
-            # Speed adjust
-            # -----------------
-            elif msg_type == "SET_SPEED":
-                control_state["speed"] = float(data.get("speed", 1.0))
-                print("Speed set to:", control_state["speed"])
-
-            # -----------------
-            # Zoom gain
-            # -----------------
-            elif msg_type == "SET_ZOOM_GAIN":
-                control_state["zoom_gain"] = float(data.get("zoom_gain", 60))
-                print("Zoom gain set to:", control_state["zoom_gain"])
-
-            # -----------------
-            # Invert flags
-            # -----------------
-            elif msg_type == "SET_INVERT":
-                control_state["invert"] = data.get(
-                    "invert",
-                    control_state["invert"],
-                )
-                print("Invert flags updated:", control_state["invert"])
-
-            # -----------------
-            # Lens type / sources (UI state only in MVP bridge)
-            # -----------------
-            elif msg_type == "SET_LENS_TYPE":
-                lens_type = str(data.get("lens_type", "")).lower()
-                if lens_type in ("fuji", "canon"):
-                    control_state["lens_type"] = lens_type
-                    await websocket.send(
-                        json.dumps(
-                            {
-                                "type": "CURRENT_LENS_TYPE",
-                                "lens_type": lens_type,
-                            }
-                        )
-                    )
-                    print("Lens type set to:", lens_type)
-            elif msg_type == "SET_LENS_AXIS_SOURCE":
-                axis = str(data.get("axis", "")).lower()
-                source = str(data.get("source", "")).lower()
-                if axis in ("zoom", "focus", "iris") and source in ("pc", "camera", "off"):
-                    control_state["axis_sources"][axis] = source
-                    await websocket.send(
-                        json.dumps(
-                            {
-                                "type": "CURRENT_LENS_AXIS_SOURCES",
-                                "sources": control_state["axis_sources"],
-                            }
-                        )
-                    )
-                    print(f"Axis source set: {axis} -> {source}")
-
-    except websockets.ConnectionClosed:
-        print("Web client disconnected")
-
-
-async def main():
-    print(f"WebSocket server starting on ws://127.0.0.1:{WS_PORT}")
-    async with websockets.serve(handler, "0.0.0.0", WS_PORT):
-        await asyncio.Future()
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
-
-# ==========================================
-# Hydravision Lite - MVP Controller Bridge
-# Runs on PC or Raspberry Pi (normal Python)
-# WebSocket <-> UDP bridge
-# ==========================================
-
-import asyncio
-import websockets
-import json
-import socket
-
-WS_PORT = 8765
-UDP_DEFAULT_PORT = 8888
-
-HEADS_FILE = "heads.json"
-
-# -----------------------------
-# Load heads configuration
-# -----------------------------
-
-def load_heads():
-    try:
-        with open(HEADS_FILE, "r") as f:
-            heads = json.load(f)
-        print(f"Loaded {len(heads)} heads from {HEADS_FILE}")
-        return heads
-    except Exception as e:
-        print("Error loading heads.json:", e)
-        return []
-
-
-heads = load_heads()
-selected_index = 0
-
-# Default control state
-control_state = {
-    "invert": {"yaw": False, "pitch": False, "roll": False},
-    "speed": 1.0,
-    "zoom_gain": 60
+slow_state: Dict[str, Any] = {
+    "motors_on": 1,
+    "pan_gain": 0,
+    "tilt_gain": 0,
+    "roll_gain": 0,
+    "pan_acceleration": 0,
+    "tilt_acceleration": 0,
+    "roll_acceleration": 0,
+    "expo": 0,
+    "pan_top_speed": 0,
+    "tilt_top_speed": 0,
+    "roll_top_speed": 0,
+    "gyro_drift_offset": 0,
+    "control_mode": "speed",
+    "lens_select": "fuji",
+    "source_zoom": "pc",
+    "source_focus": "pc",
+    "source_iris": "pc",
 }
 
-# UDP socket
-udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+pending_slow: Dict[int, Dict[str, Any]] = {}
+slow_change_queue: asyncio.Queue = asyncio.Queue()
+slow_snapshot_keys = list(mvp_protocol.SLOW_KEYS.keys())
+slow_snapshot_index = 0
+latest_telem: Dict[str, Any] = {}
+slow_io_sock: Optional[socket.socket] = None
 
 
-# -----------------------------------
-# Build 16-byte UDP packet
-# -----------------------------------
-
-def build_udp_packet(axes):
-    """
-    Match the ORIGINAL controller/main.py behaviour:
-    - Browser axes float [-1..+1] -> int [-512..+512]
-    - Apply the same map_* transforms you were using
-    - Pack bytes in the SAME byte order as the original send_udp_message()
-    """
-
-    def f(name, default=0.0):
-        try:
-            return float(axes.get(name, default))
-        except Exception:
-            return float(default)
-
-    # Browser float axes
-    pan   = f("X")         # Joystick.X
-    tilt  = f("Y")         # Joystick.Y
-    roll  = f("Z")         # Joystick.Z
-    focus = f("Xrotate")   # Joystick.Xrotate
-    iris  = f("Yrotate")   # Joystick.Yrotate
-    zoom  = f("Zrotate")   # Joystick.Zrotate
-
-    # Deadzone (same idea as before, but applied in float domain)
-    DEADZONE = 0.06
-    def dz(v): return 0.0 if -DEADZONE < v < DEADZONE else v
-    pan = dz(pan); tilt = dz(tilt); roll = dz(roll)
-    focus = dz(focus); iris = dz(iris); zoom = dz(zoom)
-
-    # Invert flags (match original intent)
-    if control_state["invert"]["yaw"]:
-        pan = -pan
-    if control_state["invert"]["pitch"]:
-        tilt = -tilt
-    if control_state["invert"]["roll"]:
-        roll = -roll
-
-    # Speed scaling (float domain, then clamp)
-    sp = float(control_state.get("speed", 1.0))
-    pan *= sp; tilt *= sp; roll *= sp
-
-    def clamp1(v):
-        if v < -1.0: return -1.0
-        if v >  1.0: return  1.0
-        return v
-
-    pan = clamp1(pan); tilt = clamp1(tilt); roll = clamp1(roll)
-    focus = clamp1(focus); iris = clamp1(iris); zoom = clamp1(zoom)
-
-    # === ORIGINAL INTERNAL RANGE: -512..+512 ===
-    pan_i   = int(pan   * 512)
-    tilt_i  = int(tilt  * 512)
-    roll_i  = int(roll  * 512)
-    focus_i = int(focus * 512)
-    iris_i  = int(iris  * 512)
-
-    # zoom rocker -> signed delta similar to original feel
-    zg = float(control_state.get("zoom_gain", 60.0))
-    zoom_i = int(zoom * zg)
-
-    # === ORIGINAL map_* transforms (copied from controller/main.py) ===
-    map_zoom  = lambda value: (value + 0)
-    map_iris  = lambda value: (value + 512) >> 4
-    map_focus = lambda value: (value + 512) >> 4
-    map_pitch = lambda value: value
-
-    tilt_i  = map_pitch(tilt_i)
-    zoom_i  = map_zoom(zoom_i)
-    focus_i = map_focus(focus_i)
-    iris_i  = map_iris(iris_i)
-
-    # Pack EXACTLY like original send_udp_message() byte order
-    msg = bytes([
-        0xDE, 0xFD,
-
-        zoom_i & 0xFF, (zoom_i >> 8) & 0xFF,
-
-        (focus_i >> 8) & 0xFF, focus_i & 0xFF,
-        (iris_i  >> 8) & 0xFF, iris_i  & 0xFF,
-
-        (pan_i  >> 8) & 0xFF, pan_i  & 0xFF,
-        (tilt_i >> 8) & 0xFF, tilt_i & 0xFF,
-        (roll_i >> 8) & 0xFF, roll_i & 0xFF,
-
-        0x00, 0x00
-    ])
-
-    return msg
-
-
-
-# -----------------------------------
-# Send UDP to selected head
-# -----------------------------------
-
-def send_udp(packet):
+def _current_head() -> Optional[Dict[str, Any]]:
     if not heads:
+        return None
+    if selected_index < 0 or selected_index >= len(heads):
+        return None
+    return heads[selected_index]
+
+
+def _head_fast_port(head: Dict[str, Any]) -> int:
+    return int(head.get("port", mvp_protocol.FAST_PORT))
+
+
+def _head_slow_cmd_port(head: Dict[str, Any]) -> int:
+    return int(head.get("slow_cmd_port", mvp_protocol.SLOW_CMD_PORT))
+
+
+def _head_slow_telem_port(head: Dict[str, Any]) -> int:
+    return int(head.get("slow_telem_port", mvp_protocol.SLOW_TELEM_PORT))
+
+
+def _encode_slow_value(key: str, value: Any) -> int:
+    if key in ("motors_on",):
+        return 1 if bool(value) else 0
+    if key == "control_mode":
+        return mvp_protocol._encode_control_mode(str(value))
+    if key == "lens_select":
+        return mvp_protocol._encode_lens_select(str(value))
+    if key in ("source_zoom", "source_focus", "source_iris"):
+        return mvp_protocol._encode_source(str(value))
+    return int(value)
+
+
+async def _broadcast(msg: Dict[str, Any]) -> None:
+    if not clients:
         return
+    payload = json.dumps(msg)
+    stale = []
+    for ws in clients:
+        try:
+            await ws.send(payload)
+        except Exception:
+            stale.append(ws)
+    for ws in stale:
+        clients.discard(ws)
 
-    head = heads[selected_index]
-    ip = head["ip"]
-    port = head.get("port", UDP_DEFAULT_PORT)
 
-    udp_sock.sendto(packet, (ip, port))
-
-
-# -----------------------------------
-# WebSocket handler
-# -----------------------------------
-
-async def handler(websocket):
-    global selected_index
-
-    # Send initial STATE
-    await websocket.send(json.dumps({
+def _state_payload() -> Dict[str, Any]:
+    return {
         "type": "STATE",
         "heads": heads,
         "selected": selected_index,
         "invert": control_state["invert"],
         "speed": control_state["speed"],
-        "zoom_gain": control_state["zoom_gain"]
-    }))
+        "zoom_gain": control_state["zoom_gain"],
+        "fast_hz": fast_hz,
+        "slow_control": dict(slow_state),
+        "slow_telem": dict(latest_telem),
+    }
 
+
+async def _queue_slow_update(key: str, value: Any) -> None:
+    if key not in mvp_protocol.SLOW_KEYS:
+        return
+    if slow_state.get(key) == value:
+        return
+    slow_state[key] = value
+    await slow_change_queue.put((key, value))
+    await _broadcast({"type": "SLOW_CONTROL_STATE", "slow_control": dict(slow_state)})
+
+
+async def handler(websocket):
+    global selected_index, fast_hz
+    clients.add(websocket)
+    await websocket.send(json.dumps(_state_payload()))
     print("Web client connected")
 
     try:
@@ -332,59 +146,186 @@ async def handler(websocket):
             data = json.loads(message)
             msg_type = data.get("type")
 
-            # -----------------
-            # GAMEPAD streaming
-            # -----------------
             if msg_type == "GAMEPAD":
-                packet = build_udp_packet(data.get("axes", {}))
-                send_udp(packet)
-
-            # -----------------
-            # Select head
-            # -----------------
+                axes = data.get("axes", {})
+                for k in last_axes.keys():
+                    try:
+                        last_axes[k] = float(axes.get(k, 0.0))
+                    except Exception:
+                        last_axes[k] = 0.0
             elif msg_type == "SELECT_HEAD":
                 idx = int(data.get("index", 0))
                 if 0 <= idx < len(heads):
                     selected_index = idx
                     print("Selected head:", heads[idx]["name"])
-                    await websocket.send(json.dumps({
-                        "type": "SELECTED",
-                        "selected": selected_index
-                    }))
-
-            # -----------------
-            # Speed adjust
-            # -----------------
+                    await _broadcast({"type": "SELECTED", "selected": selected_index})
             elif msg_type == "SET_SPEED":
                 control_state["speed"] = float(data.get("speed", 1.0))
-                print("Speed set to:", control_state["speed"])
-
-            # -----------------
-            # Zoom gain
-            # -----------------
             elif msg_type == "SET_ZOOM_GAIN":
                 control_state["zoom_gain"] = float(data.get("zoom_gain", 60))
-                print("Zoom gain set to:", control_state["zoom_gain"])
-
-            # -----------------
-            # Invert flags
-            # -----------------
             elif msg_type == "SET_INVERT":
                 control_state["invert"] = data.get("invert", control_state["invert"])
-                print("Invert flags updated:", control_state["invert"])
+            elif msg_type == "SET_FAST_HZ":
+                hz = float(data.get("fast_hz", fast_hz))
+                fast_hz = max(25.0, min(100.0, hz))
+                await _broadcast({"type": "FAST_HZ", "fast_hz": fast_hz})
+            elif msg_type == "SET_SLOW_CONTROL":
+                key = str(data.get("key", "")).strip()
+                if key in mvp_protocol.SLOW_KEYS:
+                    await _queue_slow_update(key, data.get("value"))
+            elif msg_type == "SET_LENS_TYPE":
+                lens_type = str(data.get("lens_type", "")).lower()
+                if lens_type in ("fuji", "canon"):
+                    await _queue_slow_update("lens_select", lens_type)
+            elif msg_type == "SET_LENS_AXIS_SOURCE":
+                axis = str(data.get("axis", "")).lower()
+                source = str(data.get("source", "")).lower()
+                if axis in ("zoom", "focus", "iris") and source in ("pc", "camera", "off"):
+                    await _queue_slow_update(f"source_{axis}", source)
 
     except websockets.ConnectionClosed:
         print("Web client disconnected")
+    finally:
+        clients.discard(websocket)
 
 
-# -----------------------------------
-# Main entry
-# -----------------------------------
+async def fast_sender_task():
+    global fast_seq
+    last_sent: Optional[bytes] = None
+    last_send_ms = 0
+    while True:
+        head = _current_head()
+        if head:
+            fast_seq = (fast_seq + 1) & 0xFFFF
+            packet = mvp_protocol.build_fast_packet(last_axes, control_state, fast_seq)
+            now_ms = int(time.time() * 1000)
+            changed = packet != last_sent
+            heartbeat_due = (now_ms - last_send_ms) >= FAST_HEARTBEAT_MS
+            if changed or heartbeat_due:
+                mvp_protocol.send_udp_to(head["ip"], _head_fast_port(head), packet)
+                last_sent = packet
+                last_send_ms = now_ms
+        await asyncio.sleep(max(0.001, 1.0 / fast_hz))
+
+
+async def slow_sender_task():
+    global slow_seq, next_apply_id, slow_snapshot_index
+    snapshot_period_s = 1.0 / SLOW_HZ
+    last_snapshot = 0.0
+    while True:
+        head = _current_head()
+        now = time.time()
+        if not head:
+            await asyncio.sleep(0.05)
+            continue
+
+        # Immediate-on-change sends first.
+        try:
+            while True:
+                key, value = slow_change_queue.get_nowait()
+                key_id = mvp_protocol.SLOW_KEYS[key]
+                encoded = _encode_slow_value(key, value)
+                apply_id = next_apply_id & 0xFFFF
+                next_apply_id += 1
+                slow_seq = (slow_seq + 1) & 0xFFFF
+                packet = mvp_protocol.build_slow_cmd_packet(slow_seq, apply_id, key_id, encoded)
+                if slow_io_sock:
+                    slow_io_sock.sendto(packet, (head["ip"], _head_slow_cmd_port(head)))
+                pending_slow[apply_id] = {
+                    "packet": packet,
+                    "key_id": key_id,
+                    "retries_left": SLOW_MAX_RETRIES,
+                    "retry_at": now + (SLOW_RETRY_MS / 1000.0),
+                }
+                await _broadcast({"type": "SLOW_CMD_SENT", "apply_id": apply_id, "key": key, "value": value})
+        except asyncio.QueueEmpty:
+            pass
+
+        # 2Hz background snapshot of one key at a time.
+        if (now - last_snapshot) >= snapshot_period_s and slow_snapshot_keys:
+            key = slow_snapshot_keys[slow_snapshot_index]
+            slow_snapshot_index = (slow_snapshot_index + 1) % len(slow_snapshot_keys)
+            value = slow_state.get(key)
+            key_id = mvp_protocol.SLOW_KEYS[key]
+            encoded = _encode_slow_value(key, value)
+            apply_id = next_apply_id & 0xFFFF
+            next_apply_id += 1
+            slow_seq = (slow_seq + 1) & 0xFFFF
+            packet = mvp_protocol.build_slow_cmd_packet(slow_seq, apply_id, key_id, encoded)
+            if slow_io_sock:
+                slow_io_sock.sendto(packet, (head["ip"], _head_slow_cmd_port(head)))
+            pending_slow[apply_id] = {
+                "packet": packet,
+                "key_id": key_id,
+                "retries_left": SLOW_MAX_RETRIES,
+                "retry_at": now + (SLOW_RETRY_MS / 1000.0),
+            }
+            last_snapshot = now
+
+        # Retry unacked commands.
+        expired = []
+        for apply_id, item in pending_slow.items():
+            if now < item["retry_at"]:
+                continue
+            if item["retries_left"] <= 0:
+                expired.append(apply_id)
+                await _broadcast(
+                    {
+                        "type": "SLOW_ACK_TIMEOUT",
+                        "apply_id": apply_id,
+                        "key": mvp_protocol.SLOW_KEYS_BY_ID.get(item["key_id"], "unknown"),
+                    }
+                )
+                continue
+            if slow_io_sock:
+                slow_io_sock.sendto(item["packet"], (head["ip"], _head_slow_cmd_port(head)))
+            item["retries_left"] -= 1
+            item["retry_at"] = now + (SLOW_RETRY_MS / 1000.0)
+        for apply_id in expired:
+            pending_slow.pop(apply_id, None)
+
+        await asyncio.sleep(0.02)
+
+
+async def slow_rx_task():
+    global latest_telem
+    print(f"Slow RX socket listening on UDP {mvp_protocol.BRIDGE_RX_PORT}")
+
+    while True:
+        try:
+            if not slow_io_sock:
+                await asyncio.sleep(0.05)
+                continue
+            data, addr = await asyncio.to_thread(slow_io_sock.recvfrom, 2048)
+        except Exception:
+            await asyncio.sleep(0.01)
+            continue
+
+        ack = mvp_protocol.decode_slow_ack_packet(data)
+        if ack:
+            pending_slow.pop(ack["apply_id"], None)
+            await _broadcast({"type": "SLOW_ACK", "from": addr[0], **ack})
+            continue
+
+        telem = mvp_protocol.decode_slow_telem_packet(data)
+        if telem:
+            latest_telem = telem
+            await _broadcast({"type": "SLOW_TELEMETRY", "from": addr[0], **telem})
+            continue
+
 
 async def main():
-    print(f"WebSocket server starting on ws://127.0.0.1:{WS_PORT}")
+    global slow_io_sock
+    slow_io_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    slow_io_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    slow_io_sock.bind(("0.0.0.0", mvp_protocol.BRIDGE_RX_PORT))
+    print(f"WebSocket server starting on ws://0.0.0.0:{WS_PORT}")
     async with websockets.serve(handler, "0.0.0.0", WS_PORT):
-        await asyncio.Future()
+        await asyncio.gather(
+            fast_sender_task(),
+            slow_sender_task(),
+            slow_rx_task(),
+        )
 
 
 if __name__ == "__main__":

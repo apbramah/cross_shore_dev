@@ -98,3 +98,18 @@ class LensController:
             return bool(fn())
         print("[LENS] No diagnostics available for lens")
         return False
+
+    def get_status(self):
+        axis_sources = self.get_axis_sources()
+        zoom_position = int(getattr(self.active_lens, "zoom", 0)) if self.active_lens else 0
+        focus_position = int(getattr(self.active_lens, "focus", 0)) if self.active_lens else 0
+        iris_position = int(getattr(self.active_lens, "iris", 0)) if self.active_lens else 0
+        return {
+            "lens_select": self.get_lens_type() or LENS_FUJI,
+            "source_zoom": axis_sources.get("zoom", "pc"),
+            "source_focus": axis_sources.get("focus", "pc"),
+            "source_iris": axis_sources.get("iris", "pc"),
+            "zoom_position": zoom_position,
+            "focus_position": focus_position,
+            "iris_position": iris_position,
+        }
