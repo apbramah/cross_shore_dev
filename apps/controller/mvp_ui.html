@@ -184,6 +184,7 @@ let mapperEnabled = true;
 let lensState = { lens_type: "fuji", axis_sources: { zoom: "pc", focus: "pc", iris: "pc" } };
 
 let lastAxes = [];
+let lastSendMs = 0;
 let detectedAxis = null;
 let detectedDelta = 0;
 
@@ -509,8 +510,12 @@ function tick(){
   const named = readNamedAxes(gp);
   $("namedAxes").textContent = JSON.stringify(named);
 
-  // Send every frame; bridge does send-on-change + heartbeat/rate limiting.
-  send({type:"GAMEPAD", axes: named});
+  // Throttle browser->bridge stream to avoid starving control messages.
+  const now = performance.now();
+  if (!lastSendMs || (now - lastSendMs) > 20) { // ~50Hz
+    send({type:"GAMEPAD", axes: named});
+    lastSendMs = now;
+  }
 
   requestAnimationFrame(tick);
 }
