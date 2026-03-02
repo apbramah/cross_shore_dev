@@ -134,18 +134,20 @@ def build_fast_packet(axes: Dict[str, Any], control_state: Dict[str, Any], seq: 
     iris = f("Yrotate")   # Joystick.Yrotate
     zoom = f("Zrotate")   # Joystick.Zrotate
 
-    # Deadzone (float domain)
-    DEADZONE = 0.06
+    # Deadzones (float domain). Lens axes get stronger deadzone to suppress
+    # idle drift/jitter from gamepad ADC noise.
+    DEADZONE_MOTION = 0.06
+    DEADZONE_LENS = 0.12
 
-    def dz(v: float) -> float:
-        return 0.0 if -DEADZONE < v < DEADZONE else v
+    def dz(v: float, threshold: float) -> float:
+        return 0.0 if -threshold < v < threshold else v
 
-    pan = dz(pan)
-    tilt = dz(tilt)
-    roll = dz(roll)
-    focus = dz(focus)
-    iris = dz(iris)
-    zoom = dz(zoom)
+    pan = dz(pan, DEADZONE_MOTION)
+    tilt = dz(tilt, DEADZONE_MOTION)
+    roll = dz(roll, DEADZONE_MOTION)
+    zoom = dz(zoom, DEADZONE_MOTION)
+    focus = dz(focus, DEADZONE_LENS)
+    iris = dz(iris, DEADZONE_LENS)
 
     invert = control_state.get("invert", {}) or {}
 
@@ -181,8 +183,18 @@ def build_fast_packet(axes: Dict[str, Any], control_state: Dict[str, Any], seq: 
     pan_i = int(pan * 512)
     tilt_i = int(tilt * 512)
     roll_i = int(roll * 512)
-    focus_i = int(focus * 512)
-    iris_i = int(iris * 512)
+    # Lens focus/iris are sent as high-resolution absolute controls in 0..16384.
+    # This avoids 0..64 quantization noise that caused visible lens jitter.
+    focus_i = int(((focus + 1.0) * 0.5) * 16384.0)
+    iris_i = int(((iris + 1.0) * 0.5) * 16384.0)
+    if focus_i < 0:
+        focus_i = 0
+    elif focus_i > 16384:
+        focus_i = 16384
+    if iris_i < 0:
+        iris_i = 0
+    elif iris_i > 16384:
+        iris_i = 16384
 
     # zoom rocker -> signed delta similar to original feel
     zg = float(control_state.get("zoom_gain", 60.0))
@@ -190,14 +202,10 @@ def build_fast_packet(axes: Dict[str, Any], control_state: Dict[str, Any], seq: 
 
     # === ORIGINAL map_* transforms (copied from controller/main.py) ===
     map_zoom = lambda value: (value + 0)
-    map_iris = lambda value: (value + 512) >> 4
-    map_focus = lambda value: (value + 512) >> 4
     map_pitch = lambda value: value
 
     tilt_i = map_pitch(tilt_i)
     zoom_i = map_zoom(zoom_i)
-    focus_i = map_focus(focus_i)
-    iris_i = map_iris(iris_i)
 
     return struct.pack(
         "<BBBHhHHHHHH",
