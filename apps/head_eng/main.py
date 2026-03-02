@@ -46,6 +46,10 @@ SLOW_STATE = {
     "roll_top_speed": 0,
     "gyro_drift_offset": 0,
     "control_mode": "speed",
+    "lens_select": "fuji",
+    "source_zoom": "pc",
+    "source_focus": "pc",
+    "source_iris": "pc",
 }
 
 # ---------- LED ----------
@@ -109,7 +113,7 @@ def decode_fast_packet(data):
     if len(data) != 19:
         return None
     try:
-        magic, ver, pkt_type, seq, zoom, focus, iris, yaw, pitch, roll, _ = struct.unpack("<BBBHhHHHHHH", data)
+        magic, ver, pkt_type, seq, zoom, focus, iris, yaw, pitch, roll, _ = struct.unpack("<BBBHhHHhhhH", data)
     except Exception:
         return None
     if magic != PKT_MAGIC or ver != PKT_VER or pkt_type != PKT_FAST_CTRL:
@@ -184,20 +188,41 @@ def _apply_slow_command(key_id, value):
         return 0
     if key_id == KEY_LENS_SELECT:
         want = _decode_lens_enum(value)
+        if SLOW_STATE.get("lens_select") == want:
+            return 0
         ok = lens.set_lens_type(want)
         if not ok:
             return 2
+        SLOW_STATE["lens_select"] = want
         print("Slow apply lens_select ->", want)
         return 0
     if key_id == KEY_SOURCE_ZOOM:
         src = _decode_source_enum(value)
-        return 0 if lens.set_axis_source("zoom", src) else 2
+        if SLOW_STATE.get("source_zoom") == src:
+            return 0
+        ok = lens.set_axis_source("zoom", src)
+        if ok:
+            SLOW_STATE["source_zoom"] = src
+            return 0
+        return 2
     if key_id == KEY_SOURCE_FOCUS:
         src = _decode_source_enum(value)
-        return 0 if lens.set_axis_source("focus", src) else 2
+        if SLOW_STATE.get("source_focus") == src:
+            return 0
+        ok = lens.set_axis_source("focus", src)
+        if ok:
+            SLOW_STATE["source_focus"] = src
+            return 0
+        return 2
     if key_id == KEY_SOURCE_IRIS:
         src = _decode_source_enum(value)
-        return 0 if lens.set_axis_source("iris", src) else 2
+        if SLOW_STATE.get("source_iris") == src:
+            return 0
+        ok = lens.set_axis_source("iris", src)
+        if ok:
+            SLOW_STATE["source_iris"] = src
+            return 0
+        return 2
 
     # Generic numeric slow table parameters for BGC path (stored now, apply later).
     if key_id == 2:
@@ -260,6 +285,10 @@ def build_telem_packet(seq):
     )
 
 
+def _to_u16_signed(v):
+    return int(v) & 0xFFFF
+
+
 # ---------- Main Loop ----------
 while True:
     pulse_update()
@@ -316,7 +345,11 @@ while True:
         last_fast_fields = stale
 
     # Apply motion paths.
-    bgc.send_joystick_control(last_fast_fields["yaw"], last_fast_fields["pitch"], last_fast_fields["roll"])
+    bgc.send_joystick_control(
+        _to_u16_signed(last_fast_fields["yaw"]),
+        _to_u16_signed(last_fast_fields["pitch"]),
+        _to_u16_signed(last_fast_fields["roll"]),
+    )
     if bit_ok:
         lens.move_zoom(last_fast_fields["zoom"])
         lens.set_focus_input(last_fast_fields["focus"])

@@ -123,7 +123,9 @@ class BGC:
         self.send_cmd(CMD_BEEP_SOUND, payload)
 
     def send_joystick_control(self, yaw, pitch, roll):
-        payload = struct.pack(">3H", yaw, pitch, roll)
+        # BGC virtual channels are 16-bit values; allow signed caller values
+        # and convert to two's-complement u16 on transmit.
+        payload = struct.pack(">3H", int(yaw) & 0xFFFF, int(pitch) & 0xFFFF, int(roll) & 0xFFFF)
         self.send_cmd(CMD_API_VIRT_CH_CONTROL, payload)
 
 
