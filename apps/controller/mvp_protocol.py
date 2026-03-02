@@ -23,6 +23,10 @@ SLOW_KEY_LENS_SELECT = 3
 SLOW_KEY_SOURCE_ZOOM = 4
 SLOW_KEY_SOURCE_FOCUS = 5
 SLOW_KEY_SOURCE_IRIS = 6
+SLOW_KEY_FILTER_ENABLE_FOCUS = 7
+SLOW_KEY_FILTER_ENABLE_IRIS = 8
+SLOW_KEY_FILTER_NUM = 9
+SLOW_KEY_FILTER_DEN = 10
 
 SLOW_KEY_IDS = {
     "motors_on": SLOW_KEY_MOTORS_ON,
@@ -31,6 +35,10 @@ SLOW_KEY_IDS = {
     "source_zoom": SLOW_KEY_SOURCE_ZOOM,
     "source_focus": SLOW_KEY_SOURCE_FOCUS,
     "source_iris": SLOW_KEY_SOURCE_IRIS,
+    "filter_enable_focus": SLOW_KEY_FILTER_ENABLE_FOCUS,
+    "filter_enable_iris": SLOW_KEY_FILTER_ENABLE_IRIS,
+    "filter_num": SLOW_KEY_FILTER_NUM,
+    "filter_den": SLOW_KEY_FILTER_DEN,
 }
 
 # Resolve heads.json relative to this file so it works from any CWD
@@ -324,6 +332,13 @@ def encode_slow_value(key: str, value: Any) -> Optional[int]:
         if s == "off":
             return 2
         return 0
+    if key in ("filter_enable_focus", "filter_enable_iris"):
+        return 1 if bool(value) else 0
+    if key in ("filter_num", "filter_den"):
+        try:
+            return int(value)
+        except Exception:
+            return None
     try:
         return int(value)
     except Exception:
