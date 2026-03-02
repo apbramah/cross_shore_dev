@@ -118,7 +118,7 @@ def decode_fast_packet(data):
     if len(data) != 19:
         return None
     try:
-        magic, ver, pkt_type, seq, zoom, focus, iris, yaw, pitch, roll, _ = struct.unpack("<BBBHhHHHHHH", data)
+        magic, ver, pkt_type, seq, zoom, focus, iris, yaw, pitch, roll, _ = struct.unpack("<BBBHhHHhhhH", data)
     except Exception:
         return None
     if magic != PKT_MAGIC or ver != PKT_VER or pkt_type != PKT_FAST_CTRL:
@@ -290,12 +290,7 @@ def build_telem_packet(seq):
     )
 
 
-def _u16_to_s16(v):
-    iv = int(v) & 0xFFFF
-    return iv - 0x10000 if iv & 0x8000 else iv
-
-
-def _u16(v):
+def _s16_to_u16(v):
     return int(v) & 0xFFFF
 
 
@@ -321,7 +316,7 @@ while True:
 
     if got_fast:
         print(
-            "CTRL RX(raw_u16) seq/YPRZFI:",
+            "CTRL RX(s16) seq/YPRZFI:",
             last_fast_seq,
             last_fast_fields["yaw"],
             last_fast_fields["pitch"],
@@ -331,9 +326,12 @@ while True:
             last_fast_fields["iris"],
         )
         if DEBUG_BGC_NUMBERS:
-            yaw_in_u16 = _u16(last_fast_fields["yaw"])
-            pitch_in_u16 = _u16(last_fast_fields["pitch"])
-            roll_in_u16 = _u16(last_fast_fields["roll"])
+            yaw_in_s16 = int(last_fast_fields["yaw"])
+            pitch_in_s16 = int(last_fast_fields["pitch"])
+            roll_in_s16 = int(last_fast_fields["roll"])
+            yaw_in_u16 = _s16_to_u16(yaw_in_s16)
+            pitch_in_u16 = _s16_to_u16(pitch_in_s16)
+            roll_in_u16 = _s16_to_u16(roll_in_s16)
             # Current code path sends these values directly to BGC.
             yaw_tx_u16 = yaw_in_u16
             pitch_tx_u16 = pitch_in_u16
@@ -344,9 +342,9 @@ while True:
                 pitch_in_u16,
                 roll_in_u16,
                 "IN(as_s16):",
-                _u16_to_s16(yaw_in_u16),
-                _u16_to_s16(pitch_in_u16),
-                _u16_to_s16(roll_in_u16),
+                yaw_in_s16,
+                pitch_in_s16,
+                roll_in_s16,
                 "TX(u16):",
                 yaw_tx_u16,
                 pitch_tx_u16,
