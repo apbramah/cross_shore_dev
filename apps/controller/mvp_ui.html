@@ -56,6 +56,10 @@
     <label style="margin-left:20px;">Zoom gain:</label>
     <input type="range" id="zoomGain" min="10" max="150" value="60" step="1">
     <span id="zoomGainVal" class="mono">60</span>
+
+    <label style="margin-left:20px;">Fast Hz:</label>
+    <input type="range" id="fastHz" min="25" max="100" value="50" step="1">
+    <span id="fastHzVal" class="mono">50</span>
   </div>
 
   <div class="card">
@@ -101,6 +105,26 @@
     <div class="small mono" id="axisState">
       Current sources: zoom=pc focus=pc iris=pc
     </div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0;">Slow Controls (Bridge Table)</h3>
+    <div class="row">
+      <label>Motors:</label>
+      <select id="motorsOn">
+        <option value="1">on</option>
+        <option value="0">off</option>
+      </select>
+      <button id="applyMotorsOn">Apply motors</button>
+
+      <label style="margin-left:20px;">Control mode:</label>
+      <select id="controlMode">
+        <option value="speed">speed</option>
+        <option value="angle">angle</option>
+      </select>
+      <button id="applyControlMode">Apply mode</button>
+    </div>
+    <div class="small mono" id="slowState">Slow table: motors=on mode=speed</div>
   </div>
 
   <div class="grid">
@@ -160,8 +184,6 @@ let mapperEnabled = true;
 let lensState = { lens_type: "fuji", axis_sources: { zoom: "pc", focus: "pc", iris: "pc" } };
 
 let lastAxes = [];
-let lastSendMs = 0;
-
 let detectedAxis = null;
 let detectedDelta = 0;
 
@@ -196,6 +218,25 @@ function setAxisSourceState(sources){
   $("srcIris").value = lensState.axis_sources.iris;
   $("axisState").textContent =
     `Current sources: zoom=${lensState.axis_sources.zoom} focus=${lensState.axis_sources.focus} iris=${lensState.axis_sources.iris}`;
+}
+
+function setFastHzState(v){
+  const hz = Math.max(25, Math.min(100, parseInt(v ?? 50, 10) || 50));
+  $("fastHz").value = String(hz);
+  $("fastHzVal").textContent = String(hz);
+}
+
+function setSlowControlState(slow){
+  const s = slow || {};
+  const motors = (String(s.motors_on ?? "1") === "0") ? "0" : "1";
+  const mode = (String(s.control_mode || "speed").toLowerCase() === "angle") ? "angle" : "speed";
+  $("motorsOn").value = motors;
+  $("controlMode").value = mode;
+  $("slowState").textContent = `Slow table: motors=${motors === "1" ? "on" : "off"} mode=${mode}`;
+}
+
+function sendSlowControl(key, value){
+  send({ type: "SET_SLOW_CONTROL", key, value });
 }
 
 function normDeadzone(v, dz=0.03){
@@ -345,6 +386,8 @@ $("connect").onclick = () => {
 
         setLensTypeState(msg.lens_type || "fuji");
         setAxisSourceState(msg.axis_sources || {});
+        setSlowControlState(msg.slow_controls || {});
+        setFastHzState(msg.fast_hz ?? 50);
       }
       if (msg.type === "SELECTED") {
         state.selected = msg.selected;
@@ -397,6 +440,12 @@ $("zoomGain").oninput = (e) => {
   send({type:"SET_ZOOM_GAIN", zoom_gain: v});
 };
 
+$("fastHz").oninput = (e) => {
+  const v = parseInt(e.target.value, 10) || 50;
+  $("fastHzVal").textContent = String(v);
+  send({ type:"SET_FAST_HZ", hz: v });
+};
+
 $("applyLensType").onclick = () => {
   const lensType = $("lensType").value;
   send({type: "SET_LENS_TYPE", lens_type: lensType});
@@ -409,6 +458,18 @@ function applyAxisSource(axis, inputId){
 $("applySrcZoom").onclick = () => applyAxisSource("zoom", "srcZoom");
 $("applySrcFocus").onclick = () => applyAxisSource("focus", "srcFocus");
 $("applySrcIris").onclick = () => applyAxisSource("iris", "srcIris");
+
+$("applyMotorsOn").onclick = () => {
+  const v = parseInt($("motorsOn").value, 10) ? 1 : 0;
+  sendSlowControl("motors_on", v);
+  setSlowControlState({ motors_on: v, control_mode: $("controlMode").value });
+};
+
+$("applyControlMode").onclick = () => {
+  const v = $("controlMode").value === "angle" ? "angle" : "speed";
+  sendSlowControl("control_mode", v);
+  setSlowControlState({ motors_on: $("motorsOn").value, control_mode: v });
+};
 
 // --- Main loop ---
 function tick(){
@@ -448,12 +509,8 @@ function tick(){
   const named = readNamedAxes(gp);
   $("namedAxes").textContent = JSON.stringify(named);
 
-  // send at ~20Hz
-  const now = performance.now();
-  if (!lastSendMs || (now - lastSendMs) > 50) {
-    send({type:"GAMEPAD", axes: named});
-    lastSendMs = now;
-  }
+  // Send every frame; bridge does send-on-change + heartbeat/rate limiting.
+  send({type:"GAMEPAD", axes: named});
 
   requestAnimationFrame(tick);
 }
