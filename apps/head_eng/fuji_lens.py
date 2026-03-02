@@ -35,6 +35,7 @@ ZOOM_DELTA_SCALE = 12
 ZOOM_DEADBAND = 1
 AXIS_HOLD_THRESHOLD = 128
 FUJI_DEBUG = True
+FUJI_ZOOM_DEBUG = True
 
 
 class FujiLens:
@@ -54,6 +55,7 @@ class FujiLens:
         self._rx_buf = bytearray()
         self._last_sw4_readback = None
         self._next_sw4_reassert_ms = 0
+        self._last_zoom_feedback = None
 
     def on_activate(self):
         self.transport.write(build_connect(True))
@@ -95,6 +97,12 @@ class FujiLens:
             return
         self.zoom = _clamp_u16(self.zoom + (d * ZOOM_DELTA_SCALE))
         self.transport.write(build_zoom_control(self.zoom))
+        if FUJI_ZOOM_DEBUG:
+            print(
+                "[LENS][Fuji][ZOOM] TX t={} delta={} target={}".format(
+                    _ticks_ms(), d, self.zoom
+                )
+            )
 
     def set_focus_input(self, raw_value):
         if self.axis_sources["focus"] != SOURCE_PC:
@@ -308,6 +316,17 @@ class FujiLens:
                     print("[LENS][Fuji] SW4 mismatch -> reassert host control")
                 self._send_switch4()
                 self._next_sw4_reassert_ms = now_ms + 150
+        elif func == FUNC_ZOOM_POSITION and payload:
+            value = decode_position_response(payload)
+            if value is None:
+                return
+            if FUJI_ZOOM_DEBUG and value != self._last_zoom_feedback:
+                print(
+                    "[LENS][Fuji][ZOOM] RX t={} pos={}".format(
+                        _ticks_ms(), value
+                    )
+                )
+            self._last_zoom_feedback = value
 
 
 def _clamp_u16(v):
