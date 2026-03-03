@@ -58,6 +58,10 @@ constexpr uint16_t kJoyCalDelayUs = 200;
 
 // Set to 1 to output a visible test pattern instead of analog inputs.
 constexpr uint8_t kTestPattern = 0;
+constexpr uint8_t kAdcDebugEnabled = 0;
+constexpr uint32_t kAdcDebugIntervalMs = 100;
+constexpr uint8_t kCdcAdcStreamEnabled = 1;
+constexpr uint32_t kCdcAdcStreamIntervalMs = 10;
 
 struct EncoderState {
   uint8_t pinA;
@@ -88,6 +92,9 @@ bool axesInitialized = false;
 int16_t lastAxes[6] = {};
 uint8_t lastReport[JOYSTICK_SIZE] = {};
 uint32_t lastVersionPrintMs = 0;
+uint32_t lastAdcDebugMs = 0;
+uint32_t lastCdcAdcMs = 0;
+uint32_t cdcAdcSeq = 0;
 
 // Boot-calibrated raw centers for joystick X/Y/Z only.
 static int32_t g_centerRawX = 2048;
@@ -226,15 +233,22 @@ void sendReport() {
     bool pulse = ((millis() / 250u) % 2u) == 0u;
     buttonStates[0] = pulse;
   } else {
+    uint16_t rawX = analogRead(JOYSTICK_X);
+    uint16_t rawY = analogRead(JOYSTICK_Y);
+    uint16_t rawZ = analogRead(JOYSTICK_Z);
+    uint16_t rawRx = analogRead(FOCUS_POT);
+    uint16_t rawRy = analogRead(IRIS_POT);
+    uint16_t rawRz = analogRead(ZOOM_ROCKER);
+
     // X/Y/Z: use boot-calibrated centers to ensure rest is ~0 on real hardware.
-    x = scaleAnalogToSignedWithCenter(analogRead(JOYSTICK_X), g_centerRawX);
-    y = scaleAnalogToSignedWithCenter(analogRead(JOYSTICK_Y), g_centerRawY);
-    z = scaleAnalogToSignedWithCenter(analogRead(JOYSTICK_Z), g_centerRawZ);
+    x = scaleAnalogToSignedWithCenter(rawX, g_centerRawX);
+    y = scaleAnalogToSignedWithCenter(rawY, g_centerRawY);
+    z = scaleAnalogToSignedWithCenter(rawZ, g_centerRawZ);
 
     // Rx/Ry/Rz: leave as original mapping (no auto-centering per your request).
-    rx = scaleAnalogToSigned(analogRead(FOCUS_POT));
-    ry = scaleAnalogToSigned(analogRead(IRIS_POT));
-    rz = scaleAnalogToSigned(analogRead(ZOOM_ROCKER));
+    rx = scaleAnalogToSigned(rawRx);
+    ry = scaleAnalogToSigned(rawRy);
+    rz = scaleAnalogToSigned(rawRz);
 
     x = applyCenterDeadband(x);
     y = applyCenterDeadband(y);
@@ -242,6 +256,53 @@ void sendReport() {
     rx = applyCenterDeadband(rx);
     ry = applyCenterDeadband(ry);
     rz = applyCenterDeadband(rz);
+
+    // Throttled raw ADC debug output for bench testing.
+    if (kAdcDebugEnabled && Serial) {
+      uint32_t nowMs = millis();
+      if (nowMs - lastAdcDebugMs >= kAdcDebugIntervalMs) {
+        Serial.print("ADC_RAW,");
+        Serial.print(nowMs);
+        Serial.print(",");
+        Serial.print(rawX);
+        Serial.print(",");
+        Serial.print(rawY);
+        Serial.print(",");
+        Serial.print(rawZ);
+        Serial.print(",");
+        Serial.print(rawRx);
+        Serial.print(",");
+        Serial.print(rawRy);
+        Serial.print(",");
+        Serial.println(rawRz);
+        lastAdcDebugMs = nowMs;
+      }
+    }
+
+    // Bridge-ready ADC CDC frame:
+    // ADCv1,<seq>,<teensy_us>,<x>,<y>,<z>,<rx>,<ry>,<rz>
+    if (kCdcAdcStreamEnabled && Serial) {
+      uint32_t nowMs = millis();
+      if (nowMs - lastCdcAdcMs >= kCdcAdcStreamIntervalMs) {
+        Serial.print("ADCv1,");
+        Serial.print(cdcAdcSeq++);
+        Serial.print(",");
+        Serial.print(micros());
+        Serial.print(",");
+        Serial.print(rawX);
+        Serial.print(",");
+        Serial.print(rawY);
+        Serial.print(",");
+        Serial.print(rawZ);
+        Serial.print(",");
+        Serial.print(rawRx);
+        Serial.print(",");
+        Serial.print(rawRy);
+        Serial.print(",");
+        Serial.println(rawRz);
+        lastCdcAdcMs = nowMs;
+      }
+    }
   }
 
   lastAxes[0] = x;
@@ -355,7 +416,7 @@ void loop() {
         Serial.println(FW_VERSION);
       }
     }
-    if (nowMs - lastVersionPrintMs >= 2000u) {
+    if (!kCdcAdcStreamEnabled && nowMs - lastVersionPrintMs >= 2000u) {
       Serial.print("FW_VERSION=");
       Serial.println(FW_VERSION);
       lastVersionPrintMs = nowMs;
