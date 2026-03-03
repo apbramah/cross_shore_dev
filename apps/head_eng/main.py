@@ -10,6 +10,8 @@ import struct
 
 from bgc import BGC
 from lens_controller import LensController, LENS_FUJI
+import fuji_lens_from_calibration
+import fuji_control_calibration
 
 # Explicit startup Fuji ownership mode (applied once).
 # - "pc_all": zoom/focus/iris on host
@@ -23,6 +25,8 @@ CTRL_DEBUG_INTERVAL_MS = 250
 ENABLE_STARTUP_BIT = False
 MVP_FAST_DEBUG = False
 MVP_FAST_DEBUG_INTERVAL_MS = 5000
+# Set True to log Fuji focus input/target and UART connection (SW4 poll, FOCUS TX).
+FUJI_DEBUG = False
 
 # ---------- LED ----------
 led = machine.Pin("LED", machine.Pin.OUT)
@@ -86,6 +90,10 @@ _last_fast_fields = None
 _last_fast_debug_ms = 0
 
 print("BGC + ENG lens ready")
+if FUJI_DEBUG:
+    fuji_lens_from_calibration.FUJI_FOCUS_DEBUG = True
+    fuji_control_calibration.FUJI_CONN_DEBUG = True
+    print("Fuji focus/connection debug ON")
 # Lens startup is timing-sensitive on real hardware; give it a short settle window.
 for remaining in range(8, 0, -1):
     print("Waiting for lens settle...", remaining, "s")

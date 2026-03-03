@@ -6,9 +6,11 @@ from fuji_protocol import (
     FUNC_FOCUS_CONTROL,
     FUNC_IRIS_CONTROL,
     FUNC_ZOOM_CONTROL,
+    FUNC_ZOOM_SPEED_CONTROL,
     build_focus_control,
     build_iris_control,
     build_zoom_control,
+    build_zoom_speed_control,
 )
 
 from fuji_control_calibration_copy import (
@@ -23,6 +25,9 @@ SOURCE_CAMERA = "camera"
 SOURCE_OFF = "off"
 AXES = ("zoom", "focus", "iris")
 ZOOM_DELTA_SCALE = 16
+# Set True to log focus input and periodic target (Fuji connection debug).
+FUJI_FOCUS_DEBUG = False
+FUJI_FOCUS_DEBUG_INTERVAL_MS = 500
 # Baseline mode: no deadband/expo hold so fast path preserves full resolution (ADC Fast Path Cleanup).
 BASELINE_ZOOM_DEADBAND = 0
 BASELINE_ZOOM_EXPO_PCT = 0
@@ -33,6 +38,9 @@ ZOOM_EXPO_PCT = BASELINE_ZOOM_EXPO_PCT
 AXIS_HOLD_THRESHOLD = BASELINE_AXIS_HOLD_THRESHOLD
 ZOOM_INPUT_MAX = 64
 CONTROL_TX_PERIOD_MS = 20
+ZOOM_MODE_POSITION = "position"
+ZOOM_MODE_SPEED = "speed"
+DEFAULT_ZOOM_MODE = ZOOM_MODE_SPEED
 
 
 class FujiLens(FujiCalibration):
@@ -44,8 +52,10 @@ class FujiLens(FujiCalibration):
     def __init__(self, transport):
         super().__init__(transport)
         self.zoom = 0x7FFF
+        self.zoom_speed = 0x8000
         self.focus = 0x7FFF
         self.iris = 0x7FFF
+        self.zoom_mode = DEFAULT_ZOOM_MODE
         self.axis_sources = {axis: SOURCE_PC for axis in AXES}
         self._next_control_tx_ms = 0
         self._faulted = False
@@ -77,22 +87,50 @@ class FujiLens(FujiCalibration):
         self.axis_sources[axis] = source
         return True
 
+    def set_zoom_mode(self, mode):
+        """Hook for future slow-message zoom mode selection."""
+        m = str(mode).lower().strip()
+        if m not in (ZOOM_MODE_SPEED, ZOOM_MODE_POSITION):
+            return False
+        self.zoom_mode = m
+        return True
+
     def move_zoom(self, delta):
         if self.axis_sources["zoom"] != SOURCE_PC:
             return
         d = int(delta)
         if -ZOOM_DEADBAND <= d <= ZOOM_DEADBAND:
+            if self.zoom_mode == ZOOM_MODE_SPEED:
+                self.zoom_speed = 0x8000
+                return
             return
         d = _shape_zoom_input_expo(d, ZOOM_EXPO_PCT, ZOOM_INPUT_MAX)
+        if self.zoom_mode == ZOOM_MODE_SPEED:
+            # Map signed demand to Fuji speed domain: 0x0000 wide, 0x8000 stop, 0xFFFF tele.
+            if d > ZOOM_INPUT_MAX:
+                d = ZOOM_INPUT_MAX
+            elif d < -ZOOM_INPUT_MAX:
+                d = -ZOOM_INPUT_MAX
+            span = 32767.0
+            self.zoom_speed = _clamp_u16(round(0x8000 + (d / float(ZOOM_INPUT_MAX)) * span))
+            return
+        # Position-mode hook (future slow-message selection); keeps prior behavior.
         self.zoom = _clamp_u16(self.zoom + (d * ZOOM_DELTA_SCALE))
 
     def set_focus_input(self, raw_value):
         if self.axis_sources["focus"] != SOURCE_PC:
+            if FUJI_FOCUS_DEBUG:
+                print("[LENS][Fuji][FOCUS] set_focus_input SKIP axis_sources[focus] != PC")
             return
         v = _normalize_input(raw_value, 0xFFFF)
         if abs(v - self.focus) < AXIS_HOLD_THRESHOLD:
+            if FUJI_FOCUS_DEBUG:
+                _log_focus_input(raw_value, v, "hold_skip", self.focus)
             return
+        prev = self.focus
         self.focus = v
+        if FUJI_FOCUS_DEBUG:
+            _log_focus_input(raw_value, v, "updated", prev)
 
     def set_iris_input(self, raw_value):
         if self.axis_sources["iris"] != SOURCE_PC:
@@ -127,8 +165,26 @@ class FujiLens(FujiCalibration):
         return True
 
     def _send_runtime_controls(self):
+        if FUJI_FOCUS_DEBUG:
+            now_ms = _ticks_ms()
+            if not hasattr(self, "_last_focus_log_ms"):
+                self._last_focus_log_ms = 0
+            if now_ms - self._last_focus_log_ms >= FUJI_FOCUS_DEBUG_INTERVAL_MS:
+                self._last_focus_log_ms = now_ms
+                print(
+                    "[LENS][Fuji][FOCUS] periodic zoom_mode={} zoom_pos=0x{:04X} zoom_speed=0x{:04X} focus=0x{:04X} iris=0x{:04X} faulted={}".format(
+                        self.zoom_mode, self.zoom, self.zoom_speed, self.focus, self.iris, self._faulted
+                    )
+                )
         if self.axis_sources["zoom"] == SOURCE_PC:
-            self._send_control(build_zoom_control(self.zoom), "ZOOM_CONTROL", FUNC_ZOOM_CONTROL)
+            if self.zoom_mode == ZOOM_MODE_SPEED:
+                self._send_control(
+                    build_zoom_speed_control(self.zoom_speed),
+                    "ZOOM_SPEED_CONTROL",
+                    FUNC_ZOOM_SPEED_CONTROL,
+                )
+            else:
+                self._send_control(build_zoom_control(self.zoom), "ZOOM_CONTROL", FUNC_ZOOM_CONTROL)
         if self.axis_sources["focus"] == SOURCE_PC:
             self._send_control(build_focus_control(self.focus), "FOCUS_CONTROL", FUNC_FOCUS_CONTROL)
         if self.axis_sources["iris"] == SOURCE_PC:
@@ -159,19 +215,24 @@ def _clamp_u16(v):
     return int(v)
 
 
+def _log_focus_input(raw_value, normalized_v, reason, current_focus):
+    t = _ticks_ms()
+    print(
+        "[LENS][Fuji][FOCUS] set_focus_input raw={} norm=0x{:04X} {} focus=0x{:04X} t={}".format(
+            raw_value, normalized_v & 0xFFFF, reason, current_focus & 0xFFFF, t
+        )
+    )
+
+
 def _normalize_input(raw_value, out_max):
+    # Runtime fast path already provides u16-domain values. Keep passthrough clamp only.
+    _ = out_max
     v = int(raw_value)
     if v < 0:
-        v = 0
-    if v <= 64:
-        return int((v * out_max) // 64)
-    if v <= 16384:
-        return int((v * out_max) // 16384)
-    if v <= out_max:
-        return v
+        return 0
     if v > 0xFFFF:
-        v = 0xFFFF
-    return int((v * out_max) // 0xFFFF)
+        return 0xFFFF
+    return v
 
 
 def _shape_zoom_input_expo(value, expo_pct, input_max):
