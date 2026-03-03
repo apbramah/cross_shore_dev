@@ -21,6 +21,32 @@ from mvp_bridge_adc_state import ADCBridgeState
 from mvp_bridge_adc_shape import shape_sample, neutral_axes
 from mvp_bridge_adc_output import send_fast, send_slow, DEFAULT_FAST_PORT, DEFAULT_SLOW_PORT, DEFAULT_HEAD_ADDR
 
+try:
+    import mvp_protocol
+    MVP_PROTOCOL_AVAILABLE = True
+except ImportError:
+    mvp_protocol = None
+    MVP_PROTOCOL_AVAILABLE = False
+
+
+def _resolve_head_host_port(host: str, fast_port: int, slow_port: int, head_index: int = 0):
+    """If host is default localhost and we have heads.json, use head at head_index IP and ports."""
+    if host != DEFAULT_HEAD_ADDR or not MVP_PROTOCOL_AVAILABLE:
+        return host, fast_port, slow_port
+    try:
+        heads = mvp_protocol.load_heads()
+        if not heads or not (0 <= head_index < len(heads)):
+            return host, fast_port, slow_port
+        h = heads[head_index]
+        ip = h.get("ip")
+        if not ip:
+            return host, fast_port, slow_port
+        fp = int(h.get("port_fast", h.get("port", mvp_protocol.FAST_PORT)))
+        sp = int(h.get("port_slow_cmd", mvp_protocol.SLOW_CMD_PORT))
+        return ip, fp, sp
+    except Exception:
+        return host, fast_port, slow_port
+
 
 def _run_ingest_loop(
     port_name: str | None,
@@ -171,18 +197,33 @@ def run_bridge(
 def main() -> None:
     parser = argparse.ArgumentParser(description="ADC bridge: Teensy CDC -> shape -> UDP to head_eng")
     parser.add_argument("--port", "-p", default=None, help="CDC serial port (e.g. COM3, /dev/ttyACM0)")
-    parser.add_argument("--host", default=DEFAULT_HEAD_ADDR, help="Head UDP host")
+    parser.add_argument(
+        "--host",
+        default=DEFAULT_HEAD_ADDR,
+        help="Head UDP host (default: first head in heads.json if present, else 127.0.0.1)",
+    )
     parser.add_argument("--fast-port", type=int, default=DEFAULT_FAST_PORT, help="Fast channel port")
     parser.add_argument("--slow-port", type=int, default=DEFAULT_SLOW_PORT, help="Slow channel port")
     parser.add_argument("--fast-hz", type=float, default=50.0, help="Fast send rate Hz")
     parser.add_argument("--slow-hz", type=float, default=10.0, help="Slow send rate Hz")
     parser.add_argument("--profile-dir", default=None, help="Directory for adc_bridge_profile.json")
+    parser.add_argument(
+        "--head-index",
+        type=int,
+        default=0,
+        help="Index of head in heads.json when not passing --host (default: 0)",
+    )
     args = parser.parse_args()
+    host, fast_port, slow_port = _resolve_head_host_port(
+        args.host, args.fast_port, args.slow_port, args.head_index
+    )
+    if host != DEFAULT_HEAD_ADDR:
+        print(f"Using head: {host} (fast:{fast_port} slow:{slow_port})")
     run_bridge(
         port=args.port,
-        host=args.host,
-        fast_port=args.fast_port,
-        slow_port=args.slow_port,
+        host=host,
+        fast_port=fast_port,
+        slow_port=slow_port,
         fast_hz=args.fast_hz,
         slow_hz=args.slow_hz,
         profile_dir=args.profile_dir,
