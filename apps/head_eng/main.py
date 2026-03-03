@@ -18,7 +18,7 @@ FUJI_OWNERSHIP_MODE = "pc_all"
 FAST_CHANNEL_MODE = "v2"  # Set to "legacy" for immediate rollback.
 ENABLE_DUAL_CHANNEL = FAST_CHANNEL_MODE == "v2"
 ENABLE_SLOW_CHANNEL = True   # Slow receive/apply remains active in both modes.
-CTRL_DEBUG = False
+CTRL_DEBUG = True
 CTRL_DEBUG_INTERVAL_MS = 250
 ENABLE_STARTUP_BIT = False
 MVP_FAST_DEBUG = False
@@ -40,21 +40,6 @@ def pulse_update():
     if pulse_until and time.ticks_diff(time.ticks_ms(), pulse_until) >= 0:
         led.off()
         pulse_until = 0
-
-
-def _v2_u16_to_bgc_legacy(u16_val):
-    """Map v2 fast packet u16 (0-65535, center 32768) to BGC legacy range (center 0, ±512)."""
-    if u16_val > 65535:
-        u16_val = 65535
-    elif u16_val < 0:
-        u16_val = 0
-    # signed -512..+512, then as unsigned for struct.pack(">3H")
-    signed = (int(u16_val) - 32768) * 512 // 32768
-    if signed > 512:
-        signed = 512
-    elif signed < -512:
-        signed = -512
-    return signed & 0xFFFF
 
 
 # ---------- Ethernet ----------
@@ -416,17 +401,15 @@ while True:
 
     # Apply slow gate to BGC joystick stream.
     if slow_motors_on:
-        if ENABLE_DUAL_CHANNEL:
-            yaw_bgc = _v2_u16_to_bgc_legacy(fields["yaw"])
-            pitch_bgc = _v2_u16_to_bgc_legacy(fields["pitch"])
-            roll_bgc = _v2_u16_to_bgc_legacy(fields["roll"])
-            bgc.send_joystick_control(yaw_bgc, pitch_bgc, roll_bgc)
-        else:
-            bgc.send_joystick_control(
-                fields["yaw"],
-                fields["pitch"],
-                fields["roll"]
-            )
+        # SimpleBGC CMD 45 Speed: u16 0 -> -500, 32768 -> 0, 65535 -> +500; int16 LE
+        def u16_to_bgc_speed(u):
+            u = max(0, min(65535, int(u)))
+            s = round((u - 32768) / 32768.0 * 500.0)
+            return max(-500, min(500, s))
+        yaw_s = u16_to_bgc_speed(fields["yaw"])
+        pitch_s = u16_to_bgc_speed(fields["pitch"])
+        roll_s = u16_to_bgc_speed(fields["roll"])
+        bgc.send_joystick_control(yaw_s, pitch_s, roll_s)
 
     # Runtime lens commands are not gated by startup BIT.
     lens_control = fields.get("lens_control")

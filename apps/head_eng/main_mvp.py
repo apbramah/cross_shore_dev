@@ -88,15 +88,20 @@ while True:
     if not fields:
         continue
 
+    # SimpleBGC CMD 45 Speed: u16 0 -> -500, 32768 -> 0, 65535 -> +500
+    def u16_to_bgc_speed(u):
+        u = max(0, min(65535, int(u)))
+        s = round((u - 32768) / 32768.0 * 500.0)
+        return max(-500, min(500, s))
+    yaw_s = u16_to_bgc_speed(fields["yaw"])
+    pitch_s = u16_to_bgc_speed(fields["pitch"])
+    roll_s = u16_to_bgc_speed(fields["roll"])
+
     print("YPRZ:", fields["yaw"], fields["pitch"], fields["roll"], fields["zoom"])
     pulse(15)
 
-    # Send directly to BGC
-    bgc.send_joystick_control(
-        fields["yaw"],
-        fields["pitch"],
-        fields["roll"]
-    )
+    # Send to BGC (int16 LE, -500..+500)
+    bgc.send_joystick_control(yaw_s, pitch_s, roll_s)
 
     # Send zoom/focus/iris to the active ENG lens protocol
     lens.move_zoom(fields["zoom"])

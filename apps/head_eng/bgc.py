@@ -123,7 +123,8 @@ class BGC:
         self.send_cmd(CMD_BEEP_SOUND, payload)
 
     def send_joystick_control(self, yaw, pitch, roll):
-        payload = struct.pack(">3H", yaw, pitch, roll)
+        # SimpleBGC CMD 45 Speed mode: int16 little-endian, center=0, range -500..+500
+        payload = struct.pack("<3h", int(yaw), int(pitch), int(roll))
         self.send_cmd(CMD_API_VIRT_CH_CONTROL, payload)
 
 
