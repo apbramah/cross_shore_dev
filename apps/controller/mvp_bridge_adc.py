@@ -7,6 +7,7 @@ See ADC_BRIDGE_INTERFACE.md and the ADC Bridge Pivot Plan.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import queue
 import threading
@@ -57,6 +58,17 @@ def _resolve_head_host_port(host: str, fast_port: int, slow_port: int, head_inde
         return ip, fp, sp
     except Exception:
         return host, fast_port, slow_port
+
+
+def _load_selected_head_index(default_index: int = 0) -> int:
+    """Read selected head index persisted by slow bridge UI."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mvp_selected_head.json")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return int(data.get("selected_index", default_index))
+    except Exception:
+        return default_index
 
 
 def _run_ingest_loop(
@@ -113,6 +125,8 @@ def _run_output_loop(
     host: str,
     fast_port: int,
     slow_port: int,
+    head_index: int,
+    follow_selected_head: bool,
     fast_interval_s: float,
     slow_interval_s: float,
     stop: threading.Event,
@@ -126,6 +140,12 @@ def _run_output_loop(
     fast_send_count = 0
     last_fast_log = 0.0
     FAST_DEBUG_INTERVAL_S = 5.0
+    current_host = host
+    current_fast_port = fast_port
+    current_slow_port = slow_port
+    current_head_index = head_index
+    follow_selected_head = bool(follow_selected_head and MVP_PROTOCOL_AVAILABLE)
+    last_head_refresh = 0.0
     while not stop.is_set():
         try:
             current_axes = shaped_queue.get(timeout=0.02)
@@ -134,12 +154,27 @@ def _run_output_loop(
         if current_axes is None:
             current_axes = neutral_axes()
         now = time.monotonic()
+        if follow_selected_head and now - last_head_refresh >= 0.25:
+            last_head_refresh = now
+            idx = _load_selected_head_index(current_head_index)
+            if idx != current_head_index:
+                current_head_index = idx
+                current_host, current_fast_port, current_slow_port = _resolve_head_host_port(
+                    DEFAULT_HEAD_ADDR,
+                    DEFAULT_FAST_PORT,
+                    DEFAULT_SLOW_PORT,
+                    current_head_index,
+                )
+                print(
+                    f"ADC bridge retargeted head index={current_head_index}: "
+                    f"{current_host} (fast:{current_fast_port} slow:{current_slow_port})"
+                )
         if now - last_fast >= fast_interval_s:
-            sock = send_fast(current_axes, host, fast_port, sock)
+            sock = send_fast(current_axes, current_host, current_fast_port, sock)
             last_fast = now
             fast_send_count += 1
         if now - last_slow >= slow_interval_s:
-            send_slow(current_axes, host, slow_port, sock)
+            send_slow(current_axes, current_host, current_slow_port, sock)
             last_slow = now
         if fast_debug and now - last_fast_log >= FAST_DEBUG_INTERVAL_S:
             last_fast_log = now
@@ -154,6 +189,8 @@ def run_bridge(
     host: str = DEFAULT_HEAD_ADDR,
     fast_port: int = DEFAULT_FAST_PORT,
     slow_port: int = DEFAULT_SLOW_PORT,
+    head_index: int = 0,
+    follow_selected_head: bool = False,
     fast_hz: float = 50.0,
     slow_hz: float = 10.0,
     profile_dir: str | None = None,
@@ -201,7 +238,19 @@ def run_bridge(
     shape_thread = threading.Thread(target=shape_worker, daemon=True)
     output_thread = threading.Thread(
         target=_run_output_loop,
-        args=(state, shaped_queue, host, fast_port, slow_port, fast_interval_s, slow_interval_s, stop, use_fast_debug),
+        args=(
+            state,
+            shaped_queue,
+            host,
+            fast_port,
+            slow_port,
+            head_index,
+            follow_selected_head,
+            fast_interval_s,
+            slow_interval_s,
+            stop,
+            use_fast_debug,
+        ),
         daemon=True,
     )
     ingest_thread.start()
@@ -252,6 +301,8 @@ def main() -> None:
         host=host,
         fast_port=fast_port,
         slow_port=slow_port,
+        head_index=args.head_index,
+        follow_selected_head=(args.host == DEFAULT_HEAD_ADDR),
         fast_hz=args.fast_hz,
         slow_hz=args.slow_hz,
         profile_dir=args.profile_dir,

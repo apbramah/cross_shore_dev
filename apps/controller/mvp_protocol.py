@@ -27,6 +27,7 @@ SLOW_KEY_FILTER_ENABLE_FOCUS = 7
 SLOW_KEY_FILTER_ENABLE_IRIS = 8
 SLOW_KEY_FILTER_NUM = 9
 SLOW_KEY_FILTER_DEN = 10
+SLOW_KEY_GYRO_HEADING_CORRECTION = 11
 
 SLOW_KEY_IDS = {
     "motors_on": SLOW_KEY_MOTORS_ON,
@@ -39,6 +40,7 @@ SLOW_KEY_IDS = {
     "filter_enable_iris": SLOW_KEY_FILTER_ENABLE_IRIS,
     "filter_num": SLOW_KEY_FILTER_NUM,
     "filter_den": SLOW_KEY_FILTER_DEN,
+    "gyro_heading_correction": SLOW_KEY_GYRO_HEADING_CORRECTION,
 }
 
 # Resolve heads.json relative to this file so it works from any CWD
@@ -388,6 +390,11 @@ def encode_slow_value(key: str, value: Any) -> Optional[int]:
     if key in ("filter_enable_focus", "filter_enable_iris"):
         return 1 if bool(value) else 0
     if key in ("filter_num", "filter_den"):
+        try:
+            return int(value)
+        except Exception:
+            return None
+    if key == "gyro_heading_correction":
         try:
             return int(value)
         except Exception:

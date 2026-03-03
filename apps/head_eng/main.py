@@ -163,6 +163,7 @@ SLOW_KEY_FILTER_ENABLE_FOCUS = 7
 SLOW_KEY_FILTER_ENABLE_IRIS = 8
 SLOW_KEY_FILTER_NUM = 9
 SLOW_KEY_FILTER_DEN = 10
+SLOW_KEY_GYRO_HEADING_CORRECTION = 11
 
 sock_fast = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 sock_fast.bind(("0.0.0.0", FAST_UDP_PORT))
@@ -332,7 +333,8 @@ def apply_slow_command(cmd):
         enabled = int(value) != 0
         if enabled != slow_motors_on:
             slow_motors_on = enabled
-            print("Slow apply motors_on ->", 1 if enabled else 0)
+            bgc.set_motors_enabled(enabled)
+            print("Slow apply motors_on ->", 1 if enabled else 0, "(BGC CMD sent)")
         return
 
     if key == SLOW_KEY_CONTROL_MODE:
@@ -344,6 +346,13 @@ def apply_slow_command(cmd):
                 print("Slow apply control_mode -> speed (angle mode disabled)")
             else:
                 print("Slow apply control_mode -> angle (accepted; apply pending)")
+        return
+
+    if key == SLOW_KEY_GYRO_HEADING_CORRECTION:
+        v = int(value)
+        print("Slow recv gyro_heading_correction key/value:", key, v)
+        bgc.set_gyro_heading_correction(v)
+        print("Slow apply gyro_heading_correction ->", v, "(BGC CMD sent)")
         return
 
 # ---------- Main Loop ----------

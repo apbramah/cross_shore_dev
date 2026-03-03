@@ -1,0 +1,297 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Hydravision MVP UI 2 (Slow Controls)</title>
+  <style>
+    body { font-family: sans-serif; margin: 16px; max-width: 900px; }
+    .row { display:flex; gap:12px; align-items:center; margin: 10px 0; flex-wrap: wrap; }
+    .card { padding: 12px; border: 1px solid #ddd; border-radius: 12px; margin: 12px 0; }
+    .pill { display:inline-block; padding: 2px 8px; border-radius: 999px; background:#e9e9e9; }
+    .pill.on { background:#dff3df; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    select, input, button { padding: 6px; }
+    button { cursor: pointer; }
+    .small { font-size: 12px; opacity: 0.9; }
+    .focused { outline: 2px solid #3b8ed0; outline-offset: 2px; }
+    .editing { outline: 2px solid #f39c12; outline-offset: 2px; }
+  </style>
+</head>
+<body>
+  <h2>Hydravision MVP UI 2 (Slow Commands)</h2>
+
+  <div class="row">
+    <label>Slow Bridge WebSocket URL:</label>
+    <input id="wsurl" size="38" value="ws://127.0.0.1:8766">
+    <button id="connect">Connect</button>
+    <span class="pill" id="wsPill">WS: disconnected</span>
+  </div>
+
+  <div class="row">
+    <label>Selected HEAD:</label>
+    <select id="heads"></select>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0;">Slow Controls</h3>
+    <div class="row">
+      <label>Motors:</label>
+      <select id="motorsOn">
+        <option value="1">on</option>
+        <option value="0">off</option>
+      </select>
+      <button id="applyMotorsOn">Apply motors</button>
+    </div>
+    <div class="row">
+      <label>GYRO_HEADING_CORRECTION:</label>
+      <select id="gyroHeading"></select>
+      <button id="applyGyroHeading">Apply heading</button>
+    </div>
+    <div class="small mono" id="slowState">Slow table: motors=on</div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0;">Encoder Control (Gamepad Buttons)</h3>
+    <div class="small mono">
+      B0 = CW, B1 = CCW, B2 = SW
+    </div>
+    <div class="small mono">
+      Turn when not editing: move focus between dropdowns
+    </div>
+    <div class="small mono">
+      Press SW: open focused dropdown (edit mode)
+    </div>
+    <div class="small mono">
+      Turn in edit mode: change value
+    </div>
+    <div class="small mono">
+      Press SW again: set value and close dropdown
+    </div>
+    <div class="small mono" id="encoderState">Encoder: idle</div>
+  </div>
+
+  <div class="small mono" id="eventLog">Idle</div>
+
+<script>
+let ws = null;
+let state = { heads: [], selected: 0 };
+const FOCUS_IDS = ["heads", "motorsOn", "gyroHeading"];
+let focusIndex = 0;
+let editMode = false;
+let prevButtons = [0, 0, 0];
+
+function $(id){ return document.getElementById(id); }
+
+function send(obj){
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
+}
+
+function setWsPill(text, ok){
+  const p = $("wsPill");
+  p.textContent = "WS: " + text;
+  p.classList.toggle("on", !!ok);
+}
+
+function setSlowControlState(slow){
+  const s = slow || {};
+  const motors = (String(s.motors_on ?? "1") === "0") ? "0" : "1";
+  const gyro = parseInt(s.gyro_heading_correction ?? 0x00001500, 10) || 0x00001500;
+  $("motorsOn").value = motors;
+  setSelectToClosestValue($("gyroHeading"), gyro);
+  $("slowState").textContent = `Slow table: motors=${motors === "1" ? "on" : "off"} gyro_heading_correction=${gyro}`;
+}
+
+function refreshHeadsUI(){
+  const sel = $("heads");
+  sel.innerHTML = "";
+  state.heads.forEach((h, i) => {
+    const opt = document.createElement("option");
+    opt.value = String(i);
+    opt.textContent = `${h.name} (${h.ip}:${h.port})`;
+    sel.appendChild(opt);
+  });
+  sel.value = String(state.selected ?? 0);
+  refreshFocusUI();
+}
+
+function buildGyroHeadingOptions(){
+  const sel = $("gyroHeading");
+  sel.innerHTML = "";
+  for (let v = -8192; v <= 8192; v += 256) {
+    const opt = document.createElement("option");
+    opt.value = String(v);
+    opt.textContent = `${v}`;
+    sel.appendChild(opt);
+  }
+  setSelectToClosestValue(sel, 0x00001500);
+}
+
+function setSelectToClosestValue(sel, value){
+  const target = parseInt(value, 10) || 0;
+  const values = Array.from(sel.options).map(o => parseInt(o.value, 10));
+  if (!values.length) return;
+  let best = values[0];
+  let bestDelta = Math.abs(values[0] - target);
+  for (const v of values) {
+    const d = Math.abs(v - target);
+    if (d < bestDelta) {
+      bestDelta = d;
+      best = v;
+    }
+  }
+  sel.value = String(best);
+}
+
+function moveSelectByStep(sel, step){
+  const idx = sel.selectedIndex;
+  if (idx < 0) return;
+  let ni = idx + step;
+  if (ni < 0) ni = 0;
+  if (ni >= sel.options.length) ni = sel.options.length - 1;
+  sel.selectedIndex = ni;
+}
+
+function refreshFocusUI(){
+  for (let i = 0; i < FOCUS_IDS.length; i++) {
+    const el = $(FOCUS_IDS[i]);
+    if (!el) continue;
+    el.classList.toggle("focused", i === focusIndex);
+    el.classList.toggle("editing", i === focusIndex && editMode);
+  }
+  const current = FOCUS_IDS[focusIndex] || "-";
+  $("encoderState").textContent = editMode
+    ? `Encoder: editing ${current}`
+    : `Encoder: focus ${current}`;
+}
+
+function applyFocusedControl(){
+  const id = FOCUS_IDS[focusIndex];
+  if (id === "heads") {
+    const idx = parseInt($("heads").value, 10);
+    send({ type: "SELECT_HEAD", index: idx });
+    $("eventLog").textContent = `Encoder set head index ${idx}`;
+    return;
+  }
+  if (id === "motorsOn") {
+    const v = parseInt($("motorsOn").value, 10) ? 1 : 0;
+    send({ type: "SET_SLOW_CONTROL", key: "motors_on", value: v });
+    $("eventLog").textContent = `Encoder set motors_on=${v}`;
+    return;
+  }
+  if (id === "gyroHeading") {
+    const v = parseInt($("gyroHeading").value, 10) || 0;
+    send({ type: "SET_SLOW_CONTROL", key: "gyro_heading_correction", value: v });
+    $("eventLog").textContent = `Encoder set gyro_heading_correction=${v}`;
+  }
+}
+
+function handleEncoderStep(dir){
+  if (!editMode) {
+    focusIndex = (focusIndex + dir + FOCUS_IDS.length) % FOCUS_IDS.length;
+    refreshFocusUI();
+    return;
+  }
+  const id = FOCUS_IDS[focusIndex];
+  const el = $(id);
+  if (!el) return;
+  moveSelectByStep(el, dir);
+  if (id === "gyroHeading") {
+    $("eventLog").textContent = `Gyro preview ${$("gyroHeading").value}`;
+  }
+}
+
+function onEncoderSwitchPress(){
+  if (!editMode) {
+    editMode = true;
+    refreshFocusUI();
+    return;
+  }
+  applyFocusedControl();
+  editMode = false;
+  refreshFocusUI();
+}
+
+function pollEncoderButtons(){
+  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  const gp = pads && pads[0];
+  if (!gp || !gp.buttons) {
+    requestAnimationFrame(pollEncoderButtons);
+    return;
+  }
+
+  const b0 = gp.buttons[0]?.pressed ? 1 : 0; // CW
+  const b1 = gp.buttons[1]?.pressed ? 1 : 0; // CCW
+  const b2 = gp.buttons[2]?.pressed ? 1 : 0; // Switch
+
+  if (b0 && !prevButtons[0]) handleEncoderStep(+1);
+  if (b1 && !prevButtons[1]) handleEncoderStep(-1);
+  if (b2 && !prevButtons[2]) onEncoderSwitchPress();
+
+  prevButtons = [b0, b1, b2];
+  requestAnimationFrame(pollEncoderButtons);
+}
+
+$("connect").onclick = () => {
+  const url = $("wsurl").value.trim();
+  ws = new WebSocket(url);
+  setWsPill("connecting...", false);
+
+  ws.onopen = () => setWsPill("connected", true);
+  ws.onclose = () => setWsPill("closed", false);
+  ws.onerror = () => setWsPill("error", false);
+
+  ws.onmessage = (ev) => {
+    try {
+      const msg = JSON.parse(ev.data);
+      if (msg.type === "STATE") {
+        state.heads = msg.heads || [];
+        state.selected = msg.selected || 0;
+        refreshHeadsUI();
+        setSlowControlState(msg.slow_controls || {});
+        $("eventLog").textContent = "Received STATE";
+      }
+      if (msg.type === "SELECTED") {
+        state.selected = msg.selected || 0;
+        $("heads").value = String(state.selected);
+        $("eventLog").textContent = `Selected head index ${state.selected}`;
+      }
+      if (msg.type === "SLOW_APPLIED") {
+        if (msg.key === "motors_on") {
+          setSlowControlState({ motors_on: msg.value });
+        }
+        if (msg.key === "gyro_heading_correction") {
+          setSlowControlState({
+            motors_on: $("motorsOn").value,
+            gyro_heading_correction: msg.value,
+          });
+        }
+        $("eventLog").textContent = `Applied ${msg.key}=${msg.value}`;
+      }
+    } catch {
+      $("eventLog").textContent = "Invalid message";
+    }
+  };
+};
+
+$("heads").onchange = (e) => {
+  send({ type: "SELECT_HEAD", index: parseInt(e.target.value, 10) });
+};
+
+$("applyMotorsOn").onclick = () => {
+  const v = parseInt($("motorsOn").value, 10) ? 1 : 0;
+  send({ type: "SET_SLOW_CONTROL", key: "motors_on", value: v });
+  $("eventLog").textContent = `Sent motors_on=${v}`;
+};
+
+$("applyGyroHeading").onclick = () => {
+  const v = parseInt($("gyroHeading").value, 10) || 0;
+  send({ type: "SET_SLOW_CONTROL", key: "gyro_heading_correction", value: v });
+  $("eventLog").textContent = `Sent gyro_heading_correction=${v}`;
+};
+
+buildGyroHeadingOptions();
+refreshFocusUI();
+pollEncoderButtons();
+</script>
+</body>
+</html>
