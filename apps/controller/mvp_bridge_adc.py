@@ -29,6 +29,16 @@ except ImportError:
     MVP_PROTOCOL_AVAILABLE = False
 
 
+def _port_is_open(port) -> bool:
+    """True if port exists and is open; works whether is_open is a property (bool) or method."""
+    if port is None:
+        return False
+    v = getattr(port, "is_open", None)
+    if v is None:
+        return True
+    return v() if callable(v) else bool(v)
+
+
 def _resolve_head_host_port(host: str, fast_port: int, slow_port: int, head_index: int = 0):
     """If host is default localhost and we have heads.json, use head at head_index IP and ports."""
     if host != DEFAULT_HEAD_ADDR or not MVP_PROTOCOL_AVAILABLE:
@@ -86,7 +96,7 @@ def _run_ingest_loop(
             snap = ingest_state.snapshot()
             state.update_health(**snap)
 
-        while not stop.is_set() and port and getattr(port, "is_open", lambda: False)():
+        while not stop.is_set() and port and _port_is_open(port):
             read_frames(port, ingest_state, state.get_stale_timeout_ms(), on_sample)
             ingest_state.update_age(state.get_stale_timeout_ms())
             time.sleep(0.001)

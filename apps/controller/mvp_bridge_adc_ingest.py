@@ -137,12 +137,22 @@ def open_cdc_port(port: str | None = None, baud: int = 115200):  # noqa: ANN201
     return None
 
 
+def _is_port_open(port) -> bool:
+    """True if port exists and is open; works whether is_open is a property (bool) or method."""
+    if port is None:
+        return False
+    v = getattr(port, "is_open", None)
+    if v is None:
+        return True
+    return v() if callable(v) else bool(v)
+
+
 def read_frames(port, state: IngestState, stale_timeout_ms: float, on_sample: Callable[[dict[str, Any]], None]) -> None:
     """
     Read lines from port, parse ADCv1 frames, update state, call on_sample for each valid frame.
     Caller should run this in a loop with reconnect/backoff when port is None or closed.
     """
-    if not port or not getattr(port, "is_open", lambda: False)():
+    if not port or not _is_port_open(port):
         return
     try:
         line = port.readline()
