@@ -7,6 +7,7 @@ See ADC_BRIDGE_INTERFACE.md and the ADC Bridge Pivot Plan.
 from __future__ import annotations
 
 import argparse
+import os
 import queue
 import threading
 import time
@@ -115,12 +116,16 @@ def _run_output_loop(
     fast_interval_s: float,
     slow_interval_s: float,
     stop: threading.Event,
+    fast_debug: bool = False,
 ) -> None:
     """Background thread: consume shaped axes from queue, send fast/slow UDP."""
     sock = None
     last_fast = 0.0
     last_slow = 0.0
     current_axes: dict[str, Any] | None = None
+    fast_send_count = 0
+    last_fast_log = 0.0
+    FAST_DEBUG_INTERVAL_S = 5.0
     while not stop.is_set():
         try:
             current_axes = shaped_queue.get(timeout=0.02)
@@ -132,9 +137,15 @@ def _run_output_loop(
         if now - last_fast >= fast_interval_s:
             sock = send_fast(current_axes, host, fast_port, sock)
             last_fast = now
+            fast_send_count += 1
         if now - last_slow >= slow_interval_s:
             send_slow(current_axes, host, slow_port, sock)
             last_slow = now
+        if fast_debug and now - last_fast_log >= FAST_DEBUG_INTERVAL_S:
+            last_fast_log = now
+            ax = current_axes or {}
+            r = {k: (ax.get(k), ax.get(k)) for k in ("X", "Y", "Z", "Xrotate", "Yrotate", "Zrotate")}
+            print(f"[FAST_DEBUG] sends={fast_send_count} axes={r}")
         time.sleep(0.001)
 
 
@@ -146,6 +157,7 @@ def run_bridge(
     fast_hz: float = 50.0,
     slow_hz: float = 10.0,
     profile_dir: str | None = None,
+    fast_debug: bool = False,
 ) -> None:
     """Run ingest + shaping + output in threads. Blocks until KeyboardInterrupt."""
     state = ADCBridgeState(profile_dir=profile_dir)
@@ -179,6 +191,7 @@ def run_bridge(
 
     fast_interval_s = 1.0 / fast_hz if fast_hz > 0 else 0.02
     slow_interval_s = 1.0 / slow_hz if slow_hz > 0 else 0.1
+    use_fast_debug = fast_debug or os.environ.get("MVP_FAST_DEBUG", "").strip().lower() in ("1", "true", "yes")
 
     ingest_thread = threading.Thread(
         target=_run_ingest_loop,
@@ -188,7 +201,7 @@ def run_bridge(
     shape_thread = threading.Thread(target=shape_worker, daemon=True)
     output_thread = threading.Thread(
         target=_run_output_loop,
-        args=(state, shaped_queue, host, fast_port, slow_port, fast_interval_s, slow_interval_s, stop),
+        args=(state, shaped_queue, host, fast_port, slow_port, fast_interval_s, slow_interval_s, stop, use_fast_debug),
         daemon=True,
     )
     ingest_thread.start()
@@ -223,6 +236,11 @@ def main() -> None:
         default=0,
         help="Index of head in heads.json when not passing --host (default: 0)",
     )
+    parser.add_argument(
+        "--fast-debug",
+        action="store_true",
+        help="Enable low-rate fast-path logs (send count, axes). Also set by MVP_FAST_DEBUG=1.",
+    )
     args = parser.parse_args()
     host, fast_port, slow_port = _resolve_head_host_port(
         args.host, args.fast_port, args.slow_port, args.head_index
@@ -237,6 +255,7 @@ def main() -> None:
         fast_hz=args.fast_hz,
         slow_hz=args.slow_hz,
         profile_dir=args.profile_dir,
+        fast_debug=args.fast_debug,
     )
 
 

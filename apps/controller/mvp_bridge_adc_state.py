@@ -15,12 +15,13 @@ PROFILE_FILENAME = "adc_bridge_profile.json"
 SCHEMA_VERSION = 1
 STALE_TIMEOUT_MS_DEFAULT = 150
 
+# Passthrough defaults per ADC Fast Path Cleanup: no filtering, no bit loss.
 DEFAULT_AXIS_TUNING: dict[str, Any] = {
     "deadband": 0.0,
     "center_offset": 0.0,
-    "lpf_alpha": 0.5,
+    "lpf_alpha": 1.0,   # 1.0 = no LPF (passthrough)
     "expo": 0.0,
-    "slew_rate": 10.0,
+    "slew_rate": 1000.0,  # high = effectively no slew limit
     "invert": False,
     "gain": 1.0,
     "clamp_min": -1.0,

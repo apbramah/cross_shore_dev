@@ -244,29 +244,82 @@ def _encode_lens_control(control_state: Dict[str, Any]) -> tuple[int, int]:
 
 
 # -------------------------------
+# Fast packet contract (ADC Fast Path Cleanup)
+# -------------------------------
+# Active runtime uses v2 fast decode on head (decode_fast_packet_v2). Fast packet format:
+#   struct "<BBBHhHHHHHH": magic, ver, PKT_FAST_CTRL, seq(16), zoom(s16), focus(u16), iris(u16), yaw(u16), pitch(u16), roll(u16), reserved(u16).
+# All axis control (yaw, pitch, roll, zoom, focus, iris) is carried ONLY on fast UDP (port 8888).
+# Slow channel (port 8890) carries only config: motors_on, control_mode, lens_select, axis sources, filter keys — no axis values.
+
+# -------------------------------
 # Gate 1 dual-channel scaffolding
 # -------------------------------
-# These helpers are intentionally additive and are not used by default.
-# The legacy build_udp_packet() path remains the active runtime path.
+
+def _float_to_u16(v: float) -> int:
+    """Map [-1, 1] to [0, 65535] with center at 32768. No deadzone or quantization."""
+    x = round(32768.0 + float(v) * 32767.0)
+    if x < 0:
+        return 0
+    if x > 65535:
+        return 65535
+    return int(x)
+
 
 def build_fast_packet_v2(axes: Dict[str, Any], control_state: Dict[str, Any], seq: int) -> bytes:
-    """Versioned fast packet helper for staged migration (inactive by default)."""
-    legacy = build_udp_packet(axes, control_state)
-    fields = decode_legacy_fast_fields(legacy)
-    if not fields:
-        fields = {"zoom": 0, "focus": 0, "iris": 0, "yaw": 0, "pitch": 0, "roll": 0}
+    """
+    Build v2 fast packet directly from axes (float [-1,1]) and control_state.
+    No round-trip through legacy 16-byte packet. Full 16-bit range per axis.
+    """
+    def f(name: str, default: float = 0.0) -> float:
+        try:
+            return float(axes.get(name, default))
+        except Exception:
+            return float(default)
+
+    pan = f("X")
+    tilt = f("Y")
+    roll = f("Z")
+    focus = f("Xrotate")
+    iris = f("Yrotate")
+    zoom = f("Zrotate")
+
+    invert = control_state.get("invert", {}) or {}
+    if invert.get("yaw"):
+        pan = -pan
+    if invert.get("pitch"):
+        tilt = -tilt
+    if invert.get("roll"):
+        roll = -roll
+
+    sp = float(control_state.get("speed", 1.0))
+    pan = max(-1.0, min(1.0, pan * sp))
+    tilt = max(-1.0, min(1.0, tilt * sp))
+    roll = max(-1.0, min(1.0, roll * sp))
+    focus = max(-1.0, min(1.0, focus))
+    iris = max(-1.0, min(1.0, iris))
+    zoom = max(-1.0, min(1.0, zoom))
+
+    yaw_u16 = _float_to_u16(pan)
+    pitch_u16 = _float_to_u16(tilt)
+    roll_u16 = _float_to_u16(roll)
+    focus_u16 = _float_to_u16(focus)
+    iris_u16 = _float_to_u16(iris)
+    zg = float(control_state.get("zoom_gain", 60.0))
+    zoom_i = int(zoom * zg)
+    zoom_i = max(-32768, min(32767, zoom_i))
+
     return struct.pack(
         "<BBBHhHHHHHH",
         PKT_MAGIC,
         PKT_VER,
         PKT_FAST_CTRL,
         int(seq) & 0xFFFF,
-        int(fields["zoom"]),
-        int(fields["focus"]) & 0xFFFF,
-        int(fields["iris"]) & 0xFFFF,
-        int(fields["yaw"]) & 0xFFFF,
-        int(fields["pitch"]) & 0xFFFF,
-        int(fields["roll"]) & 0xFFFF,
+        zoom_i,
+        focus_u16 & 0xFFFF,
+        iris_u16 & 0xFFFF,
+        yaw_u16 & 0xFFFF,
+        pitch_u16 & 0xFFFF,
+        roll_u16 & 0xFFFF,
         0,
     )
 

@@ -60,6 +60,20 @@ def _slew(current: float, target: float, rate_per_sec: float, dt: float) -> floa
     return current + math.copysign(step, delta)
 
 
+def _is_passthrough_tuning(t: dict[str, Any]) -> bool:
+    """True if tuning is identity (no deadband, expo, LPF, slew effect)."""
+    return (
+        t.get("deadband", 0) == 0
+        and t.get("center_offset", 0) == 0
+        and t.get("expo", 0) == 0
+        and t.get("lpf_alpha", 0.5) >= 1.0
+        and t.get("slew_rate", 10) >= 500.0
+        and t.get("gain", 1) == 1.0
+        and t.get("clamp_min", -1) <= -1.0
+        and t.get("clamp_max", 1) >= 1.0
+    )
+
+
 def shape_sample(
     raw_sample: dict[str, Any],
     state: ADCBridgeState,
@@ -70,6 +84,7 @@ def shape_sample(
     Take raw axis sample and state, return protocol-ready axes dict
     (X, Y, Z, Xrotate, Yrotate, Zrotate) and new last_time.
     filter_state holds per-axis LPF and slew state; mutated in place.
+    When all axes use passthrough tuning, only norm + invert + clamp are applied (no LPF/slew).
     """
     now = time.monotonic()
     dt = now - last_time if last_time else 0.0
@@ -81,12 +96,16 @@ def shape_sample(
         v = _apply_center_offset(v, tuning["center_offset"])
         v = _apply_deadband(v, tuning["deadband"])
         v = _apply_expo(v, tuning["expo"])
-        lpf_alpha = tuning["lpf_alpha"]
-        key_lpf = f"{k}_lpf"
-        prev_lpf = filter_state.get(key_lpf, 0.0)
-        v = _apply_lpf(prev_lpf, v, lpf_alpha)
-        filter_state[key_lpf] = v
-        v = _slew(filter_state.get(f"{k}_out", 0.0), v, tuning["slew_rate"], dt)
+        if _is_passthrough_tuning(tuning):
+            # Passthrough baseline: skip LPF and slew to preserve resolution.
+            pass
+        else:
+            lpf_alpha = tuning["lpf_alpha"]
+            key_lpf = f"{k}_lpf"
+            prev_lpf = filter_state.get(key_lpf, 0.0)
+            v = _apply_lpf(prev_lpf, v, lpf_alpha)
+            filter_state[key_lpf] = v
+            v = _slew(filter_state.get(f"{k}_out", 0.0), v, tuning["slew_rate"], dt)
         if tuning["invert"]:
             v = -v
         v = v * tuning["gain"]
