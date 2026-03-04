@@ -2,7 +2,7 @@ import time
 
 from lens_serial import LensSerial
 from canon_lens import CanonLens
-from fuji_lens import FujiLens
+from fuji_lens_from_calibration import FujiLens
 
 LENS_CANON = "canon"
 LENS_FUJI = "fuji"
@@ -28,6 +28,8 @@ class LensController:
 
     def set_lens_type(self, lens_type):
         if lens_type not in (LENS_CANON, LENS_FUJI):
+            return False
+        if lens_type == self.active_lens_type:
             return False
 
         if lens_type == LENS_CANON:
@@ -88,6 +90,38 @@ class LensController:
             return
         self.active_lens.periodic(time.ticks_ms())
 
+    def set_input_filter_enabled(self, axis, enabled):
+        if self.active_lens is None:
+            return False
+        fn = getattr(self.active_lens, "set_input_filter_enabled", None)
+        if not callable(fn):
+            return False
+        return bool(fn(axis, enabled))
+
+    def set_input_filter_ratio(self, num, den):
+        if self.active_lens is None:
+            return False
+        fn = getattr(self.active_lens, "set_input_filter_ratio", None)
+        if not callable(fn):
+            return False
+        return bool(fn(num, den))
+
+    def set_input_filter_num(self, num):
+        if self.active_lens is None:
+            return False
+        fn = getattr(self.active_lens, "set_input_filter_num", None)
+        if not callable(fn):
+            return False
+        return bool(fn(num))
+
+    def set_input_filter_den(self, den):
+        if self.active_lens is None:
+            return False
+        fn = getattr(self.active_lens, "set_input_filter_den", None)
+        if not callable(fn):
+            return False
+        return bool(fn(den))
+
     def startup_diagnostics(self):
         if self.active_lens is None:
             print("[LENS] No active lens")
@@ -98,18 +132,3 @@ class LensController:
             return bool(fn())
         print("[LENS] No diagnostics available for lens")
         return False
-
-    def get_status(self):
-        axis_sources = self.get_axis_sources()
-        zoom_position = int(getattr(self.active_lens, "zoom", 0)) if self.active_lens else 0
-        focus_position = int(getattr(self.active_lens, "focus", 0)) if self.active_lens else 0
-        iris_position = int(getattr(self.active_lens, "iris", 0)) if self.active_lens else 0
-        return {
-            "lens_select": self.get_lens_type() or LENS_FUJI,
-            "source_zoom": axis_sources.get("zoom", "pc"),
-            "source_focus": axis_sources.get("focus", "pc"),
-            "source_iris": axis_sources.get("iris", "pc"),
-            "zoom_position": zoom_position,
-            "focus_position": focus_position,
-            "iris_position": iris_position,
-        }

@@ -9,56 +9,39 @@ UDP_DEFAULT_PORT = 8888
 FAST_PORT = 8888
 SLOW_CMD_PORT = 8890
 SLOW_TELEM_PORT = 8891
-BRIDGE_RX_PORT = 8892
 
 PKT_MAGIC = 0xDE
 PKT_VER = 0x01
-
 PKT_FAST_CTRL = 0x10
 PKT_SLOW_CMD = 0x20
 PKT_SLOW_ACK = 0x21
 PKT_SLOW_TELEM = 0x30
 
-# Slow-control key IDs (v1)
-KEY_MOTORS_ON = 1
-KEY_PAN_GAIN = 2
-KEY_TILT_GAIN = 3
-KEY_ROLL_GAIN = 4
-KEY_PAN_ACCEL = 5
-KEY_TILT_ACCEL = 6
-KEY_ROLL_ACCEL = 7
-KEY_EXPO = 8
-KEY_PAN_TOP_SPEED = 9
-KEY_TILT_TOP_SPEED = 10
-KEY_ROLL_TOP_SPEED = 11
-KEY_GYRO_DRIFT_OFFSET = 12
-KEY_CONTROL_MODE = 13
-KEY_LENS_SELECT = 20
-KEY_SOURCE_ZOOM = 21
-KEY_SOURCE_FOCUS = 22
-KEY_SOURCE_IRIS = 23
+SLOW_KEY_MOTORS_ON = 1
+SLOW_KEY_CONTROL_MODE = 2
+SLOW_KEY_LENS_SELECT = 3
+SLOW_KEY_SOURCE_ZOOM = 4
+SLOW_KEY_SOURCE_FOCUS = 5
+SLOW_KEY_SOURCE_IRIS = 6
+SLOW_KEY_FILTER_ENABLE_FOCUS = 7
+SLOW_KEY_FILTER_ENABLE_IRIS = 8
+SLOW_KEY_FILTER_NUM = 9
+SLOW_KEY_FILTER_DEN = 10
+SLOW_KEY_GYRO_HEADING_CORRECTION = 11
 
-SLOW_KEYS = {
-    "motors_on": KEY_MOTORS_ON,
-    "pan_gain": KEY_PAN_GAIN,
-    "tilt_gain": KEY_TILT_GAIN,
-    "roll_gain": KEY_ROLL_GAIN,
-    "pan_acceleration": KEY_PAN_ACCEL,
-    "tilt_acceleration": KEY_TILT_ACCEL,
-    "roll_acceleration": KEY_ROLL_ACCEL,
-    "expo": KEY_EXPO,
-    "pan_top_speed": KEY_PAN_TOP_SPEED,
-    "tilt_top_speed": KEY_TILT_TOP_SPEED,
-    "roll_top_speed": KEY_ROLL_TOP_SPEED,
-    "gyro_drift_offset": KEY_GYRO_DRIFT_OFFSET,
-    "control_mode": KEY_CONTROL_MODE,
-    "lens_select": KEY_LENS_SELECT,
-    "source_zoom": KEY_SOURCE_ZOOM,
-    "source_focus": KEY_SOURCE_FOCUS,
-    "source_iris": KEY_SOURCE_IRIS,
+SLOW_KEY_IDS = {
+    "motors_on": SLOW_KEY_MOTORS_ON,
+    "control_mode": SLOW_KEY_CONTROL_MODE,
+    "lens_select": SLOW_KEY_LENS_SELECT,
+    "source_zoom": SLOW_KEY_SOURCE_ZOOM,
+    "source_focus": SLOW_KEY_SOURCE_FOCUS,
+    "source_iris": SLOW_KEY_SOURCE_IRIS,
+    "filter_enable_focus": SLOW_KEY_FILTER_ENABLE_FOCUS,
+    "filter_enable_iris": SLOW_KEY_FILTER_ENABLE_IRIS,
+    "filter_num": SLOW_KEY_FILTER_NUM,
+    "filter_den": SLOW_KEY_FILTER_DEN,
+    "gyro_heading_correction": SLOW_KEY_GYRO_HEADING_CORRECTION,
 }
-
-SLOW_KEYS_BY_ID = {v: k for (k, v) in SLOW_KEYS.items()}
 
 # Resolve heads.json relative to this file so it works from any CWD
 HEADS_FILE = os.path.join(os.path.dirname(__file__), "heads.json")
@@ -102,7 +85,7 @@ def send_udp_to(ip: str, port: int, packet: bytes) -> None:
     _udp_sock.sendto(packet, (ip, int(port)))
 
 
-def build_fast_packet(axes: Dict[str, Any], control_state: Dict[str, Any], seq: int) -> bytes:
+def build_udp_packet(axes: Dict[str, Any], control_state: Dict[str, Any]) -> bytes:
     """
     Match the ORIGINAL controller/main.py behaviour:
     - Browser/desktop axes float [-1..+1] -> int [-512..+512]
@@ -134,20 +117,18 @@ def build_fast_packet(axes: Dict[str, Any], control_state: Dict[str, Any], seq: 
     iris = f("Yrotate")   # Joystick.Yrotate
     zoom = f("Zrotate")   # Joystick.Zrotate
 
-    # Deadzones (float domain). Lens axes get stronger deadzone to suppress
-    # idle drift/jitter from gamepad ADC noise.
-    DEADZONE_MOTION = 0.06
-    DEADZONE_LENS = 0.12
+    # Deadzone (float domain)
+    DEADZONE = 0.06
 
-    def dz(v: float, threshold: float) -> float:
-        return 0.0 if -threshold < v < threshold else v
+    def dz(v: float) -> float:
+        return 0.0 if -DEADZONE < v < DEADZONE else v
 
-    pan = dz(pan, DEADZONE_MOTION)
-    tilt = dz(tilt, DEADZONE_MOTION)
-    roll = dz(roll, DEADZONE_MOTION)
-    zoom = dz(zoom, DEADZONE_MOTION)
-    focus = dz(focus, DEADZONE_LENS)
-    iris = dz(iris, DEADZONE_LENS)
+    pan = dz(pan)
+    tilt = dz(tilt)
+    roll = dz(roll)
+    focus = dz(focus)
+    iris = dz(iris)
+    zoom = dz(zoom)
 
     invert = control_state.get("invert", {}) or {}
 
@@ -183,18 +164,8 @@ def build_fast_packet(axes: Dict[str, Any], control_state: Dict[str, Any], seq: 
     pan_i = int(pan * 512)
     tilt_i = int(tilt * 512)
     roll_i = int(roll * 512)
-    # Lens focus/iris are sent as high-resolution absolute controls in 0..16384.
-    # This avoids 0..64 quantization noise that caused visible lens jitter.
-    focus_i = int(((focus + 1.0) * 0.5) * 16384.0)
-    iris_i = int(((iris + 1.0) * 0.5) * 16384.0)
-    if focus_i < 0:
-        focus_i = 0
-    elif focus_i > 16384:
-        focus_i = 16384
-    if iris_i < 0:
-        iris_i = 0
-    elif iris_i > 16384:
-        iris_i = 16384
+    focus_i = int(focus * 512)
+    iris_i = int(iris * 512)
 
     # zoom rocker -> signed delta similar to original feel
     zg = float(control_state.get("zoom_gain", 60.0))
@@ -202,200 +173,234 @@ def build_fast_packet(axes: Dict[str, Any], control_state: Dict[str, Any], seq: 
 
     # === ORIGINAL map_* transforms (copied from controller/main.py) ===
     map_zoom = lambda value: (value + 0)
+    map_iris = lambda value: (value + 512) >> 4
+    map_focus = lambda value: (value + 512) >> 4
     map_pitch = lambda value: value
 
     tilt_i = map_pitch(tilt_i)
     zoom_i = map_zoom(zoom_i)
+    focus_i = map_focus(focus_i)
+    iris_i = map_iris(iris_i)
+
+    # Optional lens control sideband for MVP head_eng.
+    ctrl0, ctrl1 = _encode_lens_control(control_state)
+
+    # Pack EXACTLY like original send_udp_message() byte order.
+    # Last 2 bytes were historically reserved (0x00, 0x00). We now use them
+    # for optional lens control sideband with marker ctrl1=0xA5.
+    msg = bytes(
+        [
+            0xDE,
+            0xFD,
+            zoom_i & 0xFF,
+            (zoom_i >> 8) & 0xFF,
+            (focus_i >> 8) & 0xFF,
+            focus_i & 0xFF,
+            (iris_i >> 8) & 0xFF,
+            iris_i & 0xFF,
+            (pan_i >> 8) & 0xFF,
+            pan_i & 0xFF,
+            (tilt_i >> 8) & 0xFF,
+            tilt_i & 0xFF,
+            (roll_i >> 8) & 0xFF,
+            roll_i & 0xFF,
+            ctrl0 & 0xFF,
+            ctrl1 & 0xFF,
+        ]
+    )
+
+    return msg
+
+
+def _encode_lens_control(control_state: Dict[str, Any]) -> tuple[int, int]:
+    """
+    Sideband encoding in bytes 14..15:
+      ctrl0:
+        b1..b0 lens type: 0=fuji, 1=canon
+        b3..b2 zoom source: 0=pc, 1=camera, 2=off
+        b5..b4 focus source: 0=pc, 1=camera, 2=off
+        b7..b6 iris source: 0=pc, 1=camera, 2=off
+      ctrl1:
+        marker 0xA5 means sideband is valid.
+    """
+    lens_type = str(control_state.get("lens_type", "fuji")).lower()
+    axis_sources = control_state.get("axis_sources", {}) or {}
+
+    lens_bits = 1 if lens_type == "canon" else 0
+
+    def src_bits(axis_name: str) -> int:
+        v = str(axis_sources.get(axis_name, "pc")).lower()
+        if v == "camera":
+            return 1
+        if v == "off":
+            return 2
+        return 0
+
+    ctrl0 = (
+        (lens_bits & 0x03)
+        | ((src_bits("zoom") & 0x03) << 2)
+        | ((src_bits("focus") & 0x03) << 4)
+        | ((src_bits("iris") & 0x03) << 6)
+    )
+    return ctrl0, 0xA5
+
+
+# -------------------------------
+# Fast packet contract (ADC Fast Path Cleanup)
+# -------------------------------
+# Active runtime uses v2 fast decode on head (decode_fast_packet_v2). Fast packet format:
+#   struct "<BBBHhHHHHHH": magic, ver, PKT_FAST_CTRL, seq(16), zoom(s16), focus(u16), iris(u16), yaw(u16), pitch(u16), roll(u16), reserved(u16).
+# All axis control (yaw, pitch, roll, zoom, focus, iris) is carried ONLY on fast UDP (port 8888).
+# Slow channel (port 8890) carries only config: motors_on, control_mode, lens_select, axis sources, filter keys — no axis values.
+
+# -------------------------------
+# Gate 1 dual-channel scaffolding
+# -------------------------------
+
+def _float_to_u16(v: float) -> int:
+    """Map [-1, 1] to [0, 65535] with center at 32768. No deadzone or quantization."""
+    x = round(32768.0 + float(v) * 32767.0)
+    if x < 0:
+        return 0
+    if x > 65535:
+        return 65535
+    return int(x)
+
+
+def build_fast_packet_v2(axes: Dict[str, Any], control_state: Dict[str, Any], seq: int) -> bytes:
+    """
+    Build v2 fast packet directly from axes (float [-1,1]) and control_state.
+    No round-trip through legacy 16-byte packet. Full 16-bit range per axis.
+    """
+    def f(name: str, default: float = 0.0) -> float:
+        try:
+            return float(axes.get(name, default))
+        except Exception:
+            return float(default)
+
+    pan = f("X")
+    tilt = f("Y")
+    roll = f("Z")
+    focus = f("Xrotate")
+    iris = f("Yrotate")
+    zoom = f("Zrotate")
+
+    invert = control_state.get("invert", {}) or {}
+    if invert.get("yaw"):
+        pan = -pan
+    if invert.get("pitch"):
+        tilt = -tilt
+    if invert.get("roll"):
+        roll = -roll
+
+    sp = float(control_state.get("speed", 1.0))
+    pan = max(-1.0, min(1.0, pan * sp))
+    tilt = max(-1.0, min(1.0, tilt * sp))
+    roll = max(-1.0, min(1.0, roll * sp))
+    focus = max(-1.0, min(1.0, focus))
+    iris = max(-1.0, min(1.0, iris))
+    zoom = max(-1.0, min(1.0, zoom))
+
+    yaw_u16 = _float_to_u16(pan)
+    pitch_u16 = _float_to_u16(tilt)
+    roll_u16 = _float_to_u16(roll)
+    focus_u16 = _float_to_u16(focus)
+    iris_u16 = _float_to_u16(iris)
+    zg = float(control_state.get("zoom_gain", 60.0))
+    zoom_i = int(zoom * zg)
+    zoom_i = max(-32768, min(32767, zoom_i))
 
     return struct.pack(
-        "<BBBHhHHhhhH",
+        "<BBBHhHHHHHH",
         PKT_MAGIC,
         PKT_VER,
         PKT_FAST_CTRL,
         int(seq) & 0xFFFF,
-        int(zoom_i),
-        int(focus_i) & 0xFFFF,
-        int(iris_i) & 0xFFFF,
-        int(pan_i),
-        int(tilt_i),
-        int(roll_i),
-        0,  # reserved
+        zoom_i,
+        focus_u16 & 0xFFFF,
+        iris_u16 & 0xFFFF,
+        yaw_u16 & 0xFFFF,
+        pitch_u16 & 0xFFFF,
+        roll_u16 & 0xFFFF,
+        0,
     )
 
 
-def decode_fast_packet(packet: bytes) -> Optional[Dict[str, Any]]:
+def decode_fast_packet_v2(packet: bytes) -> Optional[Dict[str, Any]]:
     if len(packet) != 19:
         return None
-    magic, ver, pkt_type, seq, zoom, focus, iris, yaw, pitch, roll, _ = struct.unpack("<BBBHhHHhhhH", packet)
+    try:
+        magic, ver, pkt_type, seq, zoom, focus, iris, yaw, pitch, roll, _ = struct.unpack("<BBBHhHHHHHH", packet)
+    except Exception:
+        return None
     if magic != PKT_MAGIC or ver != PKT_VER or pkt_type != PKT_FAST_CTRL:
         return None
-    return {
-        "seq": seq,
-        "zoom": zoom,
-        "focus": focus,
-        "iris": iris,
-        "yaw": yaw,
-        "pitch": pitch,
-        "roll": roll,
-    }
+    return {"seq": seq, "zoom": zoom, "focus": focus, "iris": iris, "yaw": yaw, "pitch": pitch, "roll": roll}
 
 
 def build_slow_cmd_packet(seq: int, apply_id: int, key_id: int, value: int) -> bytes:
-    return struct.pack(
-        "<BBBHHBi",
-        PKT_MAGIC,
-        PKT_VER,
-        PKT_SLOW_CMD,
-        int(seq) & 0xFFFF,
-        int(apply_id) & 0xFFFF,
-        int(key_id) & 0xFF,
-        int(value),
-    )
-
-
-def decode_slow_cmd_packet(packet: bytes) -> Optional[Dict[str, Any]]:
-    if len(packet) != 12:
-        return None
-    magic, ver, pkt_type, seq, apply_id, key_id, value = struct.unpack("<BBBHHBi", packet)
-    if magic != PKT_MAGIC or ver != PKT_VER or pkt_type != PKT_SLOW_CMD:
-        return None
-    return {"seq": seq, "apply_id": apply_id, "key_id": key_id, "key": SLOW_KEYS_BY_ID.get(key_id), "value": value}
+    return struct.pack("<BBBHHBi", PKT_MAGIC, PKT_VER, PKT_SLOW_CMD, int(seq) & 0xFFFF, int(apply_id) & 0xFFFF, int(key_id) & 0xFF, int(value))
 
 
 def build_slow_ack_packet(seq: int, apply_id: int, key_id: int, status: int) -> bytes:
-    return struct.pack(
-        "<BBBHHBB",
-        PKT_MAGIC,
-        PKT_VER,
-        PKT_SLOW_ACK,
-        int(seq) & 0xFFFF,
-        int(apply_id) & 0xFFFF,
-        int(key_id) & 0xFF,
-        int(status) & 0xFF,
-    )
+    return struct.pack("<BBBHHBB", PKT_MAGIC, PKT_VER, PKT_SLOW_ACK, int(seq) & 0xFFFF, int(apply_id) & 0xFFFF, int(key_id) & 0xFF, int(status) & 0xFF)
 
 
 def decode_slow_ack_packet(packet: bytes) -> Optional[Dict[str, Any]]:
     if len(packet) != 9:
         return None
-    magic, ver, pkt_type, seq, apply_id, key_id, status = struct.unpack("<BBBHHBB", packet)
+    try:
+        magic, ver, pkt_type, seq, apply_id, key_id, status = struct.unpack("<BBBHHBB", packet)
+    except Exception:
+        return None
     if magic != PKT_MAGIC or ver != PKT_VER or pkt_type != PKT_SLOW_ACK:
         return None
-    return {"seq": seq, "apply_id": apply_id, "key_id": key_id, "key": SLOW_KEYS_BY_ID.get(key_id), "status": status}
+    return {"seq": seq, "apply_id": apply_id, "key_id": key_id, "status": status}
 
 
-def build_slow_telem_packet(seq: int, telem: Dict[str, Any]) -> bytes:
-    motor_power = 1 if bool(telem.get("motor_power", False)) else 0
-    control_mode = _encode_control_mode(telem.get("control_mode", "speed"))
-    voltage_mv = int(telem.get("voltage_mv", 0)) & 0xFFFF
-    pan_pos = int(telem.get("pan_position", 0)) & 0xFFFF
-    tilt_pos = int(telem.get("tilt_position", 0)) & 0xFFFF
-    roll_pos = int(telem.get("roll_position", 0)) & 0xFFFF
-    lens_select = _encode_lens_select(telem.get("lens_select", "fuji"))
-    src_zoom = _encode_source(telem.get("source_zoom", "pc"))
-    src_focus = _encode_source(telem.get("source_focus", "pc"))
-    src_iris = _encode_source(telem.get("source_iris", "pc"))
-    zoom_pos = int(telem.get("zoom_position", 0)) & 0xFFFF
-    focus_pos = int(telem.get("focus_position", 0)) & 0xFFFF
-    iris_pos = int(telem.get("iris_position", 0)) & 0xFFFF
-    return struct.pack(
-        "<BBBHBBHHHHBBBBHHH",
-        PKT_MAGIC,
-        PKT_VER,
-        PKT_SLOW_TELEM,
-        int(seq) & 0xFFFF,
-        motor_power,
-        control_mode,
-        voltage_mv,
-        pan_pos,
-        tilt_pos,
-        roll_pos,
-        lens_select,
-        src_zoom,
-        src_focus,
-        src_iris,
-        zoom_pos,
-        focus_pos,
-        iris_pos,
-    )
-
-
-def decode_slow_telem_packet(packet: bytes) -> Optional[Dict[str, Any]]:
-    if len(packet) != 25:
+def decode_legacy_fast_fields(packet: bytes) -> Optional[Dict[str, Any]]:
+    """Decode existing 16-byte MVP packet for compatibility helpers."""
+    if len(packet) != 16 or packet[0] != 0xDE or packet[1] != 0xFD:
         return None
-    (
-        magic,
-        ver,
-        pkt_type,
-        seq,
-        motor_power,
-        control_mode,
-        voltage_mv,
-        pan_pos,
-        tilt_pos,
-        roll_pos,
-        lens_select,
-        src_zoom,
-        src_focus,
-        src_iris,
-        zoom_pos,
-        focus_pos,
-        iris_pos,
-    ) = struct.unpack("<BBBHBBHHHHBBBBHHH", packet)
-    if magic != PKT_MAGIC or ver != PKT_VER or pkt_type != PKT_SLOW_TELEM:
+    try:
+        zoom, focus, iris, yaw, pitch, roll, _ = struct.unpack("<h5H2s", packet[2:16])
+    except Exception:
         return None
-    return {
-        "seq": seq,
-        "motor_power": bool(motor_power),
-        "control_mode": _decode_control_mode(control_mode),
-        "voltage_mv": voltage_mv,
-        "pan_position": pan_pos,
-        "tilt_position": tilt_pos,
-        "roll_position": roll_pos,
-        "lens_select": _decode_lens_select(lens_select),
-        "source_zoom": _decode_source(src_zoom),
-        "source_focus": _decode_source(src_focus),
-        "source_iris": _decode_source(src_iris),
-        "zoom_position": zoom_pos,
-        "focus_position": focus_pos,
-        "iris_position": iris_pos,
-    }
+    return {"zoom": zoom, "focus": focus, "iris": iris, "yaw": yaw, "pitch": pitch, "roll": roll}
 
 
-def build_udp_packet(axes: Dict[str, Any], control_state: Dict[str, Any]) -> bytes:
-    # Back-compat wrapper used by old callers.
-    return build_fast_packet(axes, control_state, seq=0)
-
-
-def _encode_lens_select(value: str) -> int:
-    return 1 if str(value).lower() == "canon" else 0
-
-
-def _decode_lens_select(value: int) -> str:
-    return "canon" if int(value) == 1 else "fuji"
-
-
-def _encode_source(value: str) -> int:
-    v = str(value).lower()
-    if v == "camera":
-        return 1
-    if v == "off":
-        return 2
-    return 0
-
-
-def _decode_source(value: int) -> str:
-    if int(value) == 1:
-        return "camera"
-    if int(value) == 2:
-        return "off"
-    return "pc"
-
-
-def _encode_control_mode(value: str) -> int:
-    return 1 if str(value).lower() == "angle" else 0
-
-
-def _decode_control_mode(value: int) -> str:
-    return "angle" if int(value) == 1 else "speed"
+def encode_slow_value(key: str, value: Any) -> Optional[int]:
+    """Convert slow-control UI value to wire int value."""
+    key = str(key).strip()
+    if key == "motors_on":
+        return 1 if bool(value) else 0
+    if key == "control_mode":
+        s = str(value).lower().strip()
+        return 1 if s == "angle" else 0
+    if key == "lens_select":
+        s = str(value).lower().strip()
+        return 1 if s == "canon" else 0
+    if key in ("source_zoom", "source_focus", "source_iris"):
+        s = str(value).lower().strip()
+        if s == "camera":
+            return 1
+        if s == "off":
+            return 2
+        return 0
+    if key in ("filter_enable_focus", "filter_enable_iris"):
+        return 1 if bool(value) else 0
+    if key in ("filter_num", "filter_den"):
+        try:
+            return int(value)
+        except Exception:
+            return None
+    if key == "gyro_heading_correction":
+        try:
+            return int(value)
+        except Exception:
+            return None
+    try:
+        return int(value)
+    except Exception:
+        return None
 

@@ -1,0 +1,961 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Hydravision MVP UI 2 (Slow Controls)</title>
+  <style>
+    :root {
+      --bg: #14171d;
+      --bg-elevated: #1d222c;
+      --bg-elevated-2: #232936;
+      --border: #323a4a;
+      --text: #e4e9f2;
+      --text-muted: #9aa5b8;
+      --accent: #4da3ff;
+      --accent-soft: rgba(77, 163, 255, 0.25);
+      --ok: #22c55e;
+      --warn: #f59e0b;
+      --danger: #ef4444;
+      --shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+      --radius: 14px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: Inter, "Segoe UI", system-ui, -apple-system, sans-serif;
+      margin: 0;
+      min-height: 100vh;
+      background: radial-gradient(circle at 15% 0%, #20283a 0%, var(--bg) 45%);
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .app-shell {
+      width: min(1160px, calc(100vw - 24px));
+      margin: 12px auto;
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: linear-gradient(180deg, #1a202b 0%, #171c25 100%);
+      box-shadow: var(--shadow);
+    }
+
+    .app-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 18px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 1.45rem;
+      letter-spacing: 0.02em;
+      color: #f2f5fc;
+    }
+
+    h3 {
+      margin: 0 0 8px;
+      font-size: 1rem;
+      font-weight: 650;
+      color: #dfe7f7;
+    }
+
+    .row {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      margin: 10px 0;
+      flex-wrap: wrap;
+    }
+
+    .row label {
+      min-width: 220px;
+      color: var(--text-muted);
+      font-size: 1rem;
+    }
+
+    .card {
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin: 14px 0;
+      background: linear-gradient(180deg, var(--bg-elevated) 0%, #1a202a 100%);
+    }
+
+    .panel-grid {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: 1fr;
+    }
+
+    .menu-tabs {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(120px, 1fr));
+      gap: 8px;
+      margin: 8px 0 10px;
+    }
+
+    .menu-tab {
+      height: 42px;
+      border-radius: 10px;
+      border: 1px solid #3a4458;
+      background: #222838;
+      color: var(--text-muted);
+      font-weight: 650;
+      letter-spacing: 0.01em;
+    }
+
+    .menu-tab.active {
+      border-color: var(--accent);
+      color: #e9f3ff;
+      background: linear-gradient(180deg, #2d4c74 0%, #253d5e 100%);
+      box-shadow: 0 0 0 2px rgba(77, 163, 255, 0.2);
+    }
+
+    .menu-panel {
+      display: none;
+    }
+
+    .menu-panel.active {
+      display: block;
+    }
+
+    .menu-list {
+      list-style: none;
+      margin: 10px 0 0;
+      padding: 0;
+      display: grid;
+      gap: 6px;
+      max-height: 240px;
+      overflow: auto;
+    }
+
+    .menu-list li {
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid #354054;
+      background: rgba(23, 29, 40, 0.88);
+      color: #c5d0e3;
+      font-size: 0.92rem;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .menu-list li.active-item {
+      border-color: var(--accent);
+      color: #edf5ff;
+      background: rgba(36, 62, 94, 0.65);
+      box-shadow: inset 0 0 0 1px rgba(77, 163, 255, 0.35);
+    }
+
+    .menu-list li .k {
+      color: #dce6f8;
+    }
+
+    .menu-list li .v {
+      color: var(--text-muted);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    .menu-empty {
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px dashed #3d4659;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+
+    .pill {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid #5b2f35;
+      background: rgba(239, 68, 68, 0.15);
+      color: #ffd7dd;
+      font-size: 0.82rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+
+    .pill.on {
+      border-color: #295339;
+      background: rgba(34, 197, 94, 0.2);
+      color: #caf9dc;
+    }
+
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    .small { font-size: 12px; color: var(--text-muted); }
+
+    select,
+    input,
+    button {
+      height: 44px;
+      padding: 0 12px;
+      border-radius: 8px;
+      border: 1px solid #3a4458;
+      background: var(--bg-elevated-2);
+      color: var(--text);
+      font-size: 1rem;
+    }
+
+    input,
+    select {
+      min-width: 220px;
+    }
+
+    input:focus,
+    select:focus,
+    button:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+
+    button {
+      cursor: pointer;
+      font-weight: 600;
+      border-color: #2e5b8e;
+      background: linear-gradient(180deg, #2f7dd0 0%, #2768ac 100%);
+      color: #ecf5ff;
+      transition: transform 80ms ease, filter 120ms ease;
+    }
+
+    button:hover { filter: brightness(1.07); }
+    button:active { transform: translateY(1px); }
+
+    .focused {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+
+    .editing {
+      border-color: var(--warn);
+      box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.25);
+    }
+
+    .help-lines > div {
+      padding: 6px 0;
+      border-bottom: 1px dashed rgba(154, 165, 184, 0.2);
+    }
+
+    .help-lines > div:last-child {
+      border-bottom: none;
+    }
+
+    #slowState,
+    #encoderState,
+    #eventLog {
+      margin-top: 8px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: rgba(0, 0, 0, 0.2);
+    }
+
+    #eventLog {
+      margin-top: 14px;
+      border-left: 3px solid var(--accent);
+    }
+
+    .encoder-dock {
+      margin-top: 14px;
+      padding: 12px;
+    }
+
+    .encoder-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(120px, 1fr));
+      gap: 8px;
+    }
+
+    .encoder-lane {
+      border: 1px solid #3a4356;
+      border-radius: 10px;
+      background: #1f2531;
+      padding: 8px;
+      min-height: 78px;
+    }
+
+    .encoder-lane.active {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(77, 163, 255, 0.18);
+      background: #223146;
+    }
+
+    .encoder-title {
+      font-size: 0.84rem;
+      color: #d8e3f5;
+      font-weight: 650;
+      margin-bottom: 6px;
+    }
+
+    .encoder-map {
+      font-size: 0.74rem;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .encoder-status {
+      font-size: 0.78rem;
+      color: #9ec4f2;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      min-height: 1.2em;
+    }
+
+    @media (pointer: coarse) {
+      body {
+        font-size: 18px;
+      }
+
+      .app-shell {
+        width: calc(100vw - 12px);
+        margin: 6px auto;
+        padding: 14px;
+        border-radius: 14px;
+      }
+
+      .app-header {
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      h2 {
+        font-size: 1.55rem;
+      }
+
+      .row {
+        gap: 10px;
+      }
+
+      .menu-tabs,
+      .encoder-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .row label {
+        min-width: 100%;
+        font-size: 1.04rem;
+      }
+
+      input,
+      select,
+      button {
+        width: 100%;
+        min-width: 0;
+        height: 52px;
+        font-size: 1.06rem;
+        border-radius: 10px;
+      }
+
+      .pill {
+        font-size: 0.94rem;
+        padding: 6px 12px;
+      }
+
+      .small {
+        font-size: 0.88rem;
+      }
+
+      .menu-tab {
+        height: 50px;
+        font-size: 1.04rem;
+      }
+
+      .menu-list li {
+        font-size: 1rem;
+        padding: 10px 12px;
+      }
+
+      .encoder-lane {
+        min-height: 92px;
+      }
+
+      .encoder-title {
+        font-size: 0.95rem;
+      }
+
+      .encoder-map,
+      .encoder-status {
+        font-size: 0.88rem;
+      }
+
+      #slowState,
+      #encoderState,
+      #eventLog {
+        padding: 10px 12px;
+      }
+    }
+
+    @media (max-width: 900px) and (pointer: fine) {
+      .row label {
+        min-width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="app-header">
+      <h2>Hydravision MVP UI 2 (Slow Commands)</h2>
+      <span class="pill" id="wsPill">WS: disconnected</span>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <label>Slow Bridge WebSocket URL:</label>
+        <input id="wsurl" size="38" value="ws://127.0.0.1:8766">
+        <button id="connect">Connect</button>
+      </div>
+      <div class="row">
+        <label>Selected HEAD:</label>
+        <select id="heads"></select>
+      </div>
+    </div>
+
+    <div class="panel-grid">
+      <div class="menu-tabs">
+        <button class="menu-tab" id="menuTab-joystick">Joystick</button>
+        <button class="menu-tab" id="menuTab-stab">Stab</button>
+        <button class="menu-tab" id="menuTab-lens">Lens</button>
+        <button class="menu-tab" id="menuTab-camera">Camera</button>
+        <button class="menu-tab" id="menuTab-booster">Booster</button>
+      </div>
+
+      <div class="card menu-panel" data-menu="joystick">
+        <h3>Joystick Settings</h3>
+        <div class="small">Controls discovered from slow-control keys for joystick domain.</div>
+        <ul class="menu-list" id="menuList-joystick"></ul>
+      </div>
+
+      <div class="card menu-panel" data-menu="stab">
+        <h3>Stab Settings</h3>
+        <div class="row">
+          <label>Motors:</label>
+          <select id="motorsOn">
+            <option value="1">on</option>
+            <option value="0">off</option>
+          </select>
+          <button id="applyMotorsOn">Apply motors</button>
+        </div>
+        <div class="row">
+          <label>GYRO_HEADING_CORRECTION:</label>
+          <select id="gyroHeading"></select>
+          <button id="applyGyroHeading">Apply heading</button>
+        </div>
+        <div class="small mono" id="slowState">Slow table: motors=on</div>
+        <div class="small mono" id="encoderState">Encoder 2: idle</div>
+      </div>
+
+      <div class="card menu-panel" data-menu="lens">
+        <h3>Lens Settings</h3>
+        <div class="row">
+          <label>Axis X source:</label>
+          <select id="lensSourceX">
+            <option value="console">console (pc)</option>
+            <option value="camera">camera</option>
+            <option value="off">off</option>
+          </select>
+          <button id="applyLensSourceX">Apply X source</button>
+        </div>
+        <div class="row">
+          <label>Axis Y source:</label>
+          <select id="lensSourceY">
+            <option value="console">console (pc)</option>
+            <option value="camera">camera</option>
+            <option value="off">off</option>
+          </select>
+          <button id="applyLensSourceY">Apply Y source</button>
+        </div>
+        <div class="row">
+          <label>Axis Z source:</label>
+          <select id="lensSourceZ">
+            <option value="console">console (pc)</option>
+            <option value="camera">camera</option>
+            <option value="off">off</option>
+          </select>
+          <button id="applyLensSourceZ">Apply Z source</button>
+        </div>
+        <div class="small mono" id="lensState">Lens source: x=console y=console z=console</div>
+        <div class="small">Other discovered lens-domain keys:</div>
+        <ul class="menu-list" id="menuList-lens"></ul>
+      </div>
+
+      <div class="card menu-panel" data-menu="camera">
+        <h3>Camera Settings</h3>
+        <div class="small">Controls discovered from slow-control keys for camera domain.</div>
+        <ul class="menu-list" id="menuList-camera"></ul>
+      </div>
+
+      <div class="card menu-panel" data-menu="booster">
+        <h3>Booster Settings</h3>
+        <div class="small">Controls discovered from slow-control keys for booster domain.</div>
+        <ul class="menu-list" id="menuList-booster"></ul>
+      </div>
+    </div>
+
+    <div class="card encoder-dock">
+      <h3>Bottom Encoder Dock</h3>
+      <div class="encoder-grid">
+        <div class="encoder-lane" id="encoderLane0">
+          <div class="encoder-title">E1 - Joystick</div>
+          <div class="encoder-map mono">B0=CW B1=CCW B2=SW</div>
+          <div class="encoder-status" id="encoderLaneStatus0">idle</div>
+        </div>
+        <div class="encoder-lane" id="encoderLane1">
+          <div class="encoder-title">E2 - Stab</div>
+          <div class="encoder-map mono">B3=CW B4=CCW B5=SW</div>
+          <div class="encoder-status" id="encoderLaneStatus1">idle</div>
+        </div>
+        <div class="encoder-lane" id="encoderLane2">
+          <div class="encoder-title">E3 - Lens</div>
+          <div class="encoder-map mono">B6=CW B7=CCW B8=SW</div>
+          <div class="encoder-status" id="encoderLaneStatus2">idle</div>
+        </div>
+        <div class="encoder-lane" id="encoderLane3">
+          <div class="encoder-title">E4 - Camera</div>
+          <div class="encoder-map mono">B9=CW B10=CCW B11=SW</div>
+          <div class="encoder-status" id="encoderLaneStatus3">idle</div>
+        </div>
+        <div class="encoder-lane" id="encoderLane4">
+          <div class="encoder-title">E5 - Booster</div>
+          <div class="encoder-map mono">B12=CW B13=CCW B14=SW</div>
+          <div class="encoder-status" id="encoderLaneStatus4">idle</div>
+        </div>
+      </div>
+      <div class="help-lines" style="margin-top:10px;">
+        <div class="small mono">SW on an encoder activates its menu.</div>
+        <div class="small mono">CW/CCW on non-stab encoders scroll the discovered slow-control keys.</div>
+        <div class="small mono">CW/CCW + SW on Stab encoder edits/applies mapped controls.</div>
+      </div>
+    </div>
+
+    <div class="small mono" id="eventLog">Idle</div>
+  </div>
+
+<script>
+let ws = null;
+let state = { heads: [], selected: 0, slowControls: {} };
+const FOCUS_IDS = ["heads", "motorsOn", "gyroHeading"];
+const MENU_DEFS = [
+  { id: "joystick", label: "Joystick", title: "Joystick Settings", prefixes: ["joystick_", "joy_", "stick_"] },
+  { id: "stab", label: "Stab", title: "Stab Settings", prefixes: ["stab_", "gyro_", "motors_"] },
+  { id: "lens", label: "Lens", title: "Lens Settings", prefixes: ["lens_", "focus_", "zoom_", "iris_"] },
+  { id: "camera", label: "Camera", title: "Camera Settings", prefixes: ["camera_", "sensor_", "record_", "wb_", "iso_", "shutter_"] },
+  { id: "booster", label: "Booster", title: "Booster Settings", prefixes: ["booster_", "assist_", "boost_"] },
+];
+let focusIndex = 0;
+let editMode = false;
+let prevButtons = [];
+let activeMenuIndex = 1; // Start on Stab
+const menuCursorByIndex = MENU_DEFS.map(() => 0);
+
+function $(id){ return document.getElementById(id); }
+
+function send(obj){
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
+}
+
+function setWsPill(text, ok){
+  const p = $("wsPill");
+  p.textContent = "WS: " + text;
+  p.classList.toggle("on", !!ok);
+}
+
+function setSlowControlState(slow){
+  const s = slow || {};
+  state.slowControls = { ...state.slowControls, ...s };
+  const motors = (String(s.motors_on ?? "1") === "0") ? "0" : "1";
+  const gyro = parseInt(s.gyro_heading_correction ?? 0x00001500, 10) || 0x00001500;
+  $("motorsOn").value = motors;
+  setSelectToClosestValue($("gyroHeading"), gyro);
+  const lx = String(s.lens_source_x ?? state.slowControls.lens_source_x ?? "console");
+  const ly = String(s.lens_source_y ?? state.slowControls.lens_source_y ?? "console");
+  const lz = String(s.lens_source_z ?? state.slowControls.lens_source_z ?? "console");
+  $("lensSourceX").value = lx;
+  $("lensSourceY").value = ly;
+  $("lensSourceZ").value = lz;
+  $("slowState").textContent = `Slow table: motors=${motors === "1" ? "on" : "off"} gyro_heading_correction=${gyro}`;
+  $("lensState").textContent = `Lens source: x=${lx} y=${ly} z=${lz}`;
+  renderMenuLists();
+}
+
+function refreshHeadsUI(){
+  const sel = $("heads");
+  sel.innerHTML = "";
+  state.heads.forEach((h, i) => {
+    const opt = document.createElement("option");
+    opt.value = String(i);
+    opt.textContent = `${h.name} (${h.ip}:${h.port})`;
+    sel.appendChild(opt);
+  });
+  sel.value = String(state.selected ?? 0);
+  refreshFocusUI();
+}
+
+function buildGyroHeadingOptions(){
+  const sel = $("gyroHeading");
+  sel.innerHTML = "";
+  for (let v = -8192; v <= 8192; v += 256) {
+    const opt = document.createElement("option");
+    opt.value = String(v);
+    opt.textContent = `${v}`;
+    sel.appendChild(opt);
+  }
+  setSelectToClosestValue(sel, 0x00001500);
+}
+
+function setSelectToClosestValue(sel, value){
+  const target = parseInt(value, 10) || 0;
+  const values = Array.from(sel.options).map(o => parseInt(o.value, 10));
+  if (!values.length) return;
+  let best = values[0];
+  let bestDelta = Math.abs(values[0] - target);
+  for (const v of values) {
+    const d = Math.abs(v - target);
+    if (d < bestDelta) {
+      bestDelta = d;
+      best = v;
+    }
+  }
+  sel.value = String(best);
+}
+
+function moveSelectByStep(sel, step){
+  const idx = sel.selectedIndex;
+  if (idx < 0) return;
+  let ni = idx + step;
+  if (ni < 0) ni = 0;
+  if (ni >= sel.options.length) ni = sel.options.length - 1;
+  sel.selectedIndex = ni;
+}
+
+function refreshFocusUI(){
+  for (let i = 0; i < FOCUS_IDS.length; i++) {
+    const el = $(FOCUS_IDS[i]);
+    if (!el) continue;
+    el.classList.toggle("focused", i === focusIndex);
+    el.classList.toggle("editing", i === focusIndex && editMode);
+  }
+  const current = FOCUS_IDS[focusIndex] || "-";
+  $("encoderState").textContent = editMode
+    ? `Encoder 2: editing ${current}`
+    : `Encoder 2: focus ${current}`;
+}
+
+function humanizeKey(key){
+  return String(key || "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function getMenuControlItems(menuId){
+  const def = MENU_DEFS.find(m => m.id === menuId);
+  if (!def) return [];
+  const entries = Object.entries(state.slowControls || {});
+  if (!entries.length) return [];
+
+  let filtered = entries.filter(([k]) => def.prefixes.some((p) => k.startsWith(p)));
+  if (menuId === "stab") {
+    const required = ["motors_on", "gyro_heading_correction"];
+    const existingKeys = new Set(filtered.map(([k]) => k));
+    for (const req of required) {
+      if (!existingKeys.has(req) && req in state.slowControls) {
+        filtered.push([req, state.slowControls[req]]);
+      }
+    }
+  }
+  if (!filtered.length && menuId === "stab") {
+    filtered = entries;
+  }
+  return filtered.map(([key, value]) => ({ key, value }));
+}
+
+function renderMenuLists(){
+  for (let mi = 0; mi < MENU_DEFS.length; mi++) {
+    const menu = MENU_DEFS[mi];
+    const host = $("menuList-" + menu.id);
+    if (!host) continue;
+    const items = getMenuControlItems(menu.id);
+    if (!items.length) {
+      host.innerHTML = `<li class="menu-empty">No mapped slow-control keys yet for ${menu.label.toLowerCase()}.</li>`;
+      continue;
+    }
+    if (menuCursorByIndex[mi] >= items.length) menuCursorByIndex[mi] = items.length - 1;
+    const activeItem = menuCursorByIndex[mi];
+    host.innerHTML = items.map((item, idx) => `
+      <li class="${mi === activeMenuIndex && idx === activeItem ? "active-item" : ""}">
+        <span class="k">${humanizeKey(item.key)}</span>
+        <span class="v">${item.value}</span>
+      </li>
+    `).join("");
+  }
+}
+
+function refreshMenuUI(){
+  for (let i = 0; i < MENU_DEFS.length; i++) {
+    const menu = MENU_DEFS[i];
+    const tab = $("menuTab-" + menu.id);
+    if (tab) tab.classList.toggle("active", i === activeMenuIndex);
+    const panel = document.querySelector(`.menu-panel[data-menu="${menu.id}"]`);
+    if (panel) panel.classList.toggle("active", i === activeMenuIndex);
+    const lane = $("encoderLane" + i);
+    if (lane) lane.classList.toggle("active", i === activeMenuIndex);
+  }
+  renderMenuLists();
+}
+
+function setActiveMenu(index){
+  if (index < 0 || index >= MENU_DEFS.length) return;
+  activeMenuIndex = index;
+  if (activeMenuIndex !== 1 && editMode) {
+    editMode = false;
+  }
+  refreshMenuUI();
+  refreshFocusUI();
+}
+
+function updateLaneStatus(index, text){
+  const el = $("encoderLaneStatus" + index);
+  if (el) el.textContent = text;
+}
+
+function applyFocusedControl(){
+  const id = FOCUS_IDS[focusIndex];
+  if (id === "heads") {
+    const idx = parseInt($("heads").value, 10);
+    send({ type: "SELECT_HEAD", index: idx });
+    $("eventLog").textContent = `Encoder set head index ${idx}`;
+    return;
+  }
+  if (id === "motorsOn") {
+    const v = parseInt($("motorsOn").value, 10) ? 1 : 0;
+    send({ type: "SET_SLOW_CONTROL", key: "motors_on", value: v });
+    $("eventLog").textContent = `Encoder set motors_on=${v}`;
+    return;
+  }
+  if (id === "gyroHeading") {
+    const v = parseInt($("gyroHeading").value, 10) || 0;
+    send({ type: "SET_SLOW_CONTROL", key: "gyro_heading_correction", value: v });
+    $("eventLog").textContent = `Encoder set gyro_heading_correction=${v}`;
+  }
+}
+
+function handleEncoderStep(dir){
+  if (!editMode) {
+    focusIndex = (focusIndex + dir + FOCUS_IDS.length) % FOCUS_IDS.length;
+    refreshFocusUI();
+    return;
+  }
+  const id = FOCUS_IDS[focusIndex];
+  const el = $(id);
+  if (!el) return;
+  moveSelectByStep(el, dir);
+  if (id === "gyroHeading") {
+    $("eventLog").textContent = `Gyro preview ${$("gyroHeading").value}`;
+  }
+}
+
+function onEncoderSwitchPress(){
+  if (!editMode) {
+    editMode = true;
+    refreshFocusUI();
+    return;
+  }
+  applyFocusedControl();
+  editMode = false;
+  refreshFocusUI();
+}
+
+function nudgeMenuCursor(menuIndex, dir){
+  const menu = MENU_DEFS[menuIndex];
+  if (!menu) return;
+  const items = getMenuControlItems(menu.id);
+  if (!items.length) {
+    updateLaneStatus(menuIndex, "no keys");
+    return;
+  }
+  const max = items.length - 1;
+  let idx = menuCursorByIndex[menuIndex] ?? 0;
+  idx += dir;
+  if (idx < 0) idx = 0;
+  if (idx > max) idx = max;
+  menuCursorByIndex[menuIndex] = idx;
+  renderMenuLists();
+  updateLaneStatus(menuIndex, `${idx + 1}/${items.length}`);
+}
+
+function handleLaneStep(lane, dir){
+  const menuIndex = Math.max(0, Math.min(MENU_DEFS.length - 1, lane));
+  setActiveMenu(menuIndex);
+  if (menuIndex === 1) {
+    handleEncoderStep(dir);
+    updateLaneStatus(1, editMode ? "editing" : `focus ${FOCUS_IDS[focusIndex]}`);
+    return;
+  }
+  nudgeMenuCursor(menuIndex, dir);
+}
+
+function handleLaneSwitch(lane){
+  const menuIndex = Math.max(0, Math.min(MENU_DEFS.length - 1, lane));
+  setActiveMenu(menuIndex);
+  if (menuIndex === 1) {
+    onEncoderSwitchPress();
+    updateLaneStatus(1, editMode ? "editing" : "applied");
+    return;
+  }
+  const items = getMenuControlItems(MENU_DEFS[menuIndex].id);
+  const idx = menuCursorByIndex[menuIndex] || 0;
+  const item = items[idx];
+  if (item) {
+    $("eventLog").textContent = `Menu ${MENU_DEFS[menuIndex].label}: selected ${item.key}=${item.value}`;
+  } else {
+    $("eventLog").textContent = `Menu ${MENU_DEFS[menuIndex].label}: no mapped keys yet`;
+  }
+  updateLaneStatus(menuIndex, "menu active");
+}
+
+function pollEncoderButtons(){
+  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  const gp = pads && pads[0];
+  if (!gp || !gp.buttons) {
+    requestAnimationFrame(pollEncoderButtons);
+    return;
+  }
+
+  const buttonCount = gp.buttons.length || 0;
+  if (prevButtons.length !== buttonCount) {
+    prevButtons = Array.from({ length: buttonCount }, () => 0);
+  }
+
+  for (let lane = 0; lane < MENU_DEFS.length; lane++) {
+    const base = lane * 3;
+    const bCW = gp.buttons[base]?.pressed ? 1 : 0;
+    const bCCW = gp.buttons[base + 1]?.pressed ? 1 : 0;
+    const bSW = gp.buttons[base + 2]?.pressed ? 1 : 0;
+
+    if (bCW && !prevButtons[base]) handleLaneStep(lane, +1);
+    if (bCCW && !prevButtons[base + 1]) handleLaneStep(lane, -1);
+    if (bSW && !prevButtons[base + 2]) handleLaneSwitch(lane);
+
+    prevButtons[base] = bCW;
+    prevButtons[base + 1] = bCCW;
+    prevButtons[base + 2] = bSW;
+  }
+
+  requestAnimationFrame(pollEncoderButtons);
+}
+
+$("connect").onclick = () => {
+  const url = $("wsurl").value.trim();
+  ws = new WebSocket(url);
+  setWsPill("connecting...", false);
+
+  ws.onopen = () => setWsPill("connected", true);
+  ws.onclose = () => setWsPill("closed", false);
+  ws.onerror = () => setWsPill("error", false);
+
+  ws.onmessage = (ev) => {
+    try {
+      const msg = JSON.parse(ev.data);
+      if (msg.type === "STATE") {
+        state.heads = msg.heads || [];
+        state.selected = msg.selected || 0;
+        state.slowControls = msg.slow_controls || {};
+        refreshHeadsUI();
+        setSlowControlState(msg.slow_controls || {});
+        $("eventLog").textContent = "Received STATE";
+      }
+      if (msg.type === "SELECTED") {
+        state.selected = msg.selected || 0;
+        $("heads").value = String(state.selected);
+        $("eventLog").textContent = `Selected head index ${state.selected}`;
+      }
+      if (msg.type === "SLOW_APPLIED") {
+        state.slowControls[msg.key] = msg.value;
+        if (msg.key === "motors_on") {
+          setSlowControlState({ motors_on: msg.value });
+        }
+        if (msg.key === "gyro_heading_correction") {
+          setSlowControlState({
+            motors_on: $("motorsOn").value,
+            gyro_heading_correction: msg.value,
+          });
+        }
+        if (msg.key === "lens_source_x" || msg.key === "lens_source_y" || msg.key === "lens_source_z") {
+          setSlowControlState({
+            lens_source_x: state.slowControls.lens_source_x,
+            lens_source_y: state.slowControls.lens_source_y,
+            lens_source_z: state.slowControls.lens_source_z,
+          });
+        }
+        renderMenuLists();
+        $("eventLog").textContent = `Applied ${msg.key}=${msg.value}`;
+      }
+    } catch {
+      $("eventLog").textContent = "Invalid message";
+    }
+  };
+};
+
+$("heads").onchange = (e) => {
+  send({ type: "SELECT_HEAD", index: parseInt(e.target.value, 10) });
+};
+
+$("applyMotorsOn").onclick = () => {
+  const v = parseInt($("motorsOn").value, 10) ? 1 : 0;
+  send({ type: "SET_SLOW_CONTROL", key: "motors_on", value: v });
+  $("eventLog").textContent = `Sent motors_on=${v}`;
+};
+
+$("applyGyroHeading").onclick = () => {
+  const v = parseInt($("gyroHeading").value, 10) || 0;
+  send({ type: "SET_SLOW_CONTROL", key: "gyro_heading_correction", value: v });
+  $("eventLog").textContent = `Sent gyro_heading_correction=${v}`;
+};
+
+function applyLensSource(axis){
+  const key = "lens_source_" + axis;
+  const sel = $("lensSource" + axis.toUpperCase());
+  if (!sel) return;
+  const value = sel.value;
+  send({ type: "SET_SLOW_CONTROL", key, value });
+  state.slowControls[key] = value;
+  setSlowControlState({
+    lens_source_x: state.slowControls.lens_source_x ?? "console",
+    lens_source_y: state.slowControls.lens_source_y ?? "console",
+    lens_source_z: state.slowControls.lens_source_z ?? "console",
+  });
+  $("eventLog").textContent = `Sent ${key}=${value}`;
+}
+
+$("applyLensSourceX").onclick = () => applyLensSource("x");
+$("applyLensSourceY").onclick = () => applyLensSource("y");
+$("applyLensSourceZ").onclick = () => applyLensSource("z");
+
+for (const [i, menu] of MENU_DEFS.entries()) {
+  const tab = $("menuTab-" + menu.id);
+  if (!tab) continue;
+  tab.onclick = () => {
+    setActiveMenu(i);
+    $("eventLog").textContent = `Active menu: ${menu.title}`;
+  };
+}
+
+buildGyroHeadingOptions();
+renderMenuLists();
+setActiveMenu(activeMenuIndex);
+refreshFocusUI();
+pollEncoderButtons();
+</script>
+</body>
+</html>

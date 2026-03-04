@@ -11,6 +11,7 @@ FUNC_LENS_NAME_2 = 0x12
 FUNC_IRIS_CONTROL = 0x20
 FUNC_ZOOM_CONTROL = 0x21
 FUNC_FOCUS_CONTROL = 0x22
+FUNC_ZOOM_SPEED_CONTROL = 0x26
 FUNC_IRIS_POSITION = 0x30
 FUNC_ZOOM_POSITION = 0x31
 FUNC_FOCUS_POSITION = 0x32
@@ -73,6 +74,21 @@ def build_iris_control(value):
     if v > 0xFFFF:
         v = 0xFFFF
     return build_l10_frame(FUNC_IRIS_CONTROL, bytes([v >> 8, v & 0xFF]))
+
+
+def build_zoom_speed_control(value):
+    """
+    Zoom speed command (26h):
+      0x0000 = max speed wide (zoom-out)
+      0x8000 = stop
+      0xFFFF = max speed tele (zoom-in)
+    """
+    v = int(value)
+    if v < 0:
+        v = 0
+    if v > 0xFFFF:
+        v = 0xFFFF
+    return build_l10_frame(FUNC_ZOOM_SPEED_CONTROL, bytes([v >> 8, v & 0xFF]))
 
 
 def build_switch4_control(bits=SW4_HOST_ALL):

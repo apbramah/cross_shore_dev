@@ -10,7 +10,10 @@ PACKET_START = 0x24
 CMD_SET_ADJ_VARS_VAL = 31
 CMD_API_VIRT_CH_CONTROL = 45
 CMD_CONTROL = 67
+CMD_MOTORS_ON = 77
 CMD_BEEP_SOUND = 89
+CMD_MOTORS_OFF = 109
+ADJ_VAR_ID_GYRO_HEADING_CORRECTION = 0x26
 
 
 def hexdump(data: bytes) -> str:
@@ -104,9 +107,14 @@ class BGC:
 
     # === High-level helpers corresponding to specific CMD_ values ===
 
-    def set_gyro_heading_adjustment(self):
-        payload = bytearray([0x01, 0x26, 0x00, 0x15, 0x00, 0x00])
+    def set_gyro_heading_adjustment(self, value_raw: int = 0x00001500):
+        # CMD_SET_ADJ_VARS_VAL (#31): NUM_PARAMS=1, PARAM_ID=0x26, PARAM_VALUE=int32 (LE)
+        payload = bytearray(struct.pack("<BBi", 1, ADJ_VAR_ID_GYRO_HEADING_CORRECTION, int(value_raw)))
+        print("BGC gyro_heading_correction payload:", hexdump(payload))
         self.send_cmd(CMD_SET_ADJ_VARS_VAL, payload)
+
+    def set_gyro_heading_correction(self, value_raw: int):
+        self.set_gyro_heading_adjustment(value_raw)
 
     def disable_angle_mode(self):
         payload = bytearray([
@@ -123,14 +131,28 @@ class BGC:
         self.send_cmd(CMD_BEEP_SOUND, payload)
 
     def send_joystick_control(self, yaw, pitch, roll):
-        # BGC virtual channels are 16-bit values; allow signed caller values
-        # and convert to two's-complement u16 on transmit.
-        y_u16 = int(yaw) & 0xFFFF
-        p_u16 = int(pitch) & 0xFFFF
-        r_u16 = int(roll) & 0xFFFF
-        payload = struct.pack(">3H", y_u16, p_u16, r_u16)
+        # SimpleBGC CMD 45 Speed mode: int16 little-endian, center=0, range -500..+500
+        payload = struct.pack("<3h", int(yaw), int(pitch), int(roll))
         self.send_cmd(CMD_API_VIRT_CH_CONTROL, payload)
-        return y_u16, p_u16, r_u16, payload
+
+    def motors_on(self):
+        # CMD_MOTORS_ON (#77): no payload.
+        self.send_cmd(CMD_MOTORS_ON, bytearray())
+
+    def motors_off(self, mode: int = 0):
+        # CMD_MOTORS_OFF (#109): optional 1-byte mode (0 normal, 1 brake, 2 safe stop).
+        mode_i = int(mode)
+        if mode_i < 0:
+            mode_i = 0
+        if mode_i > 2:
+            mode_i = 2
+        self.send_cmd(CMD_MOTORS_OFF, bytearray([mode_i]))
+
+    def set_motors_enabled(self, enabled: bool):
+        if bool(enabled):
+            self.motors_on()
+        else:
+            self.motors_off(0)
 
 
 def _decode_lens_control(ctrl0: int, ctrl1: int):

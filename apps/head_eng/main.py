@@ -4,54 +4,29 @@
 
 import network
 import machine
+import time
 import socket
 import struct
-import time
 
 from bgc import BGC
 from lens_controller import LensController, LENS_FUJI
+import fuji_lens_from_calibration
+import fuji_control_calibration
 
-PKT_MAGIC = 0xDE
-PKT_VER = 0x01
-PKT_FAST_CTRL = 0x10
-PKT_SLOW_CMD = 0x20
-PKT_SLOW_ACK = 0x21
-PKT_SLOW_TELEM = 0x30
-
-FAST_PORT = 8888
-SLOW_CMD_PORT = 8890
-SLOW_TELEM_DST_PORT = 8892
-
-FAST_WATCHDOG_MS = 250
-TELEMETRY_PERIOD_MS = 500  # 2Hz
-DEBUG_BGC_NUMBERS = True
-
-KEY_MOTORS_ON = 1
-KEY_CONTROL_MODE = 13
-KEY_LENS_SELECT = 20
-KEY_SOURCE_ZOOM = 21
-KEY_SOURCE_FOCUS = 22
-KEY_SOURCE_IRIS = 23
-
-SLOW_STATE = {
-    "motors_on": 1,
-    "pan_gain": 0,
-    "tilt_gain": 0,
-    "roll_gain": 0,
-    "pan_acceleration": 0,
-    "tilt_acceleration": 0,
-    "roll_acceleration": 0,
-    "expo": 0,
-    "pan_top_speed": 0,
-    "tilt_top_speed": 0,
-    "roll_top_speed": 0,
-    "gyro_drift_offset": 0,
-    "control_mode": "speed",
-    "lens_select": "fuji",
-    "source_zoom": "pc",
-    "source_focus": "pc",
-    "source_iris": "pc",
-}
+# Explicit startup Fuji ownership mode (applied once).
+# - "pc_all": zoom/focus/iris on host
+# - "pc_zf_camera_i": zoom/focus host, iris camera
+FUJI_OWNERSHIP_MODE = "pc_all"
+FAST_CHANNEL_MODE = "v2"  # Set to "legacy" for immediate rollback.
+ENABLE_DUAL_CHANNEL = FAST_CHANNEL_MODE == "v2"
+ENABLE_SLOW_CHANNEL = True   # Slow receive/apply remains active in both modes.
+CTRL_DEBUG = True
+CTRL_DEBUG_INTERVAL_MS = 250
+ENABLE_STARTUP_BIT = False
+MVP_FAST_DEBUG = False
+MVP_FAST_DEBUG_INTERVAL_MS = 5000
+# Set True to log Fuji focus input/target and UART connection (SW4 poll, FOCUS TX).
+FUJI_DEBUG = False
 
 # ---------- LED ----------
 led = machine.Pin("LED", machine.Pin.OUT)
@@ -72,53 +47,146 @@ def pulse_update():
 
 
 # ---------- Ethernet ----------
-spi = machine.SPI(0, 2_000_000, mosi=machine.Pin(19), miso=machine.Pin(16), sck=machine.Pin(18))
-nic = network.WIZNET5K(spi, machine.Pin(17), machine.Pin(20))
+spi = machine.SPI(
+    0,
+    2_000_000,
+    mosi=machine.Pin(19),
+    miso=machine.Pin(16),
+    sck=machine.Pin(18)
+)
+
+nic = network.WIZNET5K(  # type: ignore[attr-defined]
+    spi,
+    machine.Pin(17),  # CS
+    machine.Pin(20)   # RESET
+)
+
 nic.active(True)
-nic.ifconfig(("192.168.60.120", "255.255.255.0", "192.168.60.1", "8.8.8.8"))
+
+nic.ifconfig((
+    "192.168.60.120",
+    "255.255.255.0",
+    "192.168.60.1",
+    "8.8.8.8"
+))
+
 while not nic.isconnected():
     time.sleep(0.2)
+
 print("Ethernet ready:", nic.ifconfig())
 
 # ---------- Hardware ----------
 bgc = BGC()
 lens = LensController(default_lens_type=LENS_FUJI)
+last_applied_lens_type = None
+last_applied_sources = {"zoom": "pc", "focus": "pc", "iris": "pc"}
+_last_slow_apply_id = None
+_last_slow_seq = None
+slow_motors_on = True
+slow_control_mode = "speed"
+_last_ctrl_debug_ms = 0
+_fast_recv_count = 0
+_last_fast_fields = None
+_last_fast_debug_ms = 0
+
 print("BGC + ENG lens ready")
+if FUJI_DEBUG:
+    fuji_lens_from_calibration.FUJI_FOCUS_DEBUG = True
+    fuji_control_calibration.FUJI_CONN_DEBUG = True
+    print("Fuji focus/connection debug ON")
+# Lens startup is timing-sensitive on real hardware; give it a short settle window.
 for remaining in range(8, 0, -1):
     print("Waiting for lens settle...", remaining, "s")
     time.sleep(1)
-bit_ok = lens.startup_diagnostics()
-print("LENS startup diagnostics:", "PASS" if bit_ok else "FAIL")
+if ENABLE_STARTUP_BIT:
+    bit_ok = lens.startup_diagnostics()
+    print("LENS startup diagnostics:", "PASS" if bit_ok else "FAIL")
+else:
+    bit_ok = True
+    print("LENS startup diagnostics: SKIPPED (ENABLE_STARTUP_BIT=False)")
+
+def _fuji_sw4_bits_from_sources(sources):
+    bits = 0xF8
+    if sources.get("focus") != "pc":
+        bits |= 0x01
+    if sources.get("zoom") != "pc":
+        bits |= 0x02
+    if sources.get("iris") != "pc":
+        bits |= 0x04
+    return bits & 0xFF
+
+
+def apply_fuji_ownership_mode_once():
+    mode = str(FUJI_OWNERSHIP_MODE).lower().strip()
+    if lens.get_lens_type() != LENS_FUJI:
+        print("Fuji ownership mode skipped (active lens is not Fuji)")
+        return
+    mode_map = {
+        "pc_all": {"zoom": "pc", "focus": "pc", "iris": "pc"},
+        "pc_zf_camera_i": {"zoom": "pc", "focus": "pc", "iris": "camera"},
+    }
+    desired_sources = mode_map.get(mode)
+    if desired_sources is None:
+        print("Fuji ownership mode ignored (invalid mode):", mode)
+        return
+    for axis in ("zoom", "focus", "iris"):
+        source = desired_sources[axis]
+        ok = lens.set_axis_source(axis, source)
+        print("Fuji ownership apply", axis, "->", source, "ok=" + str(ok))
+    effective_sources = lens.get_axis_sources()
+    print(
+        "Fuji ownership mode effective:",
+        mode,
+        "sources=" + str(effective_sources),
+        "desired_sw4=0x{:02X}".format(_fuji_sw4_bits_from_sources(effective_sources)),
+    )
+
+apply_fuji_ownership_mode_once()
+last_applied_lens_type = lens.get_lens_type()
+last_applied_sources = lens.get_axis_sources()
 
 # ---------- UDP ----------
-fast_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-fast_sock.bind(("0.0.0.0", FAST_PORT))
-fast_sock.setblocking(False)
+FAST_UDP_PORT = 8888
+SLOW_UDP_PORT = 8890
 
-slow_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-slow_sock.bind(("0.0.0.0", SLOW_CMD_PORT))
-slow_sock.setblocking(False)
+PKT_MAGIC = 0xDE
+PKT_VER = 0x01
+PKT_FAST_CTRL = 0x10
+PKT_SLOW_CMD = 0x20
+SLOW_KEY_MOTORS_ON = 1
+SLOW_KEY_CONTROL_MODE = 2
+SLOW_KEY_LENS_SELECT = 3
+SLOW_KEY_SOURCE_ZOOM = 4
+SLOW_KEY_SOURCE_FOCUS = 5
+SLOW_KEY_SOURCE_IRIS = 6
+SLOW_KEY_FILTER_ENABLE_FOCUS = 7
+SLOW_KEY_FILTER_ENABLE_IRIS = 8
+SLOW_KEY_FILTER_NUM = 9
+SLOW_KEY_FILTER_DEN = 10
+SLOW_KEY_GYRO_HEADING_CORRECTION = 11
 
-print("Listening FAST UDP on", FAST_PORT)
-print("Listening SLOW UDP on", SLOW_CMD_PORT)
-if DEBUG_BGC_NUMBERS:
-    print("[BGC DBG] Expected BaseCam UART channel value range: u16 0..65535")
-    print("[BGC DBG] Controller nominal signed demand: -512..+512 (encoded as u16 two's complement)")
-    print("[BGC DBG] Example mapping: -512->65024, -1->65535, 0->0, +1->1, +512->512")
+sock_fast = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+sock_fast.bind(("0.0.0.0", FAST_UDP_PORT))
+sock_fast.setblocking(False)
 
-last_fast_ms = time.ticks_ms()
-last_fast_fields = {"yaw": 0, "pitch": 0, "roll": 0, "zoom": 0, "focus": 0, "iris": 0}
-last_telem_ms = 0
-slow_peer_ip = None
-telem_seq = 0
-last_fast_seq = 0
+sock_slow = None
+if ENABLE_SLOW_CHANNEL:
+    sock_slow = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock_slow.bind(("0.0.0.0", SLOW_UDP_PORT))
+    sock_slow.setblocking(False)
+
+print("Listening FAST UDP on", FAST_UDP_PORT)
+print("Fast channel mode:", FAST_CHANNEL_MODE)
+if ENABLE_SLOW_CHANNEL:
+    print("Listening SLOW UDP on", SLOW_UDP_PORT)
 
 
-def decode_fast_packet(data):
-    if len(data) != 19:
+def decode_fast_packet_v2(packet):
+    # <BBBHhHHHHHH => magic, ver, type, seq, zoom, focus, iris, yaw, pitch, roll, reserved
+    if len(packet) != 19:
         return None
     try:
-        magic, ver, pkt_type, seq, zoom, focus, iris, yaw, pitch, roll, _ = struct.unpack("<BBBHhHHhhhH", data)
+        magic, ver, pkt_type, seq, zoom, focus, iris, yaw, pitch, roll, _ = struct.unpack("<BBBHhHHHHHH", packet)
     except Exception:
         return None
     if magic != PKT_MAGIC or ver != PKT_VER or pkt_type != PKT_FAST_CTRL:
@@ -134,273 +202,253 @@ def decode_fast_packet(data):
     }
 
 
-def decode_slow_cmd_packet(data):
-    if len(data) != 12:
+def decode_slow_cmd_packet(packet):
+    # <BBBHHBi => magic, ver, type, seq, apply_id, key_id, value
+    if len(packet) != 12:
         return None
     try:
-        magic, ver, pkt_type, seq, apply_id, key_id, value = struct.unpack("<BBBHHBi", data)
+        magic, ver, pkt_type, seq, apply_id, key_id, value = struct.unpack("<BBBHHBi", packet)
     except Exception:
         return None
     if magic != PKT_MAGIC or ver != PKT_VER or pkt_type != PKT_SLOW_CMD:
         return None
-    return {"seq": seq, "apply_id": apply_id, "key_id": key_id, "value": value}
+    return {
+        "seq": seq,
+        "apply_id": apply_id,
+        "key_id": key_id,
+        "value": value,
+    }
 
 
-def build_slow_ack_packet(seq, apply_id, key_id, status):
-    return struct.pack("<BBBHHBB", PKT_MAGIC, PKT_VER, PKT_SLOW_ACK, seq & 0xFFFF, apply_id & 0xFFFF, key_id & 0xFF, status & 0xFF)
+def poll_slow_command_once():
+    """Read one slow command packet if available."""
+    if not ENABLE_SLOW_CHANNEL or sock_slow is None:
+        return None
+    try:
+        data, _addr = sock_slow.recvfrom(256)
+    except OSError:
+        return None
+    if not data:
+        return None
+    return decode_slow_cmd_packet(data)
 
 
-def _decode_source_enum(v):
-    if int(v) == 1:
+def recv_latest_fast_packet():
+    """Drain fast socket and return the most recent packet."""
+    latest_data = None
+    latest_addr = None
+    while True:
+        try:
+            data, addr = sock_fast.recvfrom(1024)
+        except OSError:
+            break
+        if not data:
+            continue
+        latest_data = data
+        latest_addr = addr
+    return latest_data, latest_addr
+
+
+def _decode_lens_select(v):
+    return "canon" if int(v) == 1 else "fuji"
+
+
+def _decode_source(v):
+    iv = int(v)
+    if iv == 1:
         return "camera"
-    if int(v) == 2:
+    if iv == 2:
         return "off"
     return "pc"
 
 
-def _decode_lens_enum(v):
-    return "canon" if int(v) == 1 else "fuji"
+def apply_slow_command(cmd):
+    global last_applied_lens_type, last_applied_sources, _last_slow_apply_id, _last_slow_seq
+    global slow_motors_on, slow_control_mode
+    apply_id = cmd.get("apply_id")
+    seq = cmd.get("seq")
+    if apply_id == _last_slow_apply_id and seq == _last_slow_seq:
+        return
+    _last_slow_apply_id = apply_id
+    _last_slow_seq = seq
+    key = cmd.get("key_id")
+    value = cmd.get("value")
+    if key == SLOW_KEY_LENS_SELECT:
+        requested_type = _decode_lens_select(value)
+        if requested_type != lens.get_lens_type():
+            changed = lens.set_lens_type(requested_type)
+            if changed:
+                last_applied_lens_type = requested_type
+                last_applied_sources = lens.get_axis_sources()
+                print("Slow apply lens_select ->", requested_type)
+        return
 
+    if key == SLOW_KEY_SOURCE_ZOOM:
+        src = _decode_source(value)
+        if src != last_applied_sources.get("zoom"):
+            if lens.set_axis_source("zoom", src):
+                last_applied_sources["zoom"] = src
+                print("Slow apply source_zoom ->", src)
+        return
 
-def _decode_control_mode(v):
-    return "angle" if int(v) == 1 else "speed"
+    if key == SLOW_KEY_SOURCE_FOCUS:
+        src = _decode_source(value)
+        if src != last_applied_sources.get("focus"):
+            if lens.set_axis_source("focus", src):
+                last_applied_sources["focus"] = src
+                print("Slow apply source_focus ->", src)
+        return
 
+    if key == SLOW_KEY_SOURCE_IRIS:
+        src = _decode_source(value)
+        if src != last_applied_sources.get("iris"):
+            if lens.set_axis_source("iris", src):
+                last_applied_sources["iris"] = src
+                print("Slow apply source_iris ->", src)
+        return
 
-def _encode_source_enum(v):
-    s = str(v).lower()
-    if s == "camera":
-        return 1
-    if s == "off":
-        return 2
-    return 0
+    if key == SLOW_KEY_FILTER_ENABLE_FOCUS:
+        enabled = int(value) != 0
+        if lens.set_input_filter_enabled("focus", enabled):
+            print("Slow apply focus_filter_enabled ->", enabled)
+        return
 
+    if key == SLOW_KEY_FILTER_ENABLE_IRIS:
+        enabled = int(value) != 0
+        if lens.set_input_filter_enabled("iris", enabled):
+            print("Slow apply iris_filter_enabled ->", enabled)
+        return
 
-def _encode_lens_enum(v):
-    return 1 if str(v).lower() == "canon" else 0
+    if key == SLOW_KEY_FILTER_NUM:
+        if lens.set_input_filter_num(int(value)):
+            print("Slow apply input_filter_num ->", int(value))
+        return
 
+    if key == SLOW_KEY_FILTER_DEN:
+        if lens.set_input_filter_den(int(value)):
+            print("Slow apply input_filter_den ->", int(value))
+        return
 
-def _encode_control_mode(v):
-    return 1 if str(v).lower() == "angle" else 0
+    if key == SLOW_KEY_MOTORS_ON:
+        enabled = int(value) != 0
+        if enabled != slow_motors_on:
+            slow_motors_on = enabled
+            bgc.set_motors_enabled(enabled)
+            print("Slow apply motors_on ->", 1 if enabled else 0, "(BGC CMD sent)")
+        return
 
+    if key == SLOW_KEY_CONTROL_MODE:
+        mode = "angle" if int(value) == 1 else "speed"
+        if mode != slow_control_mode:
+            slow_control_mode = mode
+            if mode == "speed":
+                bgc.disable_angle_mode()
+                print("Slow apply control_mode -> speed (angle mode disabled)")
+            else:
+                print("Slow apply control_mode -> angle (accepted; apply pending)")
+        return
 
-def _apply_slow_command(key_id, value):
-    # status 0=ok, 1=invalid key/value, 2=apply failed
-    if key_id == KEY_MOTORS_ON:
-        SLOW_STATE["motors_on"] = 1 if int(value) else 0
-        return 0
-    if key_id == KEY_CONTROL_MODE:
-        SLOW_STATE["control_mode"] = _decode_control_mode(value)
-        return 0
-    if key_id == KEY_LENS_SELECT:
-        want = _decode_lens_enum(value)
-        if SLOW_STATE.get("lens_select") == want:
-            return 0
-        ok = lens.set_lens_type(want)
-        if not ok:
-            return 2
-        SLOW_STATE["lens_select"] = want
-        print("Slow apply lens_select ->", want)
-        return 0
-    if key_id == KEY_SOURCE_ZOOM:
-        src = _decode_source_enum(value)
-        if SLOW_STATE.get("source_zoom") == src:
-            return 0
-        ok = lens.set_axis_source("zoom", src)
-        if ok:
-            SLOW_STATE["source_zoom"] = src
-            return 0
-        return 2
-    if key_id == KEY_SOURCE_FOCUS:
-        src = _decode_source_enum(value)
-        if SLOW_STATE.get("source_focus") == src:
-            return 0
-        ok = lens.set_axis_source("focus", src)
-        if ok:
-            SLOW_STATE["source_focus"] = src
-            return 0
-        return 2
-    if key_id == KEY_SOURCE_IRIS:
-        src = _decode_source_enum(value)
-        if SLOW_STATE.get("source_iris") == src:
-            return 0
-        ok = lens.set_axis_source("iris", src)
-        if ok:
-            SLOW_STATE["source_iris"] = src
-            return 0
-        return 2
-
-    # Generic numeric slow table parameters for BGC path (stored now, apply later).
-    if key_id == 2:
-        SLOW_STATE["pan_gain"] = int(value)
-        return 0
-    if key_id == 3:
-        SLOW_STATE["tilt_gain"] = int(value)
-        return 0
-    if key_id == 4:
-        SLOW_STATE["roll_gain"] = int(value)
-        return 0
-    if key_id == 5:
-        SLOW_STATE["pan_acceleration"] = int(value)
-        return 0
-    if key_id == 6:
-        SLOW_STATE["tilt_acceleration"] = int(value)
-        return 0
-    if key_id == 7:
-        SLOW_STATE["roll_acceleration"] = int(value)
-        return 0
-    if key_id == 8:
-        SLOW_STATE["expo"] = int(value)
-        return 0
-    if key_id == 9:
-        SLOW_STATE["pan_top_speed"] = int(value)
-        return 0
-    if key_id == 10:
-        SLOW_STATE["tilt_top_speed"] = int(value)
-        return 0
-    if key_id == 11:
-        SLOW_STATE["roll_top_speed"] = int(value)
-        return 0
-    if key_id == 12:
-        SLOW_STATE["gyro_drift_offset"] = int(value)
-        return 0
-    return 1
-
-
-def build_telem_packet(seq):
-    lens_status = lens.get_status()
-    return struct.pack(
-        "<BBBHBBHHHHBBBBHHH",
-        PKT_MAGIC,
-        PKT_VER,
-        PKT_SLOW_TELEM,
-        seq & 0xFFFF,
-        1 if SLOW_STATE["motors_on"] else 0,
-        _encode_control_mode(SLOW_STATE["control_mode"]),
-        0,  # voltage_mv unknown in current firmware path
-        0,  # pan position unknown here
-        0,  # tilt position unknown here
-        0,  # roll position unknown here
-        _encode_lens_enum(lens_status["lens_select"]),
-        _encode_source_enum(lens_status["source_zoom"]),
-        _encode_source_enum(lens_status["source_focus"]),
-        _encode_source_enum(lens_status["source_iris"]),
-        int(lens_status["zoom_position"]) & 0xFFFF,
-        int(lens_status["focus_position"]) & 0xFFFF,
-        int(lens_status["iris_position"]) & 0xFFFF,
-    )
-
-
-def _s16_to_u16(v):
-    return int(v) & 0xFFFF
-
+    if key == SLOW_KEY_GYRO_HEADING_CORRECTION:
+        v = int(value)
+        print("Slow recv gyro_heading_correction key/value:", key, v)
+        bgc.set_gyro_heading_correction(v)
+        print("Slow apply gyro_heading_correction ->", v, "(BGC CMD sent)")
+        return
 
 # ---------- Main Loop ----------
 while True:
     pulse_update()
-    now_ms = time.ticks_ms()
+    _slow_cmd = poll_slow_command_once()
+    if _slow_cmd:
+        apply_slow_command(_slow_cmd)
 
-    # Read all pending fast packets; only apply latest.
-    got_fast = False
-    while True:
-        try:
-            data, _ = fast_sock.recvfrom(1024)
-        except OSError:
-            break
-        fields = decode_fast_packet(data)
+    data, addr = recv_latest_fast_packet()
+
+    if not data:
+        # Keep lens ownership/keepalive alive even without incoming UDP packets.
+        lens.periodic()
+        time.sleep(0.001)
+        continue
+
+    if ENABLE_DUAL_CHANNEL:
+        fields = decode_fast_packet_v2(data)
         if not fields:
+            lens.periodic()
             continue
-        last_fast_fields = fields
-        last_fast_seq = fields["seq"]
-        last_fast_ms = now_ms
-        got_fast = True
+    else:
+        fields = BGC.decode_udp_packet(data)
+    if not fields:
+        lens.periodic()
+        continue
 
-    if got_fast:
-        print(
-            "CTRL RX(s16) seq/YPRZFI:",
-            last_fast_seq,
-            last_fast_fields["yaw"],
-            last_fast_fields["pitch"],
-            last_fast_fields["roll"],
-            last_fast_fields["zoom"],
-            last_fast_fields["focus"],
-            last_fast_fields["iris"],
-        )
-        if DEBUG_BGC_NUMBERS:
-            yaw_in_s16 = int(last_fast_fields["yaw"])
-            pitch_in_s16 = int(last_fast_fields["pitch"])
-            roll_in_s16 = int(last_fast_fields["roll"])
-            yaw_in_u16 = _s16_to_u16(yaw_in_s16)
-            pitch_in_u16 = _s16_to_u16(pitch_in_s16)
-            roll_in_u16 = _s16_to_u16(roll_in_s16)
-            # Current code path sends these values directly to BGC.
-            yaw_tx_u16 = yaw_in_u16
-            pitch_tx_u16 = pitch_in_u16
-            roll_tx_u16 = roll_in_u16
+    _fast_recv_count += 1
+    _last_fast_fields = fields
+    if MVP_FAST_DEBUG:
+        now_fd = time.ticks_ms()
+        if time.ticks_diff(now_fd, _last_fast_debug_ms) >= MVP_FAST_DEBUG_INTERVAL_MS:
+            _last_fast_debug_ms = now_fd
             print(
-                "[BGC DBG] IN(raw_u16):",
-                yaw_in_u16,
-                pitch_in_u16,
-                roll_in_u16,
-                "IN(as_s16):",
-                yaw_in_s16,
-                pitch_in_s16,
-                roll_in_s16,
-                "TX(u16):",
-                yaw_tx_u16,
-                pitch_tx_u16,
-                roll_tx_u16,
+                "[FAST_DEBUG] recvs=",
+                _fast_recv_count,
+                "seq=",
+                fields.get("seq"),
+                "yaw pitch roll zoom focus iris:",
+                fields.get("yaw"),
+                fields.get("pitch"),
+                fields.get("roll"),
+                fields.get("zoom"),
+                fields.get("focus"),
+                fields.get("iris"),
             )
-        pulse(15)
 
-    # Read all pending slow command packets and ACK each apply.
-    while True:
-        try:
-            data, addr = slow_sock.recvfrom(1024)
-        except OSError:
-            break
-        cmd = decode_slow_cmd_packet(data)
-        if not cmd:
-            continue
-        slow_peer_ip = addr[0]
-        status = _apply_slow_command(cmd["key_id"], cmd["value"])
-        ack = build_slow_ack_packet(cmd["seq"], cmd["apply_id"], cmd["key_id"], status)
-        try:
-            slow_sock.sendto(ack, addr)
-        except OSError:
-            pass
+    if CTRL_DEBUG:
+        now_dbg = time.ticks_ms()
+        if time.ticks_diff(now_dbg, _last_ctrl_debug_ms) >= CTRL_DEBUG_INTERVAL_MS:
+            _last_ctrl_debug_ms = now_dbg
+            print(
+                "CTRL YPRZFI:",
+                fields["yaw"],
+                fields["pitch"],
+                fields["roll"],
+                fields["zoom"],
+                fields["focus"],
+                fields["iris"],
+            )
+    pulse(15)
 
-    # Fast watchdog: ramp to neutral when stream goes stale.
-    if time.ticks_diff(now_ms, last_fast_ms) > FAST_WATCHDOG_MS:
-        stale = {"yaw": 0, "pitch": 0, "roll": 0, "zoom": 0, "focus": 0, "iris": 0}
-        last_fast_fields = stale
+    # Apply slow gate to BGC joystick stream.
+    if slow_motors_on:
+        # SimpleBGC CMD 45 Speed: u16 0 -> -500, 32768 -> 0, 65535 -> +500; int16 LE
+        def u16_to_bgc_speed(u):
+            u = max(0, min(65535, int(u)))
+            s = round((u - 32768) / 32768.0 * 500.0)
+            return max(-500, min(500, s))
+        yaw_s = u16_to_bgc_speed(fields["yaw"])
+        pitch_s = u16_to_bgc_speed(fields["pitch"])
+        roll_s = u16_to_bgc_speed(fields["roll"])
+        bgc.send_joystick_control(yaw_s, pitch_s, roll_s)
 
-    # Apply motion paths.
-    y_tx_u16, p_tx_u16, r_tx_u16, tx_payload = bgc.send_joystick_control(
-        last_fast_fields["yaw"], last_fast_fields["pitch"], last_fast_fields["roll"]
-    )
-    if got_fast and DEBUG_BGC_NUMBERS:
-        print(
-            "[BGC DBG] UART TX(u16):",
-            y_tx_u16,
-            p_tx_u16,
-            r_tx_u16,
-            "payload_hex:",
-            " ".join("{:02X}".format(b) for b in tx_payload),
-        )
-    if bit_ok:
-        lens.move_zoom(last_fast_fields["zoom"])
-        lens.set_focus_input(last_fast_fields["focus"])
-        lens.set_iris_input(last_fast_fields["iris"])
+    # Runtime lens commands are not gated by startup BIT.
+    lens_control = fields.get("lens_control")
+    if lens_control:
+        requested_type = lens_control.get("lens_type")
+        if requested_type and requested_type != lens.get_lens_type():
+            changed = lens.set_lens_type(requested_type)
+            if changed:
+                last_applied_lens_type = requested_type
+                last_applied_sources = lens.get_axis_sources()
+                print("Applied lens_type from packet:", requested_type)
+
+        requested_sources = lens_control.get("axis_sources", {}) or {}
+        for axis in ("zoom", "focus", "iris"):
+            req_src = requested_sources.get(axis)
+            if req_src and req_src != last_applied_sources.get(axis):
+                ok = lens.set_axis_source(axis, req_src)
+                if ok:
+                    last_applied_sources[axis] = req_src
+                    print("Applied source from packet:", axis, "->", req_src)
+
+    lens.move_zoom(fields["zoom"])
+    lens.set_focus_input(fields["focus"])
+    lens.set_iris_input(fields["iris"])
     lens.periodic()
-
-    # 2Hz telemetry from head -> bridge.
-    if slow_peer_ip and time.ticks_diff(now_ms, last_telem_ms) >= TELEMETRY_PERIOD_MS:
-        telem_seq = (telem_seq + 1) & 0xFFFF
-        telem = build_telem_packet(telem_seq)
-        try:
-            slow_sock.sendto(telem, (slow_peer_ip, SLOW_TELEM_DST_PORT))
-        except OSError:
-            pass
-        last_telem_ms = now_ms
-
-    time.sleep(0.001)
