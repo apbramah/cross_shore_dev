@@ -9,7 +9,6 @@ fi
 LOG="${HOME}/.cache/hydravision-kiosk.log"
 UI_URL="${HYDRAVISION_UI_URL:-file:///home/admin/Dev/cross_shore_dev/apps/controller/mvp_ui_3.html}"
 WS_FAST_HOST="${HYDRAVISION_WS_HOST:-127.0.0.1}"
-WS_FAST_PORT="${HYDRAVISION_WS_FAST_PORT:-8765}"
 WS_SLOW_PORT="${HYDRAVISION_WS_SLOW_PORT:-8766}"
 WS_WAIT_SECONDS="${HYDRAVISION_WS_WAIT_SECONDS:-25}"
 
@@ -44,16 +43,13 @@ PY
 {
   echo "==== $(date -Iseconds) HydraVision kiosk launch ===="
   echo "UI: ${UI_URL}"
-  echo "Waiting for WS ${WS_FAST_HOST}:${WS_FAST_PORT} and ${WS_FAST_HOST}:${WS_SLOW_PORT}"
+  echo "Waiting for slow WS ${WS_FAST_HOST}:${WS_SLOW_PORT}"
 } >>"$LOG"
 
 xset s off >/dev/null 2>&1 || true
 xset -dpms >/dev/null 2>&1 || true
 xset s noblank >/dev/null 2>&1 || true
 
-if ! wait_for_port "$WS_FAST_HOST" "$WS_FAST_PORT" "$WS_WAIT_SECONDS"; then
-  echo "Fast bridge socket was not ready within ${WS_WAIT_SECONDS}s." >>"$LOG"
-fi
 if ! wait_for_port "$WS_FAST_HOST" "$WS_SLOW_PORT" "$WS_WAIT_SECONDS"; then
   echo "Slow bridge socket was not ready within ${WS_WAIT_SECONDS}s." >>"$LOG"
 fi

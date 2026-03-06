@@ -8,7 +8,6 @@ fi
 
 UI_URL="${HYDRAVISION_UI_URL:-file:///home/admin/Dev/cross_shore_dev/apps/controller/mvp_ui_3.html}"
 WS_HOST="${HYDRAVISION_WS_HOST:-127.0.0.1}"
-WS_FAST_PORT="${HYDRAVISION_WS_FAST_PORT:-8765}"
 WS_SLOW_PORT="${HYDRAVISION_WS_SLOW_PORT:-8766}"
 WS_WAIT_SECONDS="${HYDRAVISION_WS_WAIT_SECONDS:-25}"
 LOG="${HOME}/.cache/hydravision-kiosk.log"
@@ -36,12 +35,9 @@ PY
 {
   echo "==== $(date -Iseconds) HydraVision cage launch ===="
   echo "UI: ${UI_URL}"
-  echo "Waiting for WS ${WS_HOST}:${WS_FAST_PORT} and ${WS_HOST}:${WS_SLOW_PORT} (max ${WS_WAIT_SECONDS}s)"
+  echo "Waiting for slow WS ${WS_HOST}:${WS_SLOW_PORT} (max ${WS_WAIT_SECONDS}s)"
 } >>"$LOG"
 
-if ! wait_for_port "$WS_HOST" "$WS_FAST_PORT" "$WS_WAIT_SECONDS"; then
-  echo "Fast bridge (${WS_FAST_PORT}) was not ready within ${WS_WAIT_SECONDS}s." >>"$LOG"
-fi
 if ! wait_for_port "$WS_HOST" "$WS_SLOW_PORT" "$WS_WAIT_SECONDS"; then
   echo "Slow bridge (${WS_SLOW_PORT}) was not ready within ${WS_WAIT_SECONDS}s." >>"$LOG"
 fi
