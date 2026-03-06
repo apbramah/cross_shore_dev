@@ -1,0 +1,30 @@
+[Unit]
+Description=HydraVision Kiosk UI (cage + browser)
+After=systemd-user-sessions.service wsbridge.service boot-splash-lock.service
+Requires=wsbridge.service
+Conflicts=getty@tty1.service
+
+[Service]
+Type=simple
+User=admin
+Group=admin
+PAMName=login
+WorkingDirectory=/home/admin
+Environment=XDG_SESSION_TYPE=wayland
+Environment=XDG_RUNTIME_DIR=/run/hydravision-kiosk
+RuntimeDirectory=hydravision-kiosk
+RuntimeDirectoryMode=0700
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
+StandardInput=tty
+StandardOutput=journal
+StandardError=journal
+ExecStart=/usr/bin/cage -- /usr/local/bin/kiosk-browser
+Restart=always
+RestartSec=1
+TimeoutStartSec=10
+
+[Install]
+WantedBy=multi-user.target

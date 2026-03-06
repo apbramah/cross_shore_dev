@@ -1,0 +1,13 @@
+[Unit]
+Description=HydraVision WebSocket Bridge
+After=controller.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/wsbridge_daemon
+Restart=always
+RestartSec=1
+TimeoutStartSec=10
+
+[Install]
+WantedBy=multi-user.target
