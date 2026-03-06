@@ -65,13 +65,16 @@ def set_kv(lines, key, value):
         out.append(f"{key}={value}")
     return out
 
-# Raspberry Pi display rotation: 0=0°, 1=90°, 2=180°, 3=270°
-rot = os.environ.get("HYDRAVISION_DISPLAY_ROTATE", "0")
-if rot not in ("0", "1", "2", "3"):
-    rot = "0"
-
 lines = set_kv(lines, "disable_splash", "1")
-lines = set_kv(lines, "display_rotate", rot)
+
+# Do not force boot-level rotation by default. DSI rotation is handled at
+# compositor level via wlr-randr in kiosk launch.
+boot_rot = os.environ.get("HYDRAVISION_BOOT_DISPLAY_ROTATE", "").strip()
+if boot_rot:
+    if boot_rot in ("0", "1", "2", "3"):
+        lines = set_kv(lines, "display_rotate", boot_rot)
+    else:
+        print("HYDRAVISION_BOOT_DISPLAY_ROTATE invalid; expected 0-3. Keeping existing display_rotate.")
 cfg_path.write_text("\n".join(lines) + "\n")
 PY
 

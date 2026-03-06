@@ -89,6 +89,7 @@ fi
 
 check_exists "/usr/local/bin/hydravision-kiosk-launch.sh"
 check_exists "/usr/local/bin/hydravision-cage-launch.sh"
+check_exists "/usr/local/bin/hydravision-splash-then-browser.sh"
 check_exists "/usr/local/bin/hydravision-admin-unlock.sh"
 check_exists "/usr/local/bin/hydravision-remove-lockdown.sh"
 check_exists "/etc/default/hydravision-kiosk"
@@ -110,6 +111,11 @@ fi
 
 if [ "$KIOSK_MODE" = "cage" ]; then
   check_service_state "hydravision-cage.service"
+  if systemctl is-enabled getty@tty1.service 2>/dev/null | grep -q masked; then
+    pass "Unit masked: getty@tty1.service"
+  else
+    warn "Unit not masked: getty@tty1.service (possible tty contention in cage mode)"
+  fi
 else
   check_exists "/home/admin/.config/labwc/autostart"
 fi

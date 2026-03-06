@@ -1,0 +1,5 @@
+*.sh text eol=lf
+*.service text eol=lf
+*.rules text eol=lf
+*.env text eol=lf
+"Pi5 Setup/labwc/autostart" text eol=lf

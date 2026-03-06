@@ -49,7 +49,7 @@ Source paths under this repo: `Pi5 Setup/plymouth/` (`.plymouth`, `.script`, `hy
 | Asset | Path | Notes |
 |-------|------|--------|
 | Kernel cmdline | `/boot/firmware/cmdline.txt` | Patched by `pi5_boot_patch.sh` (quiet, splash, loglevel, Plymouth flags). |
-| Firmware config | `/boot/firmware/config.txt` | Patched by `pi5_boot_patch.sh` (`disable_splash`, `display_rotate`). |
+| Firmware config | `/boot/firmware/config.txt` | Patched by `pi5_boot_patch.sh` (`disable_splash`, optional `display_rotate` override). |
 | Backup dir | `/boot/firmware/backup_hydravision_*` | Timestamped backup of cmdline/config before patch. |
 
 Patch script: `Pi5 Setup/scripts/pi5_boot_patch.sh`.
@@ -114,38 +114,32 @@ Source: `Pi5 Setup/ssh/`, `Pi5 Setup/logind/`, `Pi5 Setup/firefox/`.
 
 ## Screen rotation (definitive)
 
-Display rotation is controlled by a single variable and applied to `/boot/firmware/config.txt` as `display_rotate=N` (Raspberry Pi standard).
+By default, rotation is applied at compositor level with `wlr-randr` in the kiosk launch path. This is the required behavior for the known Pi 5 DSI panel path.
 
 | Variable | Values | Effect |
 |----------|--------|--------|
-| `HYDRAVISION_DISPLAY_ROTATE` | `0` | 0° (default) |
-| | `1` | 90° |
-| | `2` | 180° |
-| | `3` | 270° |
+| `HYDRAVISION_OUTPUT_NAME` | e.g. `DSI-2` | Output name to transform. |
+| `HYDRAVISION_OUTPUT_TRANSFORM` | `normal`, `90`, `180`, `270`, ... | Transform value passed to `wlr-randr`. |
 
-**At install time:** set the variable before running the installer so the boot patch sees it:
+Set these in `/etc/default/hydravision-kiosk`:
 
 ```sh
-sudo HYDRAVISION_DISPLAY_ROTATE=1 bash "Pi5 Setup/install_pi5_setup.sh"
-sudo reboot
+HYDRAVISION_OUTPUT_NAME=DSI-2
+HYDRAVISION_OUTPUT_TRANSFORM=90
 ```
 
-**After install:** set the variable and re-run the boot patch (no need to re-run the full install):
+Boot-level rotation is optional compatibility mode only:
+
+| Variable | Values | Effect |
+|----------|--------|--------|
+| `HYDRAVISION_BOOT_DISPLAY_ROTATE` | `0..3` | Writes `display_rotate` in `/boot/firmware/config.txt` when explicitly set. |
+
+Example:
 
 ```sh
-sudo HYDRAVISION_DISPLAY_ROTATE=2 bash "Pi5 Setup/scripts/pi5_boot_patch.sh"
+sudo HYDRAVISION_BOOT_DISPLAY_ROTATE=1 bash "Pi5 Setup/scripts/pi5_boot_patch.sh"
 sudo reboot
 ```
-
-**Single place for reuse:** you can put the variable in `/etc/default/hydravision-kiosk` and source it before re-running the patch:
-
-```sh
-source /etc/default/hydravision-kiosk
-sudo -E bash "Pi5 Setup/scripts/pi5_boot_patch.sh"
-sudo reboot
-```
-
-To change rotation later, set `HYDRAVISION_DISPLAY_ROTATE` (0–3) in one of the ways above and reboot.
 
 ---
 
@@ -175,10 +169,11 @@ sudo bash "Pi5 Setup/install_pi5_setup.sh"
 sudo reboot
 ```
 
-Example with rotation set to 90°:
+Example with compositor transform set to 90°:
 
 ```sh
-sudo HYDRAVISION_DISPLAY_ROTATE=1 bash "Pi5 Setup/install_pi5_setup.sh"
+sudo HYDRAVISION_OUTPUT_NAME=DSI-2 HYDRAVISION_OUTPUT_TRANSFORM=90 \
+  bash "Pi5 Setup/install_pi5_setup.sh"
 sudo reboot
 ```
 
@@ -317,4 +312,4 @@ If the kiosk or display is unusable and you need console access:
   cp /boot/firmware/backup_hydravision_YYYYMMDD_HHMMSS/cmdline.txt /boot/firmware/cmdline.txt
   cp /boot/firmware/backup_hydravision_YYYYMMDD_HHMMSS/config.txt /boot/firmware/config.txt
    ```
-   Then reboot. This restores pre-patch cmdline/config (removes quiet/splash and display_rotate changes).
+   Then reboot. This restores pre-patch cmdline/config (removes quiet/splash and any optional display_rotate override).

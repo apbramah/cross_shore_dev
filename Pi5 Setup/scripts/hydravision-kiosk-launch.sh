@@ -58,18 +58,14 @@ if ! wait_for_port "$WS_FAST_HOST" "$WS_SLOW_PORT" "$WS_WAIT_SECONDS"; then
   echo "Slow bridge socket was not ready within ${WS_WAIT_SECONDS}s." >>"$LOG"
 fi
 
-FIREFOX_BIN="$(command -v firefox-esr || command -v firefox || true)"
-if [ -z "$FIREFOX_BIN" ]; then
-  echo "Firefox was not found in PATH." >>"$LOG"
+INNER_LAUNCHER="/usr/local/bin/hydravision-splash-then-browser.sh"
+if [ ! -x "$INNER_LAUNCHER" ]; then
+  echo "Inner launcher missing: $INNER_LAUNCHER" >>"$LOG"
   exit 1
 fi
 
 while true; do
-  MOZ_ENABLE_WAYLAND=1 "$FIREFOX_BIN" \
-    --kiosk \
-    --private-window \
-    --new-instance \
-    "${UI_URL}" >>"$LOG" 2>&1
-  echo "Firefox exited; restarting in 2s." >>"$LOG"
+  "$INNER_LAUNCHER" >>"$LOG" 2>&1
+  echo "Browser session exited; restarting in 2s." >>"$LOG"
   sleep 2
 done

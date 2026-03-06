@@ -26,7 +26,7 @@ if command -v apt-get >/dev/null 2>&1; then
     echo "plymouth-plugin-script not available on this OS; continuing with base plymouth."
     apt-get install -y plymouth plymouth-themes
   fi
-  apt-get install -y firefox-esr zenity openssh-server python3-websockets python3-serial imv librsvg2-bin
+  apt-get install -y firefox-esr zenity openssh-server python3-websockets python3-serial imv librsvg2-bin wlr-randr
   if [ "$KIOSK_MODE" = "cage" ]; then
     apt-get install -y cage
   fi
@@ -99,6 +99,13 @@ install -m 755 "$SCRIPT_DIR/scripts/hydravision-disable-cage.sh" "$BIN_DIR/hydra
 if [ ! -f "$KIOSK_ENV_FILE" ]; then
   install -m 640 "$SCRIPT_DIR/config/hydravision-kiosk.env" "$KIOSK_ENV_FILE"
 fi
+
+if grep -q '^HYDRAVISION_KIOSK_MODE=' "$KIOSK_ENV_FILE"; then
+  sed -i "s/^HYDRAVISION_KIOSK_MODE=.*/HYDRAVISION_KIOSK_MODE=${KIOSK_MODE}/" "$KIOSK_ENV_FILE"
+else
+  printf '\nHYDRAVISION_KIOSK_MODE=%s\n' "$KIOSK_MODE" >>"$KIOSK_ENV_FILE"
+fi
+
 chown root:admin "$KIOSK_ENV_FILE"
 chmod 640 "$KIOSK_ENV_FILE"
 python3 "$SCRIPT_DIR/scripts/labwc_configure_keybinds.py"
@@ -133,6 +140,9 @@ if [ "$KIOSK_MODE" = "cage" ]; then
   echo "[extra] Configuring single-app cage kiosk session..."
   cp -a "$SCRIPT_DIR/systemd/hydravision-cage.service" "$SYSTEMD_DIR/"
   systemctl daemon-reload
+  systemctl disable --now getty@tty1.service || true
+  systemctl mask getty@tty1.service || true
+  systemctl mask autovt@tty1.service || true
   systemctl disable --now lightdm.service || true
   systemctl disable --now display-manager.service || true
   rm -f /home/admin/.config/autostart/hydravision-kiosk.desktop
@@ -140,6 +150,8 @@ if [ "$KIOSK_MODE" = "cage" ]; then
   systemctl enable --now hydravision-cage.service
 else
   systemctl disable --now hydravision-cage.service || true
+  systemctl unmask getty@tty1.service || true
+  systemctl unmask autovt@tty1.service || true
 fi
 
 echo "Done. Reboot recommended."
