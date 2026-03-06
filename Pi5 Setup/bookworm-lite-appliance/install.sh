@@ -54,9 +54,20 @@ drop_exact = {
     "splash",
     "logo.nologo",
     "vt.global_cursor_default=0",
+    "systemd.show_status=false",
+    "rd.systemd.show_status=false",
 }
 parts = [p for p in parts if p not in drop_exact]
-parts = [p for p in parts if not p.startswith("loglevel=")]
+drop_prefixes = (
+    "loglevel=",
+    "systemd.show_status=",
+    "rd.systemd.show_status=",
+    "systemd.log_level=",
+    "udev.log_priority=",
+    "console=tty1",
+    "console=tty0",
+)
+parts = [p for p in parts if not any(p.startswith(prefix) for prefix in drop_prefixes)]
 
 parts += [
     "quiet",
@@ -64,7 +75,13 @@ parts += [
     "loglevel=0",
     "vt.global_cursor_default=0",
     "logo.nologo",
+    "systemd.show_status=false",
+    "rd.systemd.show_status=false",
+    "systemd.log_level=emerg",
+    "udev.log_priority=3",
 ]
+if not any(p.startswith("console=tty3") for p in parts):
+    parts.append("console=tty3")
 cmdline.write_text(" ".join(parts) + "\n")
 PY
 
@@ -111,11 +128,13 @@ mkdir -p "$PROFILE"
 
 cat >"$PROFILE/user.js" <<'JS'
 user_pref("browser.startup.homepage_override.mstone", "ignore");
+user_pref("browser.startup.blankWindow", false);
 user_pref("browser.shell.checkDefaultBrowser", false);
 user_pref("browser.tabs.warnOnClose", false);
 user_pref("browser.sessionstore.resume_from_crash", false);
 user_pref("browser.aboutConfig.showWarning", false);
 user_pref("toolkit.telemetry.reportingpolicy.firstRun", false);
+user_pref("ui.systemUsesDarkTheme", 1);
 user_pref("browser.display.background_color", "#000000");
 JS
 

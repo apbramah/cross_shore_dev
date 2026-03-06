@@ -2,7 +2,7 @@
 Description=HydraVision Boot Splash Lock
 DefaultDependencies=no
 After=local-fs.target
-Before=getty@tty1.service kiosk.service
+Before=systemd-user-sessions.service getty@tty1.service kiosk.service
 
 [Service]
 Type=oneshot
@@ -11,4 +11,4 @@ ExecStart=/bin/sh -c 'setterm --cursor off --blank 0 --powersave off --powerdown
 ExecStart=/bin/sh -c 'echo 0 > /sys/class/graphics/fbcon/cursor_blink 2>/dev/null || true'
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=sysinit.target
