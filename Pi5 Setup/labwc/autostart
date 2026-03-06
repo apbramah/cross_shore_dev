@@ -8,12 +8,16 @@ xset s off
 xset -dpms
 xset s noblank
 
-FIREFOX_BIN="$(command -v firefox-esr || command -v firefox || true)"
-if [ -z "$FIREFOX_BIN" ]; then
-  echo "firefox not found in PATH." >>"$LOG"
-  exit 1
+if [ -x /usr/local/bin/hydravision-kiosk-launch.sh ]; then
+  /usr/local/bin/hydravision-kiosk-launch.sh >>"$LOG" 2>&1
+else
+  echo "hydravision-kiosk-launch.sh not installed; falling back to direct Firefox launch." >>"$LOG"
+  FIREFOX_BIN="$(command -v firefox-esr || command -v firefox || true)"
+  if [ -z "$FIREFOX_BIN" ]; then
+    echo "firefox not found in PATH." >>"$LOG"
+    exit 1
+  fi
+  MOZ_ENABLE_WAYLAND=1 "$FIREFOX_BIN" --kiosk --private-window \
+    file:///home/admin/Dev/cross_shore_dev/apps/controller/mvp_ui.html >>"$LOG" 2>&1
 fi
-
-MOZ_ENABLE_WAYLAND=1 "$FIREFOX_BIN" --kiosk --private-window \
-  file:///home/admin/Dev/cross_shore_dev/apps/controller/mvp_ui.html >>"$LOG" 2>&1
 

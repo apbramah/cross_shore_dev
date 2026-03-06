@@ -1,0 +1,30 @@
+[Unit]
+Description=HydraVision single-app kiosk (cage + browser)
+After=systemd-user-sessions.service network-online.target mvp_bridge_adc.service mvp_slow_bridge.service
+Wants=network-online.target
+Conflicts=getty@tty1.service
+
+[Service]
+Type=simple
+User=admin
+Group=admin
+PAMName=login
+WorkingDirectory=/home/admin
+Environment=XDG_SESSION_TYPE=wayland
+Environment=MOZ_ENABLE_WAYLAND=1
+Environment=XDG_RUNTIME_DIR=/run/hydravision-kiosk
+RuntimeDirectory=hydravision-kiosk
+RuntimeDirectoryMode=0700
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
+StandardInput=tty
+StandardOutput=journal
+StandardError=journal
+ExecStart=/usr/local/bin/hydravision-cage-launch.sh
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

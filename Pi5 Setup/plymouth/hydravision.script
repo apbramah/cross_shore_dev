@@ -1,15 +1,21 @@
-// HydraVision Plymouth theme with slow fade-in text.
+// HydraVision Plymouth theme with subtle fade-in text.
 
-Window.SetBackgroundTopColor(0.16, 0.16, 0.16);
-Window.SetBackgroundBottomColor(0.16, 0.16, 0.16);
+// Dark grey background (#2b2b2b).
+Window.SetBackgroundTopColor(0.17, 0.17, 0.17);
+Window.SetBackgroundBottomColor(0.17, 0.17, 0.17);
 
-// Render text directly to avoid external assets.
-text_image = Image.Text("HydraVision", 0.82, 0.82, 0.82);
+// Slightly lighter grey centered text (#7a7a7a approx), uppercase.
+text_image = Image.Text("HYDRAVISION", 0.48, 0.48, 0.48);
+text_image_bold = Image.Text("HYDRAVISION", 0.48, 0.48, 0.48);
 text_sprite = Sprite(text_image);
+text_sprite_bold = Sprite(text_image_bold);
 
 text_sprite.SetX((Window.GetWidth() - text_image.GetWidth()) / 2);
 text_sprite.SetY((Window.GetHeight() - text_image.GetHeight()) / 2);
+text_sprite_bold.SetX(((Window.GetWidth() - text_image.GetWidth()) / 2) + 1);
+text_sprite_bold.SetY((Window.GetHeight() - text_image.GetHeight()) / 2);
 text_sprite.SetOpacity(0.0);
+text_sprite_bold.SetOpacity(0.0);
 
 start_time = 0.0;
 fade_duration = 4.0;
@@ -26,6 +32,7 @@ function fade_in()
     opacity = 1.0;
 
   text_sprite.SetOpacity(opacity);
+  text_sprite_bold.SetOpacity(opacity);
 
   if (opacity < 1.0)
     Plymouth.SetRefreshFunction(fade_in);

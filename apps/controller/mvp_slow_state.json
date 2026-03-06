@@ -1,5 +1,5 @@
 {
   "motors_on": 0,
-  "gyro_heading_correction": 8192,
+  "gyro_heading_correction": 7936,
   "selected_index": 0
 }

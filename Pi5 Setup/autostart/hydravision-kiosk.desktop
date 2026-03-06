@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Name=HydraVision Kiosk
-Comment=Launch HydraVision UI in Chromium kiosk mode
-Exec=/bin/bash -lc "xset s off; xset -dpms; xset s noblank; MOZ_ENABLE_WAYLAND=1 firefox-esr --kiosk --private-window file:///home/admin/Dev/cross_shore_dev/apps/controller/mvp_ui.html"
+Comment=Launch HydraVision UI in Firefox kiosk mode
+Exec=/bin/bash -lc "/usr/local/bin/hydravision-kiosk-launch.sh"
 X-GNOME-Autostart-enabled=true
 

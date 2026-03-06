@@ -1,0 +1,32 @@
+{
+  "policies": {
+    "DisableAppUpdate": true,
+    "DisableDeveloperTools": true,
+    "DisableFirefoxStudies": true,
+    "DisableFeedbackCommands": true,
+    "DisableFormHistory": true,
+    "DisablePasswordReveal": true,
+    "DisablePocket": true,
+    "DisableProfileImport": true,
+    "DisableSafeMode": true,
+    "DisableSetDesktopBackground": true,
+    "DisableTelemetry": true,
+    "DontCheckDefaultBrowser": true,
+    "OfferToSaveLogins": false,
+    "PasswordManagerEnabled": false,
+    "BlockAboutAddons": true,
+    "BlockAboutConfig": true,
+    "PopupBlocking": {
+      "Default": true
+    },
+    "Preferences": {
+      "browser.aboutConfig.showWarning": false,
+      "browser.sessionstore.resume_from_crash": false,
+      "browser.tabs.closeWindowWithLastTab": true,
+      "browser.urlbar.suggest.searches": false,
+      "dom.disable_window_move_resize": true,
+      "media.hardware-video-decoding.enabled": true,
+      "toolkit.telemetry.unified": false
+    }
+  }
+}

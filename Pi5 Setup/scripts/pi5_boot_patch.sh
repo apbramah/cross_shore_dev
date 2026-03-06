@@ -25,6 +25,8 @@ parts = [p for p in parts if p not in {
     "splash",
     "plymouth.ignore-serial-consoles",
     "vt.global_cursor_default=0",
+    "systemd.show_status=auto",
+    "systemd.show_status=false",
     "systemd.show_status=1",
     "systemd.show_status=true",
 }]
@@ -37,6 +39,7 @@ parts += [
     "loglevel=3",
     "vt.global_cursor_default=0",
     "plymouth.ignore-serial-consoles",
+    "systemd.show_status=false",
 ]
 
 cmdline_path.write_text(" ".join(parts) + "\n")
@@ -44,6 +47,7 @@ PY
 
 python3 - <<'PY'
 from pathlib import Path
+import os
 
 cfg_path = Path("/boot/firmware/config.txt")
 lines = cfg_path.read_text().splitlines()
@@ -61,7 +65,13 @@ def set_kv(lines, key, value):
         out.append(f"{key}={value}")
     return out
 
+# Raspberry Pi display rotation: 0=0°, 1=90°, 2=180°, 3=270°
+rot = os.environ.get("HYDRAVISION_DISPLAY_ROTATE", "0")
+if rot not in ("0", "1", "2", "3"):
+    rot = "0"
+
 lines = set_kv(lines, "disable_splash", "1")
+lines = set_kv(lines, "display_rotate", rot)
 cfg_path.write_text("\n".join(lines) + "\n")
 PY
 

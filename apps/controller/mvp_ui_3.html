@@ -1,0 +1,586 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Hydravision MVP UI 3</title>
+  <script src="./mvp_ui_3_layout.js"></script>
+  <style>
+    :root {
+      --bg: #10141b;
+      --card: #1a2130;
+      --card2: #1f2738;
+      --border: #36425a;
+      --text: #e5ecf8;
+      --muted: #9fb0cb;
+      --accent: #57a7ff;
+      --warn: #f59e0b;
+      --ok: #22c55e;
+      --danger: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      width: 100vw;
+      height: 100vh;
+      margin: 0;
+      overflow: hidden;
+      background: #0d1118;
+      color: var(--text);
+      font-family: Inter, "Segoe UI", system-ui, -apple-system, sans-serif;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .app {
+      width: 100vw;
+      height: 100vh;
+      padding: 12px;
+      display: grid;
+      grid-template-rows: 72px 1fr 76px;
+      gap: 10px;
+      background: radial-gradient(circle at 15% -10%, #202a3e 0%, #0d1118 48%);
+      overflow: hidden;
+    }
+    .topbar, .surface, .dock {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: linear-gradient(180deg, #18202f 0%, #151c2a 100%);
+    }
+    .topbar {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr 1fr auto;
+      align-items: center;
+      gap: 10px;
+      padding: 10px;
+    }
+    .top-title { font-size: 20px; font-weight: 700; }
+    .row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .row label { color: var(--muted); font-size: 14px; white-space: nowrap; }
+    input, select, button {
+      height: 52px;
+      border-radius: 8px;
+      border: 1px solid #41506d;
+      background: var(--card2);
+      color: var(--text);
+      padding: 0 10px;
+      font-size: 16px;
+    }
+    input { width: 100%; min-width: 0; }
+    button {
+      cursor: pointer;
+      background: linear-gradient(180deg, #347dd0 0%, #2c69aa 100%);
+      border-color: #2c6eb8;
+      font-weight: 700;
+      color: #eaf4ff;
+    }
+    .pill {
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid #5f2e35;
+      background: rgba(239, 68, 68, 0.2);
+      color: #ffd5dc;
+      font-weight: 650;
+      text-align: center;
+      white-space: nowrap;
+    }
+    .pill.on {
+      border-color: #29533a;
+      background: rgba(34, 197, 94, 0.18);
+      color: #caf9de;
+    }
+    .surface {
+      position: relative;
+      overflow: hidden;
+      padding: 10px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .touch-card {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: linear-gradient(180deg, #1b2434 0%, #161e2c 100%);
+      padding: 10px;
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: auto auto 1fr;
+      gap: 8px;
+    }
+    .touch-card h3 {
+      margin: 0;
+      font-size: 16px;
+      color: #dbe8ff;
+    }
+    .info {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 13px;
+      color: var(--muted);
+      border: 1px solid #34435d;
+      border-radius: 8px;
+      padding: 8px;
+      background: rgba(16, 24, 36, 0.65);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .status-list {
+      display: grid;
+      gap: 8px;
+      align-content: start;
+    }
+    .dock {
+      position: relative;
+      padding: 8px;
+      overflow: hidden;
+    }
+    .dock-grid {
+      height: 100%;
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 8px;
+    }
+    .dock-btn {
+      height: 100%;
+      border-radius: 10px;
+      border: 1px solid #44557a;
+      background: #202b40;
+      color: #d7e5ff;
+      font-weight: 700;
+      font-size: 16px;
+    }
+    .dock-btn.active {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(87, 167, 255, 0.25) inset;
+      background: #284362;
+    }
+    .popup {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 84px;
+      height: 410px;
+      margin: 0 8px;
+      border: 1px solid #4a5b7f;
+      border-radius: 12px;
+      background: linear-gradient(180deg, #202a3e 0%, #192236 100%);
+      display: none;
+      grid-template-rows: 56px 1fr;
+      overflow: hidden;
+      box-shadow: 0 14px 30px rgba(0, 0, 0, 0.45);
+    }
+    .popup.open { display: grid; }
+    .popup-head {
+      display: grid;
+      grid-template-columns: 1fr auto auto auto;
+      align-items: center;
+      gap: 8px;
+      padding: 8px;
+      border-bottom: 1px solid #3f4f70;
+    }
+    .popup-title { font-weight: 700; font-size: 18px; }
+    .popup-mode {
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid #5c4a24;
+      background: rgba(245, 158, 11, 0.2);
+      color: #ffe1ad;
+      font-size: 13px;
+    }
+    .popup-mode.position {
+      border-color: #274b34;
+      background: rgba(34, 197, 94, 0.2);
+      color: #cbf9de;
+    }
+    .positions {
+      padding: 8px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-auto-rows: 64px;
+      gap: 8px;
+      overflow: hidden;
+    }
+    .pos {
+      border: 1px solid #425171;
+      border-radius: 8px;
+      background: rgba(20, 29, 44, 0.8);
+      padding: 8px;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      user-select: none;
+    }
+    .pos .addr { color: #9db1d7; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    .pos .label { color: #deebff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pos .val { color: #a5b6d6; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    .pos.active {
+      border-color: var(--accent);
+      box-shadow: inset 0 0 0 1px rgba(87, 167, 255, 0.35);
+      background: rgba(43, 73, 112, 0.5);
+    }
+    .pos.value-edit {
+      border-color: var(--warn);
+      box-shadow: inset 0 0 0 1px rgba(245, 158, 11, 0.45);
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="topbar">
+      <div class="top-title">Hydravision MVP UI 3</div>
+      <div class="row">
+        <label>WS:</label>
+        <input id="wsurl" />
+      </div>
+      <div class="row">
+        <label>Head:</label>
+        <select id="heads"></select>
+      </div>
+      <div class="row">
+        <button id="connect">Connect</button>
+        <span id="wsPill" class="pill">WS Offline</span>
+      </div>
+    </div>
+
+    <div class="surface">
+      <div class="touch-card">
+        <h3>Touch Controls</h3>
+        <div class="row">
+          <button id="touchMotorsOn">Motors ON</button>
+          <button id="touchMotorsOff">Motors OFF</button>
+          <button id="touchGyroSend">Send Gyro</button>
+          <select id="touchGyroValue"></select>
+        </div>
+        <div class="status-list">
+          <div id="slowState" class="info">Slow state: -</div>
+          <div id="focusState" class="info">Column popup: minimized</div>
+          <div id="eventLog" class="info">Event: idle</div>
+        </div>
+      </div>
+      <div class="touch-card">
+        <h3>Runtime Status</h3>
+        <div id="encoderState" class="info">Encoder mode: position</div>
+        <div class="status-list">
+          <div id="activeSlotState" class="info">Active slot: none</div>
+          <div id="activeValueState" class="info">Active value: -</div>
+          <div id="layoutState" class="info">Layout: 5 columns x 10 positions</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dock">
+      <div id="popup" class="popup">
+        <div class="popup-head">
+          <div id="popupTitle" class="popup-title">Column</div>
+          <div id="popupMode" class="popup-mode position">POSITION SELECT</div>
+          <button id="touchToggleMode">Edit Value</button>
+          <button id="touchClosePopup">Minimize</button>
+        </div>
+        <div id="positions" class="positions"></div>
+      </div>
+      <div id="dockGrid" class="dock-grid"></div>
+    </div>
+  </div>
+
+<script>
+const LAYOUT = window.MVP_UI3_LAYOUT || { columns: [], encoders: [], wsDefaultUrl: "ws://127.0.0.1:8766" };
+const WS_DEFAULT = LAYOUT.wsDefaultUrl || "ws://127.0.0.1:8766";
+const POS_PER_COL = (LAYOUT.screen && LAYOUT.screen.positionsPerColumn) || 10;
+
+let ws = null;
+let state = { heads: [], selected: 0, slow_controls: {} };
+let activeColumn = null; // 0..4 or null
+let mode = "position"; // position | value
+let activePosIndexByColumn = [0, 0, 0, 0, 0];
+let prevButtonState = {};
+
+function $(id){ return document.getElementById(id); }
+
+function send(obj){
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
+}
+
+function setWsPill(text, online){
+  const el = $("wsPill");
+  el.textContent = text;
+  el.classList.toggle("on", !!online);
+}
+
+function getColumn(colIdx){
+  return LAYOUT.columns[colIdx] || { id: `C${colIdx + 1}`, title: `Column ${colIdx + 1}`, positions: [] };
+}
+
+function getPosition(colIdx, posIdx){
+  const c = getColumn(colIdx);
+  return c.positions[posIdx] || { id: `C${colIdx + 1}P${posIdx + 1}`, label: "Spare", commandKey: null, values: [] };
+}
+
+function getSlotValue(pos){
+  if (!pos || !pos.commandKey) return null;
+  const v = state.slow_controls[pos.commandKey];
+  if (v === undefined || v === null) return pos.defaultValue ?? null;
+  return v;
+}
+
+function valueToLabel(pos, rawValue){
+  const vals = pos.values || [];
+  const hit = vals.find(x => String(x.value) === String(rawValue));
+  return hit ? hit.label : (rawValue === null ? "-" : String(rawValue));
+}
+
+function setEvent(text){ $("eventLog").textContent = `Event: ${text}`; }
+
+function buildTouchGyroSelect(){
+  const sel = $("touchGyroValue");
+  sel.innerHTML = "";
+  const vals = (((LAYOUT.columns[0] || {}).positions || [])[1] || {}).values || [];
+  for (const item of vals){
+    const opt = document.createElement("option");
+    opt.value = String(item.value);
+    opt.textContent = item.label;
+    sel.appendChild(opt);
+  }
+}
+
+function buildHeads(){
+  const sel = $("heads");
+  sel.innerHTML = "";
+  for (let i = 0; i < state.heads.length; i++){
+    const h = state.heads[i];
+    const opt = document.createElement("option");
+    opt.value = String(i);
+    opt.textContent = `${h.name} (${h.ip}:${h.port})`;
+    sel.appendChild(opt);
+  }
+  sel.value = String(state.selected || 0);
+}
+
+function buildDock(){
+  const grid = $("dockGrid");
+  grid.innerHTML = "";
+  for (let i = 0; i < 5; i++){
+    const col = getColumn(i);
+    const b = document.createElement("button");
+    b.className = "dock-btn" + (activeColumn === i ? " active" : "");
+    b.textContent = col.id || `C${i + 1}`;
+    b.onclick = () => {
+      if (activeColumn === i) {
+        closePopup();
+      } else {
+        openPopup(i);
+      }
+    };
+    grid.appendChild(b);
+  }
+}
+
+function renderPopup(){
+  buildDock();
+  const popup = $("popup");
+  if (activeColumn === null){
+    popup.classList.remove("open");
+    $("focusState").textContent = "Column popup: minimized";
+    $("activeSlotState").textContent = "Active slot: none";
+    $("activeValueState").textContent = "Active value: -";
+    return;
+  }
+
+  popup.classList.add("open");
+  const col = getColumn(activeColumn);
+  $("popupTitle").textContent = `${col.id} - ${col.title}`;
+  $("popupMode").textContent = mode === "position" ? "POSITION SELECT" : "VALUE EDIT";
+  $("popupMode").className = "popup-mode " + (mode === "position" ? "position" : "");
+  $("focusState").textContent = `Column popup: ${col.id}`;
+
+  const positions = $("positions");
+  positions.innerHTML = "";
+  const activePos = activePosIndexByColumn[activeColumn] || 0;
+  for (let p = 0; p < POS_PER_COL; p++){
+    const pos = getPosition(activeColumn, p);
+    const raw = getSlotValue(pos);
+    const div = document.createElement("div");
+    div.className = "pos" + (p === activePos ? " active" : "") + (mode === "value" && p === activePos ? " value-edit" : "");
+    div.onclick = () => {
+      activePosIndexByColumn[activeColumn] = p;
+      renderPopup();
+    };
+    div.innerHTML = `
+      <div class="addr">${pos.id || `C${activeColumn + 1}P${p + 1}`}</div>
+      <div class="label">${pos.label || "Spare"}</div>
+      <div class="val">${valueToLabel(pos, raw)}</div>
+    `;
+    positions.appendChild(div);
+  }
+
+  const slot = getPosition(activeColumn, activePos);
+  const raw = getSlotValue(slot);
+  $("activeSlotState").textContent = `Active slot: ${slot.id} (${slot.label || "Spare"})`;
+  $("activeValueState").textContent = `Active value: ${valueToLabel(slot, raw)} (${raw === null ? "-" : raw})`;
+  $("encoderState").textContent = `Encoder mode: ${mode}`;
+}
+
+function openPopup(colIdx){
+  activeColumn = colIdx;
+  mode = "position";
+  renderPopup();
+}
+
+function closePopup(){
+  activeColumn = null;
+  mode = "position";
+  renderPopup();
+}
+
+function cyclePosition(dir){
+  if (activeColumn === null) return;
+  const p = activePosIndexByColumn[activeColumn] || 0;
+  let n = p + dir;
+  if (n < 0) n = POS_PER_COL - 1;
+  if (n >= POS_PER_COL) n = 0;
+  activePosIndexByColumn[activeColumn] = n;
+  renderPopup();
+}
+
+function cycleValue(dir){
+  if (activeColumn === null) return;
+  const p = activePosIndexByColumn[activeColumn] || 0;
+  const slot = getPosition(activeColumn, p);
+  if (!slot.commandKey || !slot.values || !slot.values.length) return;
+  const vals = slot.values;
+  const curRaw = getSlotValue(slot);
+  let idx = vals.findIndex(v => String(v.value) === String(curRaw));
+  if (idx < 0) idx = 0;
+  idx += dir;
+  if (idx < 0) idx = vals.length - 1;
+  if (idx >= vals.length) idx = 0;
+  state.slow_controls[slot.commandKey] = vals[idx].value;
+  renderPopup();
+}
+
+function commitActiveValue(){
+  if (activeColumn === null) return;
+  const p = activePosIndexByColumn[activeColumn] || 0;
+  const slot = getPosition(activeColumn, p);
+  if (!slot.commandKey || !slot.values || !slot.values.length) return;
+  const raw = getSlotValue(slot);
+  send({ type: "SET_SLOW_CONTROL", key: slot.commandKey, value: raw });
+  setEvent(`set ${slot.commandKey}=${raw}`);
+}
+
+function onEncoderSwitch(colIdx){
+  if (activeColumn === null || activeColumn !== colIdx){
+    openPopup(colIdx);
+    return;
+  }
+  if (mode === "position"){
+    mode = "value";
+    renderPopup();
+    return;
+  }
+  commitActiveValue();
+  mode = "position";
+  renderPopup();
+}
+
+function onEncoderTurn(colIdx, dir){
+  if (activeColumn !== colIdx) return;
+  if (mode === "position") cyclePosition(dir);
+  else cycleValue(dir);
+}
+
+function processEncoderButtons(){
+  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  const gp = pads && pads[0];
+  if (!gp || !gp.buttons){
+    requestAnimationFrame(processEncoderButtons);
+    return;
+  }
+
+  for (const e of (LAYOUT.encoders || [])){
+    const colIdx = Math.max(0, (e.column || 1) - 1);
+    const map = [
+      { id: `e${e.id}_cw`, btn: e.cwButton, onRise: () => onEncoderTurn(colIdx, +1) },
+      { id: `e${e.id}_ccw`, btn: e.ccwButton, onRise: () => onEncoderTurn(colIdx, -1) },
+      { id: `e${e.id}_sw`, btn: e.swButton, onRise: () => onEncoderSwitch(colIdx) },
+    ];
+    for (const m of map){
+      if (m.btn === null || m.btn === undefined || m.btn < 0) continue;
+      const pressed = gp.buttons[m.btn] && gp.buttons[m.btn].pressed ? 1 : 0;
+      const prev = prevButtonState[m.id] || 0;
+      if (pressed && !prev) m.onRise();
+      prevButtonState[m.id] = pressed;
+    }
+  }
+  requestAnimationFrame(processEncoderButtons);
+}
+
+$("connect").onclick = () => {
+  ws = new WebSocket(($("wsurl").value || WS_DEFAULT).trim());
+  setWsPill("WS Connecting", false);
+  ws.onopen = () => setWsPill("WS Online", true);
+  ws.onclose = () => setWsPill("WS Offline", false);
+  ws.onerror = () => setWsPill("WS Error", false);
+  ws.onmessage = (ev) => {
+    try {
+      const msg = JSON.parse(ev.data);
+      if (msg.type === "STATE"){
+        state.heads = msg.heads || [];
+        state.selected = msg.selected || 0;
+        state.slow_controls = msg.slow_controls || {};
+        buildHeads();
+        renderPopup();
+        $("slowState").textContent = `Slow state: ${JSON.stringify(state.slow_controls)}`;
+        setEvent("received STATE");
+      } else if (msg.type === "SELECTED"){
+        state.selected = msg.selected || 0;
+        $("heads").value = String(state.selected);
+        setEvent(`head selected ${state.selected}`);
+      } else if (msg.type === "SLOW_APPLIED"){
+        state.slow_controls[msg.key] = msg.value;
+        $("slowState").textContent = `Slow state: ${JSON.stringify(state.slow_controls)}`;
+        renderPopup();
+        setEvent(`applied ${msg.key}=${msg.value}`);
+      }
+    } catch {
+      setEvent("invalid WS message");
+    }
+  };
+};
+
+$("heads").onchange = (e) => {
+  const idx = parseInt(e.target.value, 10) || 0;
+  send({ type: "SELECT_HEAD", index: idx });
+};
+
+$("touchMotorsOn").onclick = () => send({ type: "SET_SLOW_CONTROL", key: "motors_on", value: 1 });
+$("touchMotorsOff").onclick = () => send({ type: "SET_SLOW_CONTROL", key: "motors_on", value: 0 });
+$("touchGyroSend").onclick = () => {
+  const v = parseInt($("touchGyroValue").value, 10) || 0;
+  send({ type: "SET_SLOW_CONTROL", key: "gyro_heading_correction", value: v });
+  setEvent(`set gyro_heading_correction=${v}`);
+};
+
+$("touchToggleMode").onclick = () => {
+  if (activeColumn === null) return;
+  if (mode === "position") mode = "value";
+  else {
+    commitActiveValue();
+    mode = "position";
+  }
+  renderPopup();
+};
+
+$("touchClosePopup").onclick = () => closePopup();
+
+function init(){
+  $("wsurl").value = WS_DEFAULT;
+  buildTouchGyroSelect();
+  buildDock();
+  renderPopup();
+  processEncoderButtons();
+}
+
+init();
+</script>
+</body>
+</html>

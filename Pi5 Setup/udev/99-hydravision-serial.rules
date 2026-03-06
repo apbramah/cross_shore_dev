@@ -1,0 +1,6 @@
+# HydraVision kiosk: ensure serial/Teensy CDC (ttyACM) and USB-serial (ttyUSB) are accessible by group dialout.
+# Pi OS typically adds the admin user to dialout; mvp_bridge_adc.service runs as admin.
+# Install to /etc/udev/rules.d/99-hydravision-serial.rules
+
+KERNEL=="ttyACM[0-9]*", MODE="0660", GROUP="dialout"
+KERNEL=="ttyUSB[0-9]*", MODE="0660", GROUP="dialout"
