@@ -76,6 +76,7 @@ Source: `Pi5 Setup/systemd/*.service`.
 | Script | Purpose |
 |--------|---------|
 | `hydravision-kiosk-launch.sh` | Starts Firefox (or cage+Firefox) to controller UI. |
+| `hydravision-configure-ethernet.sh` | Applies static Ethernet config via NetworkManager. |
 | `hydravision-admin-unlock.sh` | Unlock kiosk with password (Ctrl+Alt+Shift+U). |
 | `hydravision-remove-lockdown.sh` | Remove lockdown profile. |
 | `hydravision-validate.sh` | Kiosk readiness check. |
@@ -184,6 +185,36 @@ To run without desktop-session autostart and minimize desktop flash:
 ```sh
 sudo KIOSK_MODE=cage bash "Pi5 Setup/install_pi5_setup.sh"
 sudo reboot
+```
+
+### Static Ethernet policy (fleet)
+
+Installer applies static Ethernet by default (`HYDRAVISION_ETH_ENABLE=1`) using NetworkManager:
+
+- Hostname pattern `HydraVision-00xx` maps to `192.168.60.1xx`
+- Example: `HydraVision-0002` -> `192.168.60.102`
+- Defaults:
+  - subnet base: `192.168.60`
+  - prefix: `/24`
+  - gateway: `192.168.60.1`
+  - DNS: `192.168.60.1`
+
+Override options in `/etc/default/hydravision-kiosk`:
+
+```sh
+HYDRAVISION_ETH_ENABLE=1
+HYDRAVISION_ETH_SUBNET_BASE=192.168.60
+HYDRAVISION_ETH_PREFIX=24
+HYDRAVISION_ETH_GATEWAY=192.168.60.1
+HYDRAVISION_ETH_DNS=192.168.60.1
+# optional fixed override:
+HYDRAVISION_ETH_STATIC_IP=192.168.60.102
+```
+
+To apply manually after install:
+
+```sh
+sudo /usr/local/bin/hydravision-configure-ethernet.sh
 ```
 
 Rollback to desktop-session mode:

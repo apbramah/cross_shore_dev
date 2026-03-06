@@ -96,6 +96,7 @@ install -m 755 "$SCRIPT_DIR/scripts/hydravision-validate.sh" "$BIN_DIR/hydravisi
 install -m 755 "$SCRIPT_DIR/scripts/hydravision-cage-launch.sh" "$BIN_DIR/hydravision-cage-launch.sh"
 install -m 755 "$SCRIPT_DIR/scripts/hydravision-splash-then-browser.sh" "$BIN_DIR/hydravision-splash-then-browser.sh"
 install -m 755 "$SCRIPT_DIR/scripts/hydravision-disable-cage.sh" "$BIN_DIR/hydravision-disable-cage.sh"
+install -m 755 "$SCRIPT_DIR/scripts/hydravision-configure-ethernet.sh" "$BIN_DIR/hydravision-configure-ethernet.sh"
 if [ ! -f "$KIOSK_ENV_FILE" ]; then
   install -m 640 "$SCRIPT_DIR/config/hydravision-kiosk.env" "$KIOSK_ENV_FILE"
 fi
@@ -153,6 +154,9 @@ else
   systemctl unmask getty@tty1.service || true
   systemctl unmask autovt@tty1.service || true
 fi
+
+echo "[extra] Applying static ethernet profile..."
+"/usr/local/bin/hydravision-configure-ethernet.sh" || echo "Static ethernet configuration failed; continuing."
 
 echo "Done. Reboot recommended."
 

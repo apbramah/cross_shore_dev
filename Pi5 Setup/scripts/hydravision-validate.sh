@@ -90,6 +90,7 @@ fi
 check_exists "/usr/local/bin/hydravision-kiosk-launch.sh"
 check_exists "/usr/local/bin/hydravision-cage-launch.sh"
 check_exists "/usr/local/bin/hydravision-splash-then-browser.sh"
+check_exists "/usr/local/bin/hydravision-configure-ethernet.sh"
 check_exists "/usr/local/bin/hydravision-admin-unlock.sh"
 check_exists "/usr/local/bin/hydravision-remove-lockdown.sh"
 check_exists "/etc/default/hydravision-kiosk"
@@ -127,6 +128,14 @@ if [ -f /etc/default/hydravision-kiosk ]; then
     pass "Unlock password appears configured in /etc/default/hydravision-kiosk"
   else
     fail "Unlock password variable missing in /etc/default/hydravision-kiosk"
+  fi
+fi
+
+if [ "${HYDRAVISION_ETH_ENABLE:-1}" = "1" ]; then
+  if ip -4 addr show | grep -q "192.168.60."; then
+    pass "Static ethernet appears configured in 192.168.60.0/24"
+  else
+    warn "No 192.168.60.x IPv4 address detected; static ethernet may not be applied yet."
   fi
 fi
 
