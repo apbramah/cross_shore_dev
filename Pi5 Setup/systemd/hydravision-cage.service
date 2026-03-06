@@ -1,7 +1,6 @@
 [Unit]
 Description=HydraVision single-app kiosk (cage + browser)
-After=systemd-user-sessions.service network-online.target mvp_bridge_adc.service mvp_slow_bridge.service plymouth-quit-wait.service
-Wants=network-online.target
+After=systemd-user-sessions.service mvp_bridge_adc.service mvp_slow_bridge.service
 Conflicts=getty@tty1.service
 
 [Service]

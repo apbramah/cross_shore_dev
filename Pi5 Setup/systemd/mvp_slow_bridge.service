@@ -1,7 +1,5 @@
 [Unit]
 Description=HydraVision MVP Slow Bridge (WebSocket slow control to UDP)
-After=network-online.target
-Wants=network-online.target
 
 [Service]
 Type=simple
