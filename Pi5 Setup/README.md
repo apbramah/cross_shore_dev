@@ -44,6 +44,8 @@ If your paths differ, edit:
 
 Source paths under this repo: `Pi5 Setup/plymouth/` (`.plymouth`, `.script`, `hydravision_boot.svg`).
 
+If `plymouth-plugin-script` is unavailable on the target OS, installer falls back to a non-branded Plymouth theme (`text` by default, configurable via `HYDRAVISION_PLYMOUTH_FALLBACK_THEME`).
+
 ### Boot configuration
 
 | Asset | Path | Notes |

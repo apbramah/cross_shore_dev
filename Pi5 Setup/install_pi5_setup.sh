@@ -18,6 +18,7 @@ LOGIND_DROPIN_DIR="/etc/systemd/logind.conf.d"
 FIREFOX_POLICY_DIR="/etc/firefox/policies"
 PLYMOUTH_SCRIPT_PLUGIN_AVAILABLE=0
 PLYMOUTH_THEME_APPLIED=0
+PLYMOUTH_FALLBACK_THEME="${HYDRAVISION_PLYMOUTH_FALLBACK_THEME:-text}"
 
 echo "[1/6] Ensuring Plymouth script plugin..."
 if command -v apt-get >/dev/null 2>&1; then
@@ -49,19 +50,32 @@ echo "[3/6] Updating boot flags..."
 bash "$SCRIPT_DIR/scripts/pi5_boot_patch.sh"
 
 echo "[4/6] Setting Plymouth default theme..."
-if [ "$PLYMOUTH_SCRIPT_PLUGIN_AVAILABLE" != "1" ]; then
-  echo "Skipping HydraVision plymouth activation because plymouth-plugin-script is unavailable."
-elif command -v plymouth-set-default-theme >/dev/null 2>&1; then
+if command -v plymouth-set-default-theme >/dev/null 2>&1; then
+  if [ "$PLYMOUTH_SCRIPT_PLUGIN_AVAILABLE" != "1" ]; then
+    echo "HydraVision script theme unavailable; applying non-branded fallback Plymouth theme."
+    if plymouth-set-default-theme "$PLYMOUTH_FALLBACK_THEME"; then
+      PLYMOUTH_THEME_APPLIED=1
+    elif plymouth-set-default-theme spinner; then
+      PLYMOUTH_THEME_APPLIED=1
+      echo "Fallback theme '$PLYMOUTH_FALLBACK_THEME' unavailable; using 'spinner'."
+    elif plymouth-set-default-theme text; then
+      PLYMOUTH_THEME_APPLIED=1
+      echo "Fallback theme '$PLYMOUTH_FALLBACK_THEME' unavailable; using 'text'."
+    else
+      echo "Could not set fallback Plymouth theme; continuing with system default."
+    fi
+  else
   if plymouth-set-default-theme "$THEME_NAME"; then
     PLYMOUTH_THEME_APPLIED=1
   else
     echo "Failed to set HydraVision plymouth theme; continuing with system default theme."
   fi
+  fi
 else
   echo "plymouth-set-default-theme not found, skipping Plymouth initramfs rebuild."
 fi
 
-if [ "$PLYMOUTH_THEME_APPLIED" = "1" ] && [ -f /etc/plymouth/plymouthd.conf ]; then
+if [ "$PLYMOUTH_THEME_APPLIED" = "1" ] && [ "$PLYMOUTH_SCRIPT_PLUGIN_AVAILABLE" = "1" ] && [ -f /etc/plymouth/plymouthd.conf ]; then
   cat >/etc/plymouth/plymouthd.conf <<EOF
 [Daemon]
 Theme=$THEME_NAME
