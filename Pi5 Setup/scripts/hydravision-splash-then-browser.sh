@@ -7,7 +7,7 @@ if [ -r /etc/default/hydravision-kiosk ]; then
 fi
 
 LOG="${HOME}/.cache/hydravision-kiosk.log"
-UI_URL="${HYDRAVISION_UI_URL:-file:///home/admin/Dev/cross_shore_dev/apps/controller/mvp_ui.html}"
+UI_URL="${HYDRAVISION_UI_URL:-file:///home/admin/Dev/cross_shore_dev/apps/controller/mvp_ui_3.html}"
 SPLASH_IMG="${HYDRAVISION_SPLASH_IMAGE:-/usr/share/hydravision/hydravision_boot.png}"
 SPLASH_HANDOFF_TIMEOUT_SECONDS="${HYDRAVISION_SPLASH_HANDOFF_TIMEOUT_SECONDS:-20}"
 SPLASH_HANDOFF_POLL_SECONDS="${HYDRAVISION_SPLASH_HANDOFF_POLL_SECONDS:-0.2}"

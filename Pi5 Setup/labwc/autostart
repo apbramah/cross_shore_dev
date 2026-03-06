@@ -18,6 +18,6 @@ else
     exit 1
   fi
   MOZ_ENABLE_WAYLAND=1 "$FIREFOX_BIN" --kiosk --private-window \
-    file:///home/admin/Dev/cross_shore_dev/apps/controller/mvp_ui.html >>"$LOG" 2>&1
+    file:///home/admin/Dev/cross_shore_dev/apps/controller/mvp_ui_3.html >>"$LOG" 2>&1
 fi
 

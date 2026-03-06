@@ -76,10 +76,11 @@ KIOSK_MODE="${HYDRAVISION_KIOSK_MODE:-desktop}"
 check_service_state "mvp_bridge_adc.service"
 check_service_state "mvp_slow_bridge.service"
 
+# mvp_bridge_adc is a Teensy CDC -> UDP path, not a TCP/WebSocket listener.
 if systemctl is-active mvp_bridge_adc.service >/dev/null 2>&1; then
-  check_port_listening "8765"
+  pass "mvp_bridge_adc.service active (fast path uses UDP, no TCP listener expected)"
 else
-  warn "mvp_bridge_adc.service not active; skipping port 8765 check."
+  warn "mvp_bridge_adc.service not active; fast-path validation incomplete."
 fi
 if systemctl is-active mvp_slow_bridge.service >/dev/null 2>&1; then
   check_port_listening "8766"

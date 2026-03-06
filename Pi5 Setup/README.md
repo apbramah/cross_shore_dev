@@ -6,7 +6,7 @@ This folder contains deployment assets for a locked-down Pi 5 kiosk: quiet boot 
 
 - Raspberry Pi OS Desktop (64-bit), Bookworm, on Pi 5.
 - Repo path: `/home/admin/Dev/cross_shore_dev`.
-- UI file: `/home/admin/Dev/cross_shore_dev/apps/controller/mvp_ui.html` (or `mvp_ui_3.html` as configured).
+- UI file: `/home/admin/Dev/cross_shore_dev/apps/controller/mvp_ui_3.html`.
 - Runtime user is `admin`.
 
 If your paths differ, edit:

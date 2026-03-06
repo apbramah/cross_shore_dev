@@ -6,7 +6,7 @@ if [ -r /etc/default/hydravision-kiosk ]; then
   . /etc/default/hydravision-kiosk
 fi
 
-UI_URL="${HYDRAVISION_UI_URL:-file:///home/admin/Dev/cross_shore_dev/apps/controller/mvp_ui.html}"
+UI_URL="${HYDRAVISION_UI_URL:-file:///home/admin/Dev/cross_shore_dev/apps/controller/mvp_ui_3.html}"
 WS_HOST="${HYDRAVISION_WS_HOST:-127.0.0.1}"
 WS_FAST_PORT="${HYDRAVISION_WS_FAST_PORT:-8765}"
 WS_SLOW_PORT="${HYDRAVISION_WS_SLOW_PORT:-8766}"
