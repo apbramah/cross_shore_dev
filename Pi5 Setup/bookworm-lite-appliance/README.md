@@ -18,6 +18,7 @@ It is intentionally independent from Plymouth.
 ## Required package list
 
 - `cage`
+- `chromium-browser`
 - `firefox-esr`
 - `network-manager`
 - `openssh-server`
@@ -35,6 +36,8 @@ It is intentionally independent from Plymouth.
 - `/usr/local/bin/controller_daemon`
 - `/usr/local/bin/wsbridge_daemon`
 - `/usr/local/bin/kiosk-browser`
+- `/usr/local/bin/hydravision-kiosk-browser-select`
+- `/etc/default/hydravision-appliance`
 
 ## Browser launch command (example)
 
@@ -43,6 +46,13 @@ It is intentionally independent from Plymouth.
 The launcher opens:
 `file:///opt/ui/boot.html` (black trampoline), then redirects to:
 `file:///opt/ui/mvp_ui_3.html`
+
+Default browser is Firefox. To test Chromium and roll back quickly:
+
+```bash
+sudo /usr/local/bin/hydravision-kiosk-browser-select chromium
+sudo /usr/local/bin/hydravision-kiosk-browser-select firefox
+```
 
 ## Install and enable
 

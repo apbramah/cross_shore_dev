@@ -10,6 +10,8 @@ WS_DIR="/opt/wsbridge"
 CTRL_BIN="/usr/local/bin/controller_daemon"
 WS_BIN="/usr/local/bin/wsbridge_daemon"
 KIOSK_BROWSER_BIN="/usr/local/bin/kiosk-browser"
+KIOSK_SELECT_BIN="/usr/local/bin/hydravision-kiosk-browser-select"
+APPLIANCE_ENV="/etc/default/hydravision-appliance"
 SYSTEMD_DIR="/etc/systemd/system"
 
 UI_SRC_HTML="${APP_ROOT}/apps/controller/mvp_ui_3.html"
@@ -25,6 +27,7 @@ echo "[1/8] Installing required packages..."
 apt-get update -y
 apt-get install -y \
   cage \
+  chromium-browser \
   firefox-esr \
   network-manager \
   openssh-server \
@@ -146,9 +149,35 @@ exec /usr/bin/python3 /opt/wsbridge/mvp_slow_bridge.py
 EOF
 chmod 755 "$WS_BIN"
 
+if [ ! -f "$APPLIANCE_ENV" ]; then
+  cat >"$APPLIANCE_ENV" <<'EOF'
+HYDRAVISION_KIOSK_BROWSER=firefox
+HYDRAVISION_ROTATION_OUTPUT=DSI-2
+HYDRAVISION_ROTATION_TRANSFORM=90
+HYDRAVISION_BROWSER_START_DELAY=0.25
+EOF
+fi
+chown root:root "$APPLIANCE_ENV"
+chmod 644 "$APPLIANCE_ENV"
+
 cat >"$KIOSK_BROWSER_BIN" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+
+if [ -r /etc/default/hydravision-appliance ]; then
+  # shellcheck disable=SC1091
+  . /etc/default/hydravision-appliance
+fi
+
+ROT_OUTPUT="${HYDRAVISION_ROTATION_OUTPUT:-DSI-2}"
+ROT_TRANSFORM="${HYDRAVISION_ROTATION_TRANSFORM:-90}"
+START_DELAY="${HYDRAVISION_BROWSER_START_DELAY:-0.25}"
+BROWSER_CHOICE="${HYDRAVISION_KIOSK_BROWSER:-firefox}"
+
+if command -v wlr-randr >/dev/null 2>&1; then
+  wlr-randr --output "$ROT_OUTPUT" --transform "$ROT_TRANSFORM" >/dev/null 2>&1 || true
+fi
+sleep "$START_DELAY"
 
 PROFILE="/var/lib/kiosk/firefox"
 mkdir -p "$PROFILE"
@@ -163,17 +192,91 @@ user_pref("browser.aboutConfig.showWarning", false);
 user_pref("toolkit.telemetry.reportingpolicy.firstRun", false);
 user_pref("ui.systemUsesDarkTheme", 1);
 user_pref("browser.display.background_color", "#000000");
+user_pref("app.update.auto", false);
+user_pref("datareporting.healthreport.uploadEnabled", false);
+user_pref("browser.startup.page", 0);
+user_pref("browser.tabs.drawInTitlebar", false);
 JS
 
-exec env MOZ_ENABLE_WAYLAND=1 /usr/bin/firefox-esr \
-  --kiosk \
-  --new-instance \
-  --no-remote \
-  --profile "$PROFILE" \
-  "file:///opt/ui/boot.html"
+case "$BROWSER_CHOICE" in
+  chromium)
+    exec /usr/bin/chromium-browser \
+      --kiosk \
+      --no-first-run \
+      --noerrdialogs \
+      --disable-infobars \
+      --disable-session-crashed-bubble \
+      --incognito \
+      --ozone-platform=wayland \
+      "file:///opt/ui/boot.html"
+    ;;
+  firefox|*)
+    exec env MOZ_ENABLE_WAYLAND=1 /usr/bin/firefox-esr \
+      --kiosk \
+      --new-instance \
+      --no-remote \
+      --private-window \
+      --profile "$PROFILE" \
+      "file:///opt/ui/boot.html"
+    ;;
+esac
 EOF
 chmod 755 "$KIOSK_BROWSER_BIN"
+
+cat >"$KIOSK_SELECT_BIN" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ $# -lt 1 ]; then
+  echo "Usage: $0 <firefox|chromium>"
+  exit 1
+fi
+
+choice="$1"
+case "$choice" in
+  firefox|chromium) ;;
+  *)
+    echo "Invalid browser choice: $choice"
+    exit 1
+    ;;
+esac
+
+env_file="/etc/default/hydravision-appliance"
+if [ ! -f "$env_file" ]; then
+  cat >"$env_file" <<'BASE'
+HYDRAVISION_KIOSK_BROWSER=firefox
+HYDRAVISION_ROTATION_OUTPUT=DSI-2
+HYDRAVISION_ROTATION_TRANSFORM=90
+HYDRAVISION_BROWSER_START_DELAY=0.25
+BASE
+fi
+
+if grep -q '^HYDRAVISION_KIOSK_BROWSER=' "$env_file"; then
+  sed -i "s/^HYDRAVISION_KIOSK_BROWSER=.*/HYDRAVISION_KIOSK_BROWSER=${choice}/" "$env_file"
+else
+  printf '\nHYDRAVISION_KIOSK_BROWSER=%s\n' "$choice" >>"$env_file"
+fi
+
+echo "Browser set to: $choice"
+echo "Restarting kiosk.service..."
+systemctl restart kiosk.service
+EOF
+chmod 755 "$KIOSK_SELECT_BIN"
+
 chown -R "$KIOSK_USER:$KIOSK_USER" "$WS_DIR"
+
+install -d /etc/firefox/policies
+cat >/etc/firefox/policies/policies.json <<'EOF'
+{
+  "policies": {
+    "DisableTelemetry": true,
+    "DisableFirefoxStudies": true,
+    "DisableAppUpdate": true,
+    "DontCheckDefaultBrowser": true,
+    "DisplayMenuBar": "never"
+  }
+}
+EOF
 
 echo "[6/8] Installing systemd unit files..."
 install -m 644 "$SCRIPT_DIR/systemd/controller.service" "$SYSTEMD_DIR/controller.service"
