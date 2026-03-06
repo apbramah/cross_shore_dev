@@ -16,34 +16,28 @@ KIOSK_MODE="${KIOSK_MODE:-desktop}"
 KIOSK_ENV_FILE="/etc/default/hydravision-kiosk"
 LOGIND_DROPIN_DIR="/etc/systemd/logind.conf.d"
 FIREFOX_POLICY_DIR="/etc/firefox/policies"
-PLYMOUTH_SCRIPT_PLUGIN_AVAILABLE=0
 PLYMOUTH_THEME_APPLIED=0
+PLYMOUTH_SELECTED_THEME=""
 PLYMOUTH_FALLBACK_THEME="${HYDRAVISION_PLYMOUTH_FALLBACK_THEME:-text}"
 
-echo "[1/6] Ensuring Plymouth script plugin..."
+echo "[1/6] Ensuring base packages..."
 if command -v apt-get >/dev/null 2>&1; then
   apt-get update -y
-  if apt-cache show plymouth-plugin-script >/dev/null 2>&1; then
-    PLYMOUTH_SCRIPT_PLUGIN_AVAILABLE=1
-    apt-get install -y plymouth plymouth-themes plymouth-plugin-script
-  else
-    echo "plymouth-plugin-script not available on this OS; continuing with base plymouth."
-    apt-get install -y plymouth plymouth-themes
-  fi
+  apt-get install -y plymouth plymouth-themes
   apt-get install -y firefox-esr zenity openssh-server python3-websockets python3-serial imv librsvg2-bin wlr-randr
   if [ "$KIOSK_MODE" = "cage" ]; then
     apt-get install -y cage
   fi
 fi
 
-echo "[2/6] Installing Plymouth theme..."
+echo "[2/6] Installing non-script Plymouth theme..."
 install -d "$PLYMOUTH_DIR"
 cp -a "$SCRIPT_DIR/plymouth/hydravision.plymouth" "$PLYMOUTH_DIR/"
-cp -a "$SCRIPT_DIR/plymouth/hydravision.script" "$PLYMOUTH_DIR/"
 cp -a "$SCRIPT_DIR/plymouth/hydravision_boot.svg" "$PLYMOUTH_DIR/"
 install -d "/usr/share/hydravision"
 if command -v rsvg-convert >/dev/null 2>&1; then
   rsvg-convert -w 1920 -h 1080 "$PLYMOUTH_DIR/hydravision_boot.svg" -o "/usr/share/hydravision/hydravision_boot.png" || true
+  rsvg-convert -w 1920 -h 1080 "$PLYMOUTH_DIR/hydravision_boot.svg" -o "$PLYMOUTH_DIR/watermark.png" || true
 fi
 
 echo "[3/6] Updating boot flags..."
@@ -51,34 +45,34 @@ bash "$SCRIPT_DIR/scripts/pi5_boot_patch.sh"
 
 echo "[4/6] Setting Plymouth default theme..."
 if command -v plymouth-set-default-theme >/dev/null 2>&1; then
-  if [ "$PLYMOUTH_SCRIPT_PLUGIN_AVAILABLE" != "1" ]; then
-    echo "HydraVision script theme unavailable; applying non-branded fallback Plymouth theme."
+  if plymouth-set-default-theme "$THEME_NAME"; then
+    PLYMOUTH_THEME_APPLIED=1
+    PLYMOUTH_SELECTED_THEME="$THEME_NAME"
+  else
+    echo "HydraVision theme activation failed; applying non-branded fallback Plymouth theme."
     if plymouth-set-default-theme "$PLYMOUTH_FALLBACK_THEME"; then
       PLYMOUTH_THEME_APPLIED=1
+      PLYMOUTH_SELECTED_THEME="$PLYMOUTH_FALLBACK_THEME"
     elif plymouth-set-default-theme spinner; then
       PLYMOUTH_THEME_APPLIED=1
+      PLYMOUTH_SELECTED_THEME="spinner"
       echo "Fallback theme '$PLYMOUTH_FALLBACK_THEME' unavailable; using 'spinner'."
     elif plymouth-set-default-theme text; then
       PLYMOUTH_THEME_APPLIED=1
+      PLYMOUTH_SELECTED_THEME="text"
       echo "Fallback theme '$PLYMOUTH_FALLBACK_THEME' unavailable; using 'text'."
     else
       echo "Could not set fallback Plymouth theme; continuing with system default."
     fi
-  else
-  if plymouth-set-default-theme "$THEME_NAME"; then
-    PLYMOUTH_THEME_APPLIED=1
-  else
-    echo "Failed to set HydraVision plymouth theme; continuing with system default theme."
-  fi
   fi
 else
   echo "plymouth-set-default-theme not found, skipping Plymouth initramfs rebuild."
 fi
 
-if [ "$PLYMOUTH_THEME_APPLIED" = "1" ] && [ "$PLYMOUTH_SCRIPT_PLUGIN_AVAILABLE" = "1" ] && [ -f /etc/plymouth/plymouthd.conf ]; then
+if [ "$PLYMOUTH_THEME_APPLIED" = "1" ] && [ -n "$PLYMOUTH_SELECTED_THEME" ] && [ -f /etc/plymouth/plymouthd.conf ]; then
   cat >/etc/plymouth/plymouthd.conf <<EOF
 [Daemon]
-Theme=$THEME_NAME
+Theme=$PLYMOUTH_SELECTED_THEME
 EOF
 fi
 

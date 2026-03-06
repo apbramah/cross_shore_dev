@@ -39,12 +39,13 @@ If your paths differ, edit:
 |-------|----------------|
 | Theme dir | `/usr/share/plymouth/themes/hydravision` |
 | Theme descriptor | `/usr/share/plymouth/themes/hydravision/hydravision.plymouth` |
-| Script plugin | `/usr/share/plymouth/themes/hydravision/hydravision.script` |
+| Watermark image | `/usr/share/plymouth/themes/hydravision/watermark.png` |
 | Splash image | `/usr/share/plymouth/themes/hydravision/hydravision_boot.svg` |
 
-Source paths under this repo: `Pi5 Setup/plymouth/` (`.plymouth`, `.script`, `hydravision_boot.svg`).
+Source paths under this repo: `Pi5 Setup/plymouth/` (`.plymouth`, `hydravision_boot.svg`).
 
-If `plymouth-plugin-script` is unavailable on the target OS, installer falls back to a non-branded Plymouth theme (`text` by default, configurable via `HYDRAVISION_PLYMOUTH_FALLBACK_THEME`).
+HydraVision uses a non-script Plymouth theme path on Bookworm-class targets, so it does not depend on `plymouth-plugin-script`.
+If HydraVision activation fails, installer falls back to a non-branded Plymouth theme (`text` by default, configurable via `HYDRAVISION_PLYMOUTH_FALLBACK_THEME`).
 
 ### Boot configuration
 

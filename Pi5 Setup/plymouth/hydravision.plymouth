@@ -1,9 +1,17 @@
 [Plymouth Theme]
 Name=HydraVision
-Description=HydraVision minimal text splash
-ModuleName=script
+Description=HydraVision non-script splash
+ModuleName=two-step
 
-[script]
+[two-step]
 ImageDir=/usr/share/plymouth/themes/hydravision
-ScriptFile=/usr/share/plymouth/themes/hydravision/hydravision.script
+BackgroundStartColor=0x000000
+BackgroundEndColor=0x000000
+HorizontalAlignment=0.5
+VerticalAlignment=0.82
+WatermarkHorizontalAlignment=0.5
+WatermarkVerticalAlignment=0.5
+Transition=none
+TransitionDuration=0.0
+MessageBelowAnimation=false
 
