@@ -1,7 +1,7 @@
 [Unit]
 Description=HydraVision Kiosk UI (cage + browser)
-After=systemd-user-sessions.service wsbridge.service boot-splash-lock.service
-Requires=wsbridge.service
+After=systemd-user-sessions.service boot-splash-lock.service
+Wants=wsbridge.service
 Conflicts=getty@tty1.service
 
 [Service]

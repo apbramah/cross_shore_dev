@@ -28,6 +28,7 @@ It is intentionally independent from Plymouth.
 
 ## Directory layout
 
+- `/opt/ui/boot.html`
 - `/opt/ui/mvp_ui_3.html`
 - `/opt/ui/mvp_ui_3_layout.js`
 - `/opt/wsbridge/`
@@ -40,6 +41,7 @@ It is intentionally independent from Plymouth.
 `cage -- /usr/local/bin/kiosk-browser`
 
 The launcher opens:
+`file:///opt/ui/boot.html` (black trampoline), then redirects to:
 `file:///opt/ui/mvp_ui_3.html`
 
 ## Install and enable
@@ -57,7 +59,7 @@ Minimal deterministic ordering:
 
 - `controller.service`
 - `wsbridge.service` (After=controller.service)
-- `kiosk.service` (After/Requires=wsbridge.service)
+- `kiosk.service` (After=systemd-user-sessions.service, Wants=wsbridge.service)
 
 No dependency on `network-online.target`.
 
@@ -71,6 +73,5 @@ Target critical chain shape:
 
 - `multi-user.target`
   - `kiosk.service`
-    - `wsbridge.service`
 
 `controller.service` may still run in parallel with non-critical units depending on system load and ordering.

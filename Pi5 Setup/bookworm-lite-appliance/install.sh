@@ -96,6 +96,33 @@ fi
 
 install -m 644 "$UI_SRC_HTML" "$UI_DIR/mvp_ui_3.html"
 install -m 644 "$UI_SRC_LAYOUT" "$UI_DIR/mvp_ui_3_layout.js"
+cat >"$UI_DIR/boot.html" <<'EOF'
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      overflow: hidden;
+    }
+  </style>
+</head>
+<body>
+  <script>
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        location.replace("file:///opt/ui/mvp_ui_3.html");
+      });
+    });
+  </script>
+</body>
+</html>
+EOF
 
 install -m 644 "$WS_SRC_BRIDGE" "$WS_DIR/mvp_slow_bridge.py"
 install -m 644 "$WS_SRC_PROTOCOL" "$WS_DIR/mvp_protocol.py"
@@ -143,7 +170,7 @@ exec env MOZ_ENABLE_WAYLAND=1 /usr/bin/firefox-esr \
   --new-instance \
   --no-remote \
   --profile "$PROFILE" \
-  "file:///opt/ui/mvp_ui_3.html"
+  "file:///opt/ui/boot.html"
 EOF
 chmod 755 "$KIOSK_BROWSER_BIN"
 chown -R "$KIOSK_USER:$KIOSK_USER" "$WS_DIR"
