@@ -81,8 +81,18 @@ def send_udp(packet: bytes, head: Dict[str, Any]) -> None:
     send_udp_to(ip, port, packet)
 
 
-def send_udp_to(ip: str, port: int, packet: bytes) -> None:
-    _udp_sock.sendto(packet, (ip, int(port)))
+def send_udp_to(ip: str, port: int, packet: bytes) -> bool:
+    """
+    Best-effort UDP send.
+    Returns True on success; False on transient network/socket failure.
+    """
+    try:
+        _udp_sock.sendto(packet, (ip, int(port)))
+        return True
+    except OSError as e:
+        # Keep callers alive during transient route/link startup races.
+        print(f"UDP send failed to {ip}:{int(port)}: {e}")
+        return False
 
 
 def build_udp_packet(axes: Dict[str, Any], control_state: Dict[str, Any]) -> bytes:

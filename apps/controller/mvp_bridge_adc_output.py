@@ -49,7 +49,10 @@ def send_fast(axes: dict[str, Any], host: str, port: int, sock: socket.socket | 
             _fast_seq = (_fast_seq + 1) & 0xFFFF
             payload = _mvp_protocol.build_fast_packet_v2(axes, _default_control_state, _fast_seq)
             if payload:
-                sock.sendto(payload, (host, port))
+                try:
+                    sock.sendto(payload, (host, port))
+                except OSError:
+                    return sock
             return sock
         except Exception:
             pass
@@ -57,13 +60,19 @@ def send_fast(axes: dict[str, Any], host: str, port: int, sock: socket.socket | 
         try:
             payload = _mvp_protocol.build_udp_packet(axes, _default_control_state)
             if payload:
-                sock.sendto(payload, (host, port))
+                try:
+                    sock.sendto(payload, (host, port))
+                except OSError:
+                    return sock
             return sock
         except Exception:
             pass
     # Fallback: deterministic JSON for integration testing
     payload = json.dumps({"t": time.monotonic(), "axes": axes}).encode("utf-8")
-    sock.sendto(payload, (host, port))
+    try:
+        sock.sendto(payload, (host, port))
+    except OSError:
+        return sock
     return sock
 
 
@@ -75,7 +84,10 @@ def send_slow(axes: dict[str, Any], host: str, port: int, sock: socket.socket | 
         try:
             payload = _mvp_protocol.build_slow_packet(axes)
             if payload:
-                sock.sendto(payload, (host, port))
+                try:
+                    sock.sendto(payload, (host, port))
+                except OSError:
+                    return sock
             return sock
         except Exception:
             pass
