@@ -54,6 +54,25 @@ sudo /usr/local/bin/hydravision-kiosk-browser-select chromium
 sudo /usr/local/bin/hydravision-kiosk-browser-select firefox
 ```
 
+## Ethernet automation
+
+Installer configures static ethernet by default while leaving Wi-Fi available for SSH fallback.
+
+- Policy: hostname suffix `00xx` -> `192.168.60.1xx`
+- Example: `HydraVision-0003` -> `192.168.60.103`
+
+Config in `/etc/default/hydravision-appliance`:
+
+```bash
+HYDRAVISION_ETH_ENABLE=1
+HYDRAVISION_ETH_SUBNET_BASE=192.168.60
+HYDRAVISION_ETH_PREFIX=24
+HYDRAVISION_ETH_GATEWAY=192.168.60.1
+HYDRAVISION_ETH_DNS=192.168.60.1
+# optional fixed override:
+# HYDRAVISION_ETH_STATIC_IP=192.168.60.103
+```
+
 ## Install and enable
 
 From repo root on Pi:

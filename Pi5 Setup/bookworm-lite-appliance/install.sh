@@ -155,6 +155,13 @@ HYDRAVISION_KIOSK_BROWSER=firefox
 HYDRAVISION_ROTATION_OUTPUT=DSI-2
 HYDRAVISION_ROTATION_TRANSFORM=90
 HYDRAVISION_BROWSER_START_DELAY=0.25
+HYDRAVISION_ETH_ENABLE=1
+HYDRAVISION_ETH_SUBNET_BASE=192.168.60
+HYDRAVISION_ETH_PREFIX=24
+HYDRAVISION_ETH_GATEWAY=192.168.60.1
+HYDRAVISION_ETH_DNS=192.168.60.1
+# Optional override:
+# HYDRAVISION_ETH_STATIC_IP=192.168.60.103
 EOF
 fi
 chown root:root "$APPLIANCE_ENV"
@@ -305,5 +312,69 @@ systemctl enable --now boot-splash-lock.service
 systemctl enable --now controller.service
 systemctl enable --now wsbridge.service
 systemctl enable --now kiosk.service
+
+echo "[extra] Applying static ethernet profile (non-blocking)..."
+bash -c '
+set -euo pipefail
+if [ ! -r /etc/default/hydravision-appliance ]; then
+  exit 0
+fi
+. /etc/default/hydravision-appliance
+if [ "${HYDRAVISION_ETH_ENABLE:-1}" != "1" ]; then
+  echo "Ethernet automation disabled."
+  exit 0
+fi
+
+SUBNET="${HYDRAVISION_ETH_SUBNET_BASE:-192.168.60}"
+PREFIX="${HYDRAVISION_ETH_PREFIX:-24}"
+GATEWAY="${HYDRAVISION_ETH_GATEWAY:-192.168.60.1}"
+DNS="${HYDRAVISION_ETH_DNS:-192.168.60.1}"
+STATIC_IP="${HYDRAVISION_ETH_STATIC_IP:-}"
+
+if [ -z "$STATIC_IP" ]; then
+  host_name="$(hostnamectl --static 2>/dev/null || hostname)"
+  if [[ "$host_name" =~ ([0-9]+)$ ]]; then
+    suffix_all="${BASH_REMATCH[1]}"
+    suffix_two=$((10#${suffix_all} % 100))
+    if [ "$suffix_two" -eq 0 ]; then
+      suffix_two=1
+    fi
+    last_octet=$((100 + suffix_two))
+    STATIC_IP="${SUBNET}.${last_octet}"
+  else
+    STATIC_IP="${SUBNET}.101"
+  fi
+fi
+
+CONN_NAME="$(
+  nmcli -t -f NAME,TYPE connection show \
+    | awk -F: '"'"'$2=="802-3-ethernet"{print $1; exit}'"'"'
+)"
+if [ -z "$CONN_NAME" ]; then
+  IFACE="$(
+    nmcli -t -f DEVICE,TYPE device status \
+      | awk -F: '"'"'$2=="ethernet"{print $1; exit}'"'"'
+  )"
+  if [ -n "$IFACE" ]; then
+    CONN_NAME="Wired connection 1"
+    nmcli connection add type ethernet ifname "$IFACE" con-name "$CONN_NAME" || true
+  fi
+fi
+
+if [ -z "$CONN_NAME" ]; then
+  echo "No ethernet connection profile found; skipping static ethernet setup."
+  exit 0
+fi
+
+echo "Configuring $CONN_NAME => ${STATIC_IP}/${PREFIX} gw ${GATEWAY}"
+nmcli connection modify "$CONN_NAME" \
+  ipv4.method manual \
+  ipv4.addresses "${STATIC_IP}/${PREFIX}" \
+  ipv4.gateway "$GATEWAY" \
+  ipv4.dns "$DNS" \
+  ipv6.method ignore \
+  connection.autoconnect yes
+nmcli connection up "$CONN_NAME" || true
+' || echo "Static ethernet setup failed; continuing."
 
 echo "Install complete. Reboot recommended."
