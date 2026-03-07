@@ -47,7 +47,7 @@ The launcher opens:
 `file:///opt/ui/boot.html` (black trampoline), then redirects to:
 `file:///opt/ui/mvp_ui_3.html`
 
-Default browser is Chromium. To switch browser and roll back quickly:
+Installer enforces Chromium as default on each install run. To switch browser and roll back quickly:
 
 ```bash
 sudo /usr/local/bin/hydravision-kiosk-browser-select chromium

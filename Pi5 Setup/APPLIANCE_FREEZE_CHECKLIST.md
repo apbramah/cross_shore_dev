@@ -40,6 +40,7 @@ sudo reboot
 ## Browser Default
 
 Chromium is the installer default for fresh appliance installs.
+Installer enforces Chromium on each install run.
 Only run selector if you need to switch:
 
 ```bash
