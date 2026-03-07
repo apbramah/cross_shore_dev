@@ -5,8 +5,8 @@ Baseline checklist for reproducing the validated Bookworm Lite appliance setup o
 ## Baseline Revision
 
 - **Branch:** `mvp-lite`
-- **Commit:** `90f0623` (minimum browser-selector baseline)
-- Includes: appliance profile, Chromium/Firefox browser selector, rollback helper.
+- **Commit:** `origin/mvp-lite` (current baseline)
+- Includes: appliance profile, Chromium default browser seed, browser selector, rollback helper.
 
 ## Fresh Pi Prep
 
@@ -37,7 +37,10 @@ sudo bash "Pi5 Setup/bookworm-lite-appliance/install.sh"
 sudo reboot
 ```
 
-## Set Chromium Default (if required)
+## Browser Default
+
+Chromium is the installer default for fresh appliance installs.
+Only run selector if you need to switch:
 
 ```bash
 sudo /usr/local/bin/hydravision-kiosk-browser-select chromium
