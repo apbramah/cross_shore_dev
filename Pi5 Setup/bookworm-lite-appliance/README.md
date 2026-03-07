@@ -78,9 +78,20 @@ HYDRAVISION_ETH_DNS=192.168.60.1
 From repo root on Pi:
 
 ```bash
+git fsck --full
 sudo bash "Pi5 Setup/bookworm-lite-appliance/install.sh"
 sudo reboot
 ```
+
+If `git fsck` reports corrupt objects, reclone before running installer.
+
+## Recovery notes
+
+- If `kiosk.service`, `controller.service`, or `wsbridge.service` appears masked, run:
+  - `sudo systemctl unmask controller.service wsbridge.service kiosk.service`
+- If `/etc/systemd/system/kiosk.service` (or controller/wsbridge) is an empty file or symlink to `/dev/null`, remove it and rerun installer:
+  - `sudo rm -f /etc/systemd/system/kiosk.service /etc/systemd/system/controller.service /etc/systemd/system/wsbridge.service`
+- Installer now cleans stale unit overrides and fails fast if canonical unit files are not loadable.
 
 ## Expected systemd dependency graph
 

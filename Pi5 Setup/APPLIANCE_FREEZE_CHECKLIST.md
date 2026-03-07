@@ -25,7 +25,19 @@ Baseline checklist for reproducing the validated Bookworm Lite appliance setup o
 
 ```bash
 cd "$HOME/cross_shore_dev"
+git fsck --full
 git fetch origin
+git checkout mvp-lite
+git reset --hard origin/mvp-lite
+```
+
+If `git fsck` reports corrupt objects, stop and reclone before install:
+
+```bash
+cd "$HOME"
+mv cross_shore_dev "cross_shore_dev_corrupt_$(date +%Y%m%d_%H%M%S)"
+git clone https://github.com/apbramah/cross_shore_dev.git
+cd cross_shore_dev
 git checkout mvp-lite
 git reset --hard origin/mvp-lite
 ```
@@ -52,6 +64,14 @@ sudo /usr/local/bin/hydravision-kiosk-browser-select chromium
 ```bash
 systemctl status controller.service wsbridge.service kiosk.service --no-pager -l
 systemd-analyze critical-chain kiosk.service
+```
+
+If any of the three services show `masked`, clear stale local state and reinstall:
+
+```bash
+sudo systemctl unmask controller.service wsbridge.service kiosk.service
+sudo rm -f /etc/systemd/system/controller.service /etc/systemd/system/wsbridge.service /etc/systemd/system/kiosk.service
+sudo bash "Pi5 Setup/bookworm-lite-appliance/install.sh"
 ```
 
 ## Verify Persistent Appliance Config

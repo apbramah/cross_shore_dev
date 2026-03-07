@@ -23,6 +23,22 @@ SEL_HEAD_SRC="${APP_ROOT}/apps/controller/mvp_selected_head.json"
 SLOW_STATE_SRC="${APP_ROOT}/apps/controller/mvp_slow_state.json"
 CTRL_SRC="${APP_ROOT}/apps/controller/mvp_bridge_adc.py"
 
+cleanup_stale_unit_override() {
+  local unit_name="$1"
+  local unit_path="/etc/systemd/system/${unit_name}"
+  if [ -L "$unit_path" ]; then
+    local target
+    target="$(readlink "$unit_path" || true)"
+    if [ "$target" = "/dev/null" ]; then
+      echo "Removing masked unit override: ${unit_path} -> /dev/null"
+      rm -f "$unit_path"
+    fi
+  elif [ -f "$unit_path" ] && [ ! -s "$unit_path" ]; then
+    echo "Removing empty unit override: ${unit_path}"
+    rm -f "$unit_path"
+  fi
+}
+
 echo "[1/8] Installing required packages..."
 apt-get update -y
 apt-get install -y \
@@ -291,12 +307,22 @@ cat >/etc/firefox/policies/policies.json <<'EOF'
 EOF
 
 echo "[6/8] Installing systemd unit files..."
+cleanup_stale_unit_override controller.service
+cleanup_stale_unit_override wsbridge.service
+cleanup_stale_unit_override kiosk.service
 install -m 644 "$SCRIPT_DIR/systemd/controller.service" "$SYSTEMD_DIR/controller.service"
 install -m 644 "$SCRIPT_DIR/systemd/wsbridge.service" "$SYSTEMD_DIR/wsbridge.service"
 install -m 644 "$SCRIPT_DIR/systemd/kiosk.service" "$SYSTEMD_DIR/kiosk.service"
 install -m 644 "$SCRIPT_DIR/systemd/boot-splash-lock.service" "$SYSTEMD_DIR/boot-splash-lock.service"
 
 systemctl daemon-reload
+for unit in controller.service wsbridge.service kiosk.service boot-splash-lock.service; do
+  fragment_path="$(systemctl show -p FragmentPath --value "$unit" 2>/dev/null || true)"
+  if [ -z "$fragment_path" ] || [ ! -f "$fragment_path" ]; then
+    echo "ERROR: Unit ${unit} is not loadable after install (FragmentPath='${fragment_path}')."
+    exit 1
+  fi
+done
 
 echo "[7/8] Applying appliance boot target and service policy..."
 systemctl set-default multi-user.target
@@ -309,6 +335,7 @@ systemctl disable --now NetworkManager-wait-online.service 2>/dev/null || true
 
 systemctl disable --now getty@tty1.service 2>/dev/null || true
 systemctl mask getty@tty1.service autovt@tty1.service || true
+systemctl unmask controller.service wsbridge.service kiosk.service || true
 
 echo "[8/8] Enabling required services..."
 systemctl enable --now NetworkManager.service
