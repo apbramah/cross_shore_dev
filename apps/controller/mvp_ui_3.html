@@ -243,6 +243,7 @@ let inputGroupLastActionMs = Array(5).fill(0);
 let inputGroupLastBtn = Array(5).fill(-1);
 let encoderTestValue = Array(5).fill(0);
 let inputFilterDefaultsLoaded = false;
+let slotScaleState = {};
 
 function $(id){ return document.getElementById(id); }
 function send(obj){ if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj)); }
@@ -292,6 +293,49 @@ function applyEncoderTestValue(colIdx, kind){
 function getColumn(i){ return LAYOUT.columns[i] || { id:`C${i+1}`, title:`Column ${i+1}`, positions:[] }; }
 function getPosition(c, p){ const col = getColumn(c); return col.positions[p] || { id:`C${c+1}P${p+1}`, label:"Spare", commandKey:null, values:[] }; }
 function isHighResSlot(pos){ return !!(pos && pos.high_res === true); }
+function slotScaleStep(pos){ return isHighResSlot(pos) ? 0.1 : 1.0; }
+function slotScaleMin(_pos){ return 0.0; }
+function slotScaleMax(_pos){ return 10.0; }
+function slotValues(pos){ return (pos && Array.isArray(pos.values)) ? pos.values : []; }
+function slotIsTextValue(pos){ return slotValues(pos).some(v => typeof v.value === "string"); }
+function slotWrapEnabled(pos){ return slotIsTextValue(pos); }
+function valueIndexForSlot(pos, raw){
+  const vals = slotValues(pos);
+  if (!vals.length) return 0;
+  let idx = vals.findIndex(v => String(v.value) === String(raw));
+  if (idx < 0) idx = 0;
+  return idx;
+}
+function scaleValueForSlot(pos, raw){
+  const vals = slotValues(pos);
+  if (!vals.length) return 0;
+  if (vals.length === 1) return 0;
+  const idx = valueIndexForSlot(pos, raw);
+  return (idx / (vals.length - 1)) * 10.0;
+}
+function rawValueFromScale(pos, scaled){
+  const vals = slotValues(pos);
+  if (!vals.length) return null;
+  if (vals.length === 1) return vals[0].value;
+  const clamped = Math.max(slotScaleMin(pos), Math.min(slotScaleMax(pos), Number(scaled) || 0));
+  const idx = Math.round((clamped / 10.0) * (vals.length - 1));
+  return vals[Math.max(0, Math.min(vals.length - 1, idx))].value;
+}
+function nextScaledValue(pos, currentScaled, dir){
+  const step = slotScaleStep(pos);
+  const min = slotScaleMin(pos);
+  const max = slotScaleMax(pos);
+  let next = Number(currentScaled) + (dir * step);
+  if (slotWrapEnabled(pos)){
+    if (next > max) next = min;
+    if (next < min) next = max;
+  } else {
+    if (next > max) next = max;
+    if (next < min) next = min;
+  }
+  if (isHighResSlot(pos)) return Math.round(next * 10) / 10;
+  return Math.round(next);
+}
 
 function getSlotValue(pos){
   if (!pos || !pos.commandKey) return null;
@@ -314,6 +358,11 @@ function valueToLabel(pos, raw){
   const vals = pos.values || [];
   const hit = vals.find(v => String(v.value) === String(raw));
   return hit ? hit.label : (raw === null ? "-" : String(raw));
+}
+
+function scaleLabelForSlot(pos, raw){
+  const scaled = scaleValueForSlot(pos, raw);
+  return isHighResSlot(pos) ? scaled.toFixed(1) : String(Math.round(scaled));
 }
 
 function buildHeads(){
@@ -373,7 +422,8 @@ function renderPopup(){
   const slot = getPosition(activeColumn, activePos);
   const raw = getSlotValue(slot);
   $("activeSlotState").textContent = `Active slot: ${slot.id} (${slot.label || "Spare"})`;
-  $("activeValueState").textContent = `Active value: ${valueToLabel(slot, raw)} (${raw === null ? "-" : raw})`;
+  const scaleStr = (raw === null || !slotValues(slot).length) ? "-" : scaleLabelForSlot(slot, raw);
+  $("activeValueState").textContent = `Active value: ${valueToLabel(slot, raw)} (${raw === null ? "-" : raw}) | scale:${scaleStr}`;
   $("encoderState").textContent = `Encoder mode: ${mode}${isHighResSlot(slot) ? " (high-res)" : ""}`;
 }
 
@@ -404,13 +454,13 @@ function cycleValue(dir){
   const slot = getPosition(activeColumn, p);
   if (!slot.commandKey || !slot.values?.length) return;
   const vals = slot.values;
-  let idx = vals.findIndex(v => String(v.value) === String(getSlotValue(slot)));
-  if (idx < 0) idx = 0;
-  idx += dir;
-  if (idx < 0) idx = 0;
-  if (idx >= vals.length) idx = vals.length - 1;
+  const currentRaw = getSlotValue(slot);
+  const currentScaled = (slotScaleState[slot.id] !== undefined) ? slotScaleState[slot.id] : scaleValueForSlot(slot, currentRaw);
+  const nextScaled = nextScaledValue(slot, currentScaled, dir);
+  slotScaleState[slot.id] = nextScaled;
+  const nextRaw = rawValueFromScale(slot, nextScaled);
   if (slot.commandKey.startsWith("shape_")) {
-    const v = vals[idx].value;
+    const v = nextRaw;
     if (slot.commandKey === "shape_expo") state.shaping.expo = v;
     else if (slot.commandKey === "shape_top_speed") state.shaping.top_speed = v;
     else if (slot.commandKey === "shape_invert_yaw") state.shaping.invert.yaw = !!v;
@@ -421,7 +471,7 @@ function cycleValue(dir){
     else if (slot.commandKey === "shape_deadband_roll") state.shaping.deadband.roll = Number(v) || 0;
     else if (slot.commandKey === "shape_deadband_zoom") state.shaping.deadband.zoom = Number(v) || 0;
   } else {
-    state.slow_controls[slot.commandKey] = vals[idx].value;
+    state.slow_controls[slot.commandKey] = nextRaw;
   }
   renderPopup();
 }
