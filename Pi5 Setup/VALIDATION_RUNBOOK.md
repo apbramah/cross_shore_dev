@@ -38,6 +38,7 @@ This checks: both bridge services enabled/active, ports 8765 and 8766 listening 
 - [ ] **Shaping controls:** expo/top-speed/invert updates apply and persist after reboot.
 - [ ] **User defaults:** Save user defaults, reboot, and confirm settings restore; reset to factory defaults and confirm baseline values restore.
 - [ ] **Touch:** Touchscreen input works in the controller UI.
+- [ ] **Touch cold-boot rule:** For Goodix touch panels, validate touch only after full power off/on (cold boot), not reboot.
 - [ ] **Gamepad:** Physical game controller is recognized and axes/buttons map correctly in the UI.
 
 ### Network and connectivity UX

@@ -128,6 +128,7 @@ Observed operational result:
 - **Root-run installers can alter file ownership** and later block pull/merge flow; normalize ownership when debugging update issues.
 - **Local systemd override damage can block kiosk startup**; zero-byte unit files or masked unit symlinks in `/etc/systemd/system/` override canonical installed units.
 - **Corrupted local git objects can break deployment**; always run `git fsck --full` on target Pi before `fetch/reset/install`, and reclone if corruption is detected.
+- **Goodix touch panels may fail warm-reboot validation** on some units; use full power cycle (cold boot) for touch acceptance checks after rotation/touch config changes.
 
 ---
 
