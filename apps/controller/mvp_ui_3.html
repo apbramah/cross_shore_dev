@@ -186,7 +186,7 @@ let state = {
   selected: 0,
   slow_controls: {},
   slow_apply_status: {},
-  shaping: { expo: 0, top_speed: 1, invert: { yaw:false, pitch:false, roll:false } },
+  shaping: { expo: 0, top_speed: 1, invert: { yaw:false, pitch:false, roll:false }, deadband: { yaw:0, pitch:0, roll:0, zoom:0 } },
   defaults: {},
   head_feedback: {},
   connection_status: {},
@@ -226,6 +226,10 @@ function getSlotValue(pos){
     if (pos.commandKey === "shape_invert_yaw") return state.shaping.invert.yaw ? 1 : 0;
     if (pos.commandKey === "shape_invert_pitch") return state.shaping.invert.pitch ? 1 : 0;
     if (pos.commandKey === "shape_invert_roll") return state.shaping.invert.roll ? 1 : 0;
+    if (pos.commandKey === "shape_deadband_yaw") return state.shaping.deadband?.yaw ?? 0;
+    if (pos.commandKey === "shape_deadband_pitch") return state.shaping.deadband?.pitch ?? 0;
+    if (pos.commandKey === "shape_deadband_roll") return state.shaping.deadband?.roll ?? 0;
+    if (pos.commandKey === "shape_deadband_zoom") return state.shaping.deadband?.zoom ?? 0;
     return 1;
   }
   return (state.slow_controls[pos.commandKey] === undefined) ? (pos.defaultValue ?? null) : state.slow_controls[pos.commandKey];
@@ -337,6 +341,10 @@ function cycleValue(dir){
     else if (slot.commandKey === "shape_invert_yaw") state.shaping.invert.yaw = !!v;
     else if (slot.commandKey === "shape_invert_pitch") state.shaping.invert.pitch = !!v;
     else if (slot.commandKey === "shape_invert_roll") state.shaping.invert.roll = !!v;
+    else if (slot.commandKey === "shape_deadband_yaw") state.shaping.deadband.yaw = Number(v) || 0;
+    else if (slot.commandKey === "shape_deadband_pitch") state.shaping.deadband.pitch = Number(v) || 0;
+    else if (slot.commandKey === "shape_deadband_roll") state.shaping.deadband.roll = Number(v) || 0;
+    else if (slot.commandKey === "shape_deadband_zoom") state.shaping.deadband.zoom = Number(v) || 0;
   } else {
     state.slow_controls[slot.commandKey] = vals[idx].value;
   }
@@ -396,6 +404,9 @@ function processEncoderButtons(){
 }
 
 function renderState(){
+  state.shaping = state.shaping || {};
+  state.shaping.invert = state.shaping.invert || { yaw:false, pitch:false, roll:false };
+  state.shaping.deadband = state.shaping.deadband || { yaw:0, pitch:0, roll:0, zoom:0 };
   syncNetworkDraftFromState();
   $("slowState").textContent = `Slow state:\n${JSON.stringify(state.slow_controls, null, 2)}`;
   $("applyState").textContent = `Apply status:\n${JSON.stringify(state.slow_apply_status || {}, null, 2)}`;

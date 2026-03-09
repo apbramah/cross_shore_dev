@@ -104,7 +104,43 @@ def _default_shaping_profile() -> dict[str, Any]:
         "expo": 0.0,
         "top_speed": 1.0,
         "invert": {"yaw": False, "pitch": False, "roll": False},
+        "deadband": {"yaw": 0.0, "pitch": 0.0, "roll": 0.0, "zoom": 0.0},
     }
+
+
+def _normalized_shaping_profile(raw: Any) -> dict[str, Any]:
+    base = _default_shaping_profile()
+    if not isinstance(raw, dict):
+        return base
+    if "expo" in raw:
+        try:
+            base["expo"] = float(raw.get("expo", base["expo"]))
+        except Exception:
+            pass
+    if "top_speed" in raw:
+        try:
+            base["top_speed"] = float(raw.get("top_speed", base["top_speed"]))
+        except Exception:
+            pass
+    inv = raw.get("invert", {})
+    if isinstance(inv, dict):
+        for k in ("yaw", "pitch", "roll"):
+            if k in inv:
+                base["invert"][k] = bool(inv[k])
+    db = raw.get("deadband", {})
+    if isinstance(db, dict):
+        for k in ("yaw", "pitch", "roll", "zoom"):
+            if k in db:
+                try:
+                    v = float(db[k])
+                    if v < 0.0:
+                        v = 0.0
+                    if v > 0.25:
+                        v = 0.25
+                    base["deadband"][k] = v
+                except Exception:
+                    pass
+    return base
 
 
 def _default_network_model(head_count: int, source_heads: list[dict[str, Any]]) -> dict[str, Any]:
@@ -218,7 +254,7 @@ def _load_state() -> None:
             dual_slow_state[k] = _normalize_slow_value(k, data["slow_controls"][k])
     user_defaults = _safe_load_json(USER_DEFAULTS_FILE, {"shaping": _default_shaping_profile()})
     if "shaping" in user_defaults:
-        shaping_state = dict(user_defaults["shaping"])
+        shaping_state = _normalized_shaping_profile(user_defaults["shaping"])
 
 
 def _save_state() -> None:
@@ -334,11 +370,22 @@ def _apply_shaping_to_adc_profile() -> tuple[bool, str]:
     expo = float(shaping_state.get("expo", 0.0))
     gain = float(shaping_state.get("top_speed", 1.0))
     invert = shaping_state.get("invert", {})
-    for axis, inv_key in (("X", "yaw"), ("Y", "pitch"), ("Z", "roll")):
+    deadband = shaping_state.get("deadband", {})
+    for axis, inv_key in (("X", "yaw"), ("Y", "pitch"), ("Z", "roll"), ("Zrotate", "zoom")):
         t = axes.setdefault(axis, {})
         t["expo"] = expo
         t["gain"] = gain
-        t["invert"] = bool(invert.get(inv_key, False))
+        if axis != "Zrotate":
+            t["invert"] = bool(invert.get(inv_key, False))
+        try:
+            db = float(deadband.get(inv_key, t.get("deadband", 0.0)))
+        except Exception:
+            db = 0.0
+        if db < 0.0:
+            db = 0.0
+        if db > 0.25:
+            db = 0.25
+        t["deadband"] = db
     try:
         _safe_save_json(_build_adc_profile_file_path(), profile)
         return True, "adc_profile_updated"
@@ -749,6 +796,19 @@ async def handler(websocket: Any) -> None:
                     for k in ("yaw", "pitch", "roll"):
                         if k in inv:
                             shaping_state["invert"][k] = bool(inv[k])
+                db = payload.get("deadband", {})
+                if isinstance(db, dict):
+                    for k in ("yaw", "pitch", "roll", "zoom"):
+                        if k in db:
+                            try:
+                                v = float(db[k])
+                            except Exception:
+                                continue
+                            if v < 0.0:
+                                v = 0.0
+                            if v > 0.25:
+                                v = 0.25
+                            shaping_state["deadband"][k] = v
                 ok, msg = _apply_shaping_to_adc_profile()
                 await websocket.send(json.dumps({"type": "SHAPING_APPLIED", "ok": ok, "message": msg, "value": shaping_state}))
             elif msg_type == "SAVE_USER_DEFAULTS":
