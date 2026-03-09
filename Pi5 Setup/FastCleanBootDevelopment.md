@@ -166,3 +166,17 @@ Observed operational result:
   - validate service state and visual sequence
 
 This process is now repeatable and tuned for fast appliance-style boot with minimal transition artifacts.
+
+---
+
+## Functional Expansion Baseline (Post-Freeze)
+
+After boot freeze stabilization, the control stack was extended to support:
+
+- expanded slow-command coverage (motors/mode/lens/source/filter/gyro)
+- per-key apply state and head feedback telemetry in UI state payloads
+- shaping controls (expo, top speed, invert) with user-default persistence
+- IP Config subpage (Pi LAN + up to 15 head profiles) with factory reset path
+- Wi-Fi provisioning subpage (scan/select/password/connect/disconnect) for SSH reliability
+
+These features intentionally prioritize data-path correctness and persistence over visual polish.

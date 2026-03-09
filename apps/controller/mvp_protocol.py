@@ -16,6 +16,7 @@ PKT_FAST_CTRL = 0x10
 PKT_SLOW_CMD = 0x20
 PKT_SLOW_ACK = 0x21
 PKT_SLOW_TELEM = 0x30
+PKT_SCHEMA_VERSION = 2
 
 SLOW_KEY_MOTORS_ON = 1
 SLOW_KEY_CONTROL_MODE = 2
@@ -366,6 +367,39 @@ def decode_slow_ack_packet(packet: bytes) -> Optional[Dict[str, Any]]:
     if magic != PKT_MAGIC or ver != PKT_VER or pkt_type != PKT_SLOW_ACK:
         return None
     return {"seq": seq, "apply_id": apply_id, "key_id": key_id, "status": status}
+
+
+def build_slow_telem_packet(payload: Dict[str, Any]) -> bytes:
+    """
+    Build a slow telemetry packet as:
+      <BBBH payload_json_utf8>
+    where H is payload length in bytes.
+    """
+    body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    if len(body) > 65535:
+        body = body[:65535]
+    return struct.pack("<BBBH", PKT_MAGIC, PKT_VER, PKT_SLOW_TELEM, len(body)) + body
+
+
+def decode_slow_telem_packet(packet: bytes) -> Optional[Dict[str, Any]]:
+    if len(packet) < 5:
+        return None
+    try:
+        magic, ver, pkt_type, body_len = struct.unpack("<BBBH", packet[:5])
+    except Exception:
+        return None
+    if magic != PKT_MAGIC or ver != PKT_VER or pkt_type != PKT_SLOW_TELEM:
+        return None
+    if len(packet) < 5 + body_len:
+        return None
+    try:
+        body = packet[5 : 5 + body_len].decode("utf-8")
+        data = json.loads(body)
+    except Exception:
+        return None
+    if not isinstance(data, dict):
+        return None
+    return data
 
 
 def decode_legacy_fast_fields(packet: bytes) -> Optional[Dict[str, Any]]:

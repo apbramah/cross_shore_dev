@@ -7,6 +7,7 @@ import machine
 import time
 import socket
 import struct
+import json
 
 from bgc import BGC
 from lens_controller import LensController, LENS_FUJI
@@ -88,6 +89,8 @@ _last_ctrl_debug_ms = 0
 _fast_recv_count = 0
 _last_fast_fields = None
 _last_fast_debug_ms = 0
+_last_slow_sender_ip = None
+_last_telem_ms = 0
 
 print("BGC + ENG lens ready")
 if FUJI_DEBUG:
@@ -153,6 +156,9 @@ PKT_MAGIC = 0xDE
 PKT_VER = 0x01
 PKT_FAST_CTRL = 0x10
 PKT_SLOW_CMD = 0x20
+PKT_SLOW_ACK = 0x21
+PKT_SLOW_TELEM = 0x30
+SLOW_TELEM_PORT = 8891
 SLOW_KEY_MOTORS_ON = 1
 SLOW_KEY_CONTROL_MODE = 2
 SLOW_KEY_LENS_SELECT = 3
@@ -174,6 +180,7 @@ if ENABLE_SLOW_CHANNEL:
     sock_slow = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock_slow.bind(("0.0.0.0", SLOW_UDP_PORT))
     sock_slow.setblocking(False)
+sock_telem = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 print("Listening FAST UDP on", FAST_UDP_PORT)
 print("Fast channel mode:", FAST_CHANNEL_MODE)
@@ -223,14 +230,68 @@ def decode_slow_cmd_packet(packet):
 def poll_slow_command_once():
     """Read one slow command packet if available."""
     if not ENABLE_SLOW_CHANNEL or sock_slow is None:
-        return None
+        return None, None
     try:
-        data, _addr = sock_slow.recvfrom(256)
+        data, addr = sock_slow.recvfrom(256)
     except OSError:
-        return None
+        return None, None
     if not data:
-        return None
-    return decode_slow_cmd_packet(data)
+        return None, None
+    return decode_slow_cmd_packet(data), addr
+
+
+def _send_slow_ack(target_ip, seq, apply_id, key_id, status=1):
+    if not target_ip:
+        return
+    try:
+        pkt = struct.pack(
+            "<BBBHHBB",
+            PKT_MAGIC,
+            PKT_VER,
+            PKT_SLOW_ACK,
+            int(seq) & 0xFFFF,
+            int(apply_id) & 0xFFFF,
+            int(key_id) & 0xFF,
+            int(status) & 0xFF,
+        )
+        sock_telem.sendto(pkt, (target_ip, SLOW_TELEM_PORT))
+    except Exception:
+        pass
+
+
+def _send_slow_telem():
+    global _last_telem_ms
+    if not _last_slow_sender_ip:
+        return
+    now = time.ticks_ms()
+    if time.ticks_diff(now, _last_telem_ms) < 500:
+        return
+    _last_telem_ms = now
+    try:
+        payload = {
+            "slow": {
+                "motors_on": 1 if slow_motors_on else 0,
+                "control_mode": slow_control_mode,
+                "sources": dict(last_applied_sources),
+            },
+            "lens": {
+                "lens_id": lens.get_lens_type(),
+                "zoom_position": int(getattr(getattr(lens, "active_lens", None), "zoom", 0)),
+                "focus_position": int(getattr(getattr(lens, "active_lens", None), "focus", 0)),
+                "iris_position": int(getattr(getattr(lens, "active_lens", None), "iris", 0)),
+            },
+            "bgc": {
+                "power_level_main": None,
+                "power_level_aux": None,
+            },
+        }
+        body = json.dumps(payload).encode("utf-8")
+        if len(body) > 65535:
+            body = body[:65535]
+        pkt = struct.pack("<BBBH", PKT_MAGIC, PKT_VER, PKT_SLOW_TELEM, len(body)) + body
+        sock_telem.sendto(pkt, (_last_slow_sender_ip, SLOW_TELEM_PORT))
+    except Exception:
+        pass
 
 
 def recv_latest_fast_packet():
@@ -273,6 +334,7 @@ def apply_slow_command(cmd):
     _last_slow_seq = seq
     key = cmd.get("key_id")
     value = cmd.get("value")
+    _send_slow_ack(_last_slow_sender_ip, seq, apply_id, key, 1)
     if key == SLOW_KEY_LENS_SELECT:
         requested_type = _decode_lens_select(value)
         if requested_type != lens.get_lens_type():
@@ -358,9 +420,12 @@ def apply_slow_command(cmd):
 # ---------- Main Loop ----------
 while True:
     pulse_update()
-    _slow_cmd = poll_slow_command_once()
+    _slow_cmd, _slow_addr = poll_slow_command_once()
     if _slow_cmd:
+        if _slow_addr:
+            _last_slow_sender_ip = _slow_addr[0]
         apply_slow_command(_slow_cmd)
+    _send_slow_telem()
 
     data, addr = recv_latest_fast_packet()
 

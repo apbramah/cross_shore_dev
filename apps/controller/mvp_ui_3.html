@@ -6,268 +6,144 @@
   <title>Hydravision MVP UI 3</title>
   <script src="./mvp_ui_3_layout.js"></script>
   <style>
-    :root {
-      --bg: #10141b;
-      --card: #1a2130;
-      --card2: #1f2738;
-      --border: #36425a;
-      --text: #e5ecf8;
-      --muted: #9fb0cb;
-      --accent: #57a7ff;
-      --warn: #f59e0b;
-      --ok: #22c55e;
-      --danger: #ef4444;
-    }
-    * { box-sizing: border-box; }
-    html, body {
-      width: 100vw;
-      height: 100vh;
-      margin: 0;
-      overflow: hidden;
-      background: #0d1118;
-      color: var(--text);
-      font-family: Inter, "Segoe UI", system-ui, -apple-system, sans-serif;
-      touch-action: manipulation;
-      -webkit-tap-highlight-color: transparent;
-    }
-    .app {
-      width: 100vw;
-      height: 100vh;
-      padding: 12px;
-      display: grid;
-      grid-template-rows: 72px 1fr 76px;
-      gap: 10px;
-      background: radial-gradient(circle at 15% -10%, #202a3e 0%, #0d1118 48%);
-      overflow: hidden;
-    }
-    .topbar, .surface, .dock {
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      background: linear-gradient(180deg, #18202f 0%, #151c2a 100%);
-    }
-    .topbar {
-      display: grid;
-      grid-template-columns: 1.2fr 1fr 1fr auto;
-      align-items: center;
-      gap: 10px;
-      padding: 10px;
-    }
-    .top-title { font-size: 20px; font-weight: 700; }
-    .row { display: flex; align-items: center; gap: 8px; min-width: 0; }
-    .row label { color: var(--muted); font-size: 14px; white-space: nowrap; }
-    input, select, button {
-      height: 52px;
-      border-radius: 8px;
-      border: 1px solid #41506d;
-      background: var(--card2);
-      color: var(--text);
-      padding: 0 10px;
-      font-size: 16px;
-    }
-    input { width: 100%; min-width: 0; }
-    button {
-      cursor: pointer;
-      background: linear-gradient(180deg, #347dd0 0%, #2c69aa 100%);
-      border-color: #2c6eb8;
-      font-weight: 700;
-      color: #eaf4ff;
-    }
-    .pill {
-      padding: 6px 10px;
-      border-radius: 999px;
-      border: 1px solid #5f2e35;
-      background: rgba(239, 68, 68, 0.2);
-      color: #ffd5dc;
-      font-weight: 650;
-      text-align: center;
-      white-space: nowrap;
-    }
-    .pill.on {
-      border-color: #29533a;
-      background: rgba(34, 197, 94, 0.18);
-      color: #caf9de;
-    }
-    .surface {
-      position: relative;
-      overflow: hidden;
-      padding: 10px;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-    }
-    .touch-card {
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      background: linear-gradient(180deg, #1b2434 0%, #161e2c 100%);
-      padding: 10px;
-      overflow: hidden;
-      display: grid;
-      grid-template-rows: auto auto 1fr;
-      gap: 8px;
-    }
-    .touch-card h3 {
-      margin: 0;
-      font-size: 16px;
-      color: #dbe8ff;
-    }
-    .info {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      font-size: 13px;
-      color: var(--muted);
-      border: 1px solid #34435d;
-      border-radius: 8px;
-      padding: 8px;
-      background: rgba(16, 24, 36, 0.65);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .status-list {
-      display: grid;
-      gap: 8px;
-      align-content: start;
-    }
-    .dock {
-      position: relative;
-      padding: 8px;
-      overflow: hidden;
-    }
-    .dock-grid {
-      height: 100%;
-      display: grid;
-      grid-template-columns: repeat(5, 1fr);
-      gap: 8px;
-    }
-    .dock-btn {
-      height: 100%;
-      border-radius: 10px;
-      border: 1px solid #44557a;
-      background: #202b40;
-      color: #d7e5ff;
-      font-weight: 700;
-      font-size: 16px;
-    }
-    .dock-btn.active {
-      border-color: var(--accent);
-      box-shadow: 0 0 0 2px rgba(87, 167, 255, 0.25) inset;
-      background: #284362;
-    }
-    .popup {
-      position: absolute;
-      left: 0;
-      right: 0;
-      bottom: 84px;
-      height: 410px;
-      margin: 0 8px;
-      border: 1px solid #4a5b7f;
-      border-radius: 12px;
-      background: linear-gradient(180deg, #202a3e 0%, #192236 100%);
-      display: none;
-      grid-template-rows: 56px 1fr;
-      overflow: hidden;
-      box-shadow: 0 14px 30px rgba(0, 0, 0, 0.45);
-    }
-    .popup.open { display: grid; }
-    .popup-head {
-      display: grid;
-      grid-template-columns: 1fr auto auto auto;
-      align-items: center;
-      gap: 8px;
-      padding: 8px;
-      border-bottom: 1px solid #3f4f70;
-    }
-    .popup-title { font-weight: 700; font-size: 18px; }
-    .popup-mode {
-      padding: 6px 10px;
-      border-radius: 999px;
-      border: 1px solid #5c4a24;
-      background: rgba(245, 158, 11, 0.2);
-      color: #ffe1ad;
-      font-size: 13px;
-    }
-    .popup-mode.position {
-      border-color: #274b34;
-      background: rgba(34, 197, 94, 0.2);
-      color: #cbf9de;
-    }
-    .positions {
-      padding: 8px;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      grid-auto-rows: 64px;
-      gap: 8px;
-      overflow: hidden;
-    }
-    .pos {
-      border: 1px solid #425171;
-      border-radius: 8px;
-      background: rgba(20, 29, 44, 0.8);
-      padding: 8px;
-      display: grid;
-      grid-template-columns: auto 1fr auto;
-      align-items: center;
-      gap: 8px;
-      font-size: 14px;
-      user-select: none;
-    }
-    .pos .addr { color: #9db1d7; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
-    .pos .label { color: #deebff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .pos .val { color: #a5b6d6; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
-    .pos.active {
-      border-color: var(--accent);
-      box-shadow: inset 0 0 0 1px rgba(87, 167, 255, 0.35);
-      background: rgba(43, 73, 112, 0.5);
-    }
-    .pos.value-edit {
-      border-color: var(--warn);
-      box-shadow: inset 0 0 0 1px rgba(245, 158, 11, 0.45);
-    }
+    :root { --bg:#10141b; --card:#1a2130; --card2:#1f2738; --border:#36425a; --text:#e5ecf8; --muted:#9fb0cb; --accent:#57a7ff; --warn:#f59e0b; --ok:#22c55e; --danger:#ef4444; }
+    *{ box-sizing:border-box; }
+    html, body { width:100vw; height:100vh; margin:0; overflow:hidden; background:#0d1118; color:var(--text); font-family:Inter, "Segoe UI", system-ui, -apple-system, sans-serif; }
+    .app { width:100vw; height:100vh; padding:12px; display:grid; grid-template-rows:72px 46px 1fr 76px; gap:10px; background:radial-gradient(circle at 15% -10%, #202a3e 0%, #0d1118 48%); }
+    .topbar,.tabs,.surface,.dock { border:1px solid var(--border); border-radius:12px; background:linear-gradient(180deg,#18202f 0%,#151c2a 100%); }
+    .topbar { display:grid; grid-template-columns:1.2fr 1fr 1fr auto; align-items:center; gap:10px; padding:10px; }
+    .top-title { font-size:20px; font-weight:700; }
+    .tabs { display:flex; gap:8px; padding:6px; }
+    .tab { flex:1; border-radius:8px; border:1px solid #44557a; background:#202b40; color:#d7e5ff; font-weight:700; font-size:15px; }
+    .tab.active { border-color:var(--accent); box-shadow:0 0 0 2px rgba(87,167,255,.25) inset; background:#284362; }
+    .row { display:flex; align-items:center; gap:8px; min-width:0; }
+    .row label { color:var(--muted); font-size:14px; white-space:nowrap; }
+    input, select, button { height:46px; border-radius:8px; border:1px solid #41506d; background:var(--card2); color:var(--text); padding:0 10px; font-size:16px; }
+    input { width:100%; min-width:0; }
+    button { cursor:pointer; background:linear-gradient(180deg,#347dd0 0%,#2c69aa 100%); border-color:#2c6eb8; font-weight:700; color:#eaf4ff; }
+    .pill { padding:6px 10px; border-radius:999px; border:1px solid #5f2e35; background:rgba(239,68,68,.2); color:#ffd5dc; font-weight:650; text-align:center; white-space:nowrap; }
+    .pill.on { border-color:#29533a; background:rgba(34,197,94,.18); color:#caf9de; }
+    .surface { position:relative; overflow:hidden; padding:10px; }
+    .page { width:100%; height:100%; display:none; overflow:auto; gap:10px; }
+    .page.active { display:grid; grid-template-columns:1fr 1fr; }
+    .card { border:1px solid var(--border); border-radius:10px; background:linear-gradient(180deg,#1b2434 0%,#161e2c 100%); padding:10px; display:grid; gap:8px; align-content:start; }
+    .card h3 { margin:0; font-size:16px; color:#dbe8ff; }
+    .info { font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:12px; color:var(--muted); border:1px solid #34435d; border-radius:8px; padding:8px; background:rgba(16,24,36,.65); overflow:auto; max-height:170px; white-space:pre-wrap; }
+    .dock { position:relative; padding:8px; overflow:hidden; }
+    .dock-grid { height:100%; display:grid; grid-template-columns:repeat(5,1fr); gap:8px; }
+    .dock-btn { height:100%; border-radius:10px; border:1px solid #44557a; background:#202b40; color:#d7e5ff; font-weight:700; font-size:16px; }
+    .dock-btn.active { border-color:var(--accent); box-shadow:0 0 0 2px rgba(87,167,255,.25) inset; background:#284362; }
+    .popup { position:absolute; left:0; right:0; bottom:84px; height:410px; margin:0 8px; border:1px solid #4a5b7f; border-radius:12px; background:linear-gradient(180deg,#202a3e 0%,#192236 100%); display:none; grid-template-rows:56px 1fr; overflow:hidden; box-shadow:0 14px 30px rgba(0,0,0,.45); }
+    .popup.open { display:grid; }
+    .popup-head { display:grid; grid-template-columns:1fr auto auto auto; align-items:center; gap:8px; padding:8px; border-bottom:1px solid #3f4f70; }
+    .popup-mode { padding:6px 10px; border-radius:999px; border:1px solid #5c4a24; background:rgba(245,158,11,.2); color:#ffe1ad; font-size:13px; }
+    .popup-mode.position { border-color:#274b34; background:rgba(34,197,94,.2); color:#cbf9de; }
+    .positions { padding:8px; display:grid; grid-template-columns:1fr 1fr; grid-auto-rows:64px; gap:8px; overflow:hidden; }
+    .pos { border:1px solid #425171; border-radius:8px; background:rgba(20,29,44,.8); padding:8px; display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:8px; font-size:14px; user-select:none; }
+    .pos .addr { color:#9db1d7; font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; }
+    .pos .label { color:#deebff; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .pos .val { color:#a5b6d6; font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; }
+    .pos.active { border-color:var(--accent); box-shadow:inset 0 0 0 1px rgba(87,167,255,.35); background:rgba(43,73,112,.5); }
+    .pos.value-edit { border-color:var(--warn); box-shadow:inset 0 0 0 1px rgba(245,158,11,.45); }
+    .table-wrap { max-height:360px; overflow:auto; border:1px solid #34435d; border-radius:8px; }
+    table { width:100%; border-collapse:collapse; font-size:13px; }
+    th, td { border-bottom:1px solid #2f3e57; padding:6px; text-align:left; }
+    .kbd { position:fixed; inset:0; background:rgba(0,0,0,.65); display:none; align-items:center; justify-content:center; z-index:20; }
+    .kbd.open { display:flex; }
+    .kbd-card { width:780px; max-width:95vw; border:1px solid #4a5b7f; border-radius:12px; background:#1a2232; padding:10px; display:grid; gap:8px; }
+    .kbd-row { display:flex; gap:6px; flex-wrap:wrap; }
+    .kbd-key { min-width:42px; height:42px; border-radius:6px; border:1px solid #465b7f; background:#243349; color:#e8f2ff; font-weight:700; }
+    .kbd-actions { display:flex; gap:8px; justify-content:flex-end; }
   </style>
 </head>
 <body>
   <div class="app">
     <div class="topbar">
       <div class="top-title">Hydravision MVP UI 3</div>
-      <div class="row">
-        <label>WS:</label>
-        <input id="wsurl" />
-      </div>
-      <div class="row">
-        <label>Head:</label>
-        <select id="heads"></select>
-      </div>
-      <div class="row">
-        <button id="connect">Connect</button>
-        <span id="wsPill" class="pill">WS Offline</span>
-      </div>
+      <div class="row"><label>WS:</label><input id="wsurl" /></div>
+      <div class="row"><label>Head:</label><select id="heads"></select></div>
+      <div class="row"><button id="connect">Connect</button><span id="wsPill" class="pill">WS Offline</span></div>
     </div>
-
+    <div class="tabs">
+      <button class="tab active" data-page="control">Control</button>
+      <button class="tab" data-page="ipconfig">IP Config</button>
+      <button class="tab" data-page="wifi">WiFi</button>
+    </div>
     <div class="surface">
-      <div class="touch-card">
-        <h3>Touch Controls</h3>
-        <div class="row">
-          <button id="touchMotorsOn">Motors ON</button>
-          <button id="touchMotorsOff">Motors OFF</button>
-          <button id="touchGyroSend">Send Gyro</button>
-          <select id="touchGyroValue"></select>
-        </div>
-        <div class="status-list">
-          <div id="slowState" class="info">Slow state: -</div>
-          <div id="focusState" class="info">Column popup: minimized</div>
+      <div id="page-control" class="page active">
+        <div class="card">
+          <h3>Touch Controls</h3>
+          <div class="row">
+            <button id="touchMotorsOn">Motors ON</button>
+            <button id="touchMotorsOff">Motors OFF</button>
+            <button id="touchGyroSend">Send Gyro</button>
+            <select id="touchGyroValue"></select>
+          </div>
+          <div class="row">
+            <button id="touchSaveDefaults">Save User Defaults</button>
+            <button id="touchResetDefaults">Reset User Defaults</button>
+          </div>
           <div id="eventLog" class="info">Event: idle</div>
+          <div id="slowState" class="info">Slow state: -</div>
+          <div id="applyState" class="info">Apply status: -</div>
         </div>
-      </div>
-      <div class="touch-card">
-        <h3>Runtime Status</h3>
-        <div id="encoderState" class="info">Encoder mode: position</div>
-        <div class="status-list">
+        <div class="card">
+          <h3>Runtime Status</h3>
+          <div id="connectionState" class="info">Connection: -</div>
+          <div id="telemetryState" class="info">Telemetry: -</div>
+          <div id="shapingState" class="info">Shaping: -</div>
+          <div id="focusState" class="info">Column popup: minimized</div>
+          <div id="encoderState" class="info">Encoder mode: position</div>
           <div id="activeSlotState" class="info">Active slot: none</div>
           <div id="activeValueState" class="info">Active value: -</div>
-          <div id="layoutState" class="info">Layout: 5 columns x 10 positions</div>
+        </div>
+      </div>
+      <div id="page-ipconfig" class="page">
+        <div class="card">
+          <h3>Pi LAN Config</h3>
+          <div class="row"><label>Address</label><input id="piAddress" readonly /></div>
+          <div class="row"><label>Prefix</label><input id="piPrefix" readonly /></div>
+          <div class="row"><label>Gateway</label><input id="piGateway" readonly /></div>
+          <div class="row">
+            <button id="savePiLan">Save Pi LAN</button>
+            <button id="applyNetwork">Apply Network</button>
+            <button id="factoryResetNetwork">Factory Default</button>
+          </div>
+          <div id="networkInfo" class="info">Network: -</div>
+        </div>
+        <div class="card">
+          <h3>Head Config (up to 15)</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>#</th><th>Name</th><th>IP</th><th>Prefix</th><th>Gateway</th><th>Save</th></tr></thead>
+              <tbody id="headTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div id="page-wifi" class="page">
+        <div class="card">
+          <h3>WiFi Provisioning</h3>
+          <div class="row"><label>SSID</label><input id="wifiSsid" readonly /></div>
+          <div class="row"><label>Password</label><input id="wifiPassword" readonly /></div>
+          <div class="row">
+            <button id="wifiScan">Scan</button>
+            <button id="wifiConnect">Connect</button>
+            <button id="wifiDisconnect">Disconnect</button>
+          </div>
+          <div id="wifiStatus" class="info">WiFi: -</div>
+        </div>
+        <div class="card">
+          <h3>Available Networks</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>SSID</th><th>Signal</th><th>Security</th><th>Use</th></tr></thead>
+              <tbody id="wifiTableBody"></tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
-
     <div class="dock">
       <div id="popup" class="popup">
         <div class="popup-head">
@@ -282,23 +158,48 @@
     </div>
   </div>
 
+  <div id="kbd" class="kbd">
+    <div class="kbd-card">
+      <div id="kbdTargetLabel" class="info">Keyboard input</div>
+      <input id="kbdBuffer" />
+      <div id="kbdRows"></div>
+      <div class="kbd-actions">
+        <button id="kbdBack">Backspace</button>
+        <button id="kbdClear">Clear</button>
+        <button id="kbdCancel">Cancel</button>
+        <button id="kbdOk">OK</button>
+      </div>
+    </div>
+  </div>
+
 <script>
 const LAYOUT = window.MVP_UI3_LAYOUT || { columns: [], encoders: [], wsDefaultUrl: "ws://127.0.0.1:8766" };
 const WS_DEFAULT = LAYOUT.wsDefaultUrl || "ws://127.0.0.1:8766";
 const POS_PER_COL = (LAYOUT.screen && LAYOUT.screen.positionsPerColumn) || 10;
 
 let ws = null;
-let state = { heads: [], selected: 0, slow_controls: {} };
-let activeColumn = null; // 0..4 or null
-let mode = "position"; // position | value
+let state = {
+  schema_version: 0,
+  heads: [],
+  selected: 0,
+  slow_controls: {},
+  slow_apply_status: {},
+  shaping: { expo: 0, top_speed: 1, invert: { yaw:false, pitch:false, roll:false } },
+  defaults: {},
+  head_feedback: {},
+  connection_status: {},
+  network_config: { pi_lan: {}, heads: [] },
+  wifi_status: {},
+};
+let activeColumn = null;
+let mode = "position";
 let activePosIndexByColumn = [0, 0, 0, 0, 0];
 let prevButtonState = {};
+let kbdTarget = null;
 
 function $(id){ return document.getElementById(id); }
-
-function send(obj){
-  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
-}
+function send(obj){ if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj)); }
+function setEvent(text){ $("eventLog").textContent = `Event: ${text}`; }
 
 function setWsPill(text, online){
   const el = $("wsPill");
@@ -306,40 +207,26 @@ function setWsPill(text, online){
   el.classList.toggle("on", !!online);
 }
 
-function getColumn(colIdx){
-  return LAYOUT.columns[colIdx] || { id: `C${colIdx + 1}`, title: `Column ${colIdx + 1}`, positions: [] };
-}
-
-function getPosition(colIdx, posIdx){
-  const c = getColumn(colIdx);
-  return c.positions[posIdx] || { id: `C${colIdx + 1}P${posIdx + 1}`, label: "Spare", commandKey: null, values: [] };
-}
+function getColumn(i){ return LAYOUT.columns[i] || { id:`C${i+1}`, title:`Column ${i+1}`, positions:[] }; }
+function getPosition(c, p){ const col = getColumn(c); return col.positions[p] || { id:`C${c+1}P${p+1}`, label:"Spare", commandKey:null, values:[] }; }
 
 function getSlotValue(pos){
   if (!pos || !pos.commandKey) return null;
-  const v = state.slow_controls[pos.commandKey];
-  if (v === undefined || v === null) return pos.defaultValue ?? null;
-  return v;
-}
-
-function valueToLabel(pos, rawValue){
-  const vals = pos.values || [];
-  const hit = vals.find(x => String(x.value) === String(rawValue));
-  return hit ? hit.label : (rawValue === null ? "-" : String(rawValue));
-}
-
-function setEvent(text){ $("eventLog").textContent = `Event: ${text}`; }
-
-function buildTouchGyroSelect(){
-  const sel = $("touchGyroValue");
-  sel.innerHTML = "";
-  const vals = (((LAYOUT.columns[0] || {}).positions || [])[1] || {}).values || [];
-  for (const item of vals){
-    const opt = document.createElement("option");
-    opt.value = String(item.value);
-    opt.textContent = item.label;
-    sel.appendChild(opt);
+  if (pos.commandKey.startsWith("shape_")) {
+    if (pos.commandKey === "shape_expo") return state.shaping.expo;
+    if (pos.commandKey === "shape_top_speed") return state.shaping.top_speed;
+    if (pos.commandKey === "shape_invert_yaw") return state.shaping.invert.yaw ? 1 : 0;
+    if (pos.commandKey === "shape_invert_pitch") return state.shaping.invert.pitch ? 1 : 0;
+    if (pos.commandKey === "shape_invert_roll") return state.shaping.invert.roll ? 1 : 0;
+    return 1;
   }
+  return (state.slow_controls[pos.commandKey] === undefined) ? (pos.defaultValue ?? null) : state.slow_controls[pos.commandKey];
+}
+
+function valueToLabel(pos, raw){
+  const vals = pos.values || [];
+  const hit = vals.find(v => String(v.value) === String(raw));
+  return hit ? hit.label : (raw === null ? "-" : String(raw));
 }
 
 function buildHeads(){
@@ -349,7 +236,7 @@ function buildHeads(){
     const h = state.heads[i];
     const opt = document.createElement("option");
     opt.value = String(i);
-    opt.textContent = `${h.name} (${h.ip}:${h.port})`;
+    opt.textContent = `${h.name} (${h.ip}:${h.port_fast || h.port || 8888})`;
     sel.appendChild(opt);
   }
   sel.value = String(state.selected || 0);
@@ -359,17 +246,11 @@ function buildDock(){
   const grid = $("dockGrid");
   grid.innerHTML = "";
   for (let i = 0; i < 5; i++){
-    const col = getColumn(i);
+    const c = getColumn(i);
     const b = document.createElement("button");
     b.className = "dock-btn" + (activeColumn === i ? " active" : "");
-    b.textContent = col.id || `C${i + 1}`;
-    b.onclick = () => {
-      if (activeColumn === i) {
-        closePopup();
-      } else {
-        openPopup(i);
-      }
-    };
+    b.textContent = c.id;
+    b.onclick = () => activeColumn === i ? closePopup() : openPopup(i);
     grid.appendChild(b);
   }
 }
@@ -384,14 +265,12 @@ function renderPopup(){
     $("activeValueState").textContent = "Active value: -";
     return;
   }
-
   popup.classList.add("open");
   const col = getColumn(activeColumn);
   $("popupTitle").textContent = `${col.id} - ${col.title}`;
   $("popupMode").textContent = mode === "position" ? "POSITION SELECT" : "VALUE EDIT";
   $("popupMode").className = "popup-mode " + (mode === "position" ? "position" : "");
   $("focusState").textContent = `Column popup: ${col.id}`;
-
   const positions = $("positions");
   positions.innerHTML = "";
   const activePos = activePosIndexByColumn[activeColumn] || 0;
@@ -400,18 +279,10 @@ function renderPopup(){
     const raw = getSlotValue(pos);
     const div = document.createElement("div");
     div.className = "pos" + (p === activePos ? " active" : "") + (mode === "value" && p === activePos ? " value-edit" : "");
-    div.onclick = () => {
-      activePosIndexByColumn[activeColumn] = p;
-      renderPopup();
-    };
-    div.innerHTML = `
-      <div class="addr">${pos.id || `C${activeColumn + 1}P${p + 1}`}</div>
-      <div class="label">${pos.label || "Spare"}</div>
-      <div class="val">${valueToLabel(pos, raw)}</div>
-    `;
+    div.onclick = () => { activePosIndexByColumn[activeColumn] = p; renderPopup(); };
+    div.innerHTML = `<div class="addr">${pos.id}</div><div class="label">${pos.label || "Spare"}</div><div class="val">${valueToLabel(pos, raw)}</div>`;
     positions.appendChild(div);
   }
-
   const slot = getPosition(activeColumn, activePos);
   const raw = getSlotValue(slot);
   $("activeSlotState").textContent = `Active slot: ${slot.id} (${slot.label || "Spare"})`;
@@ -419,22 +290,9 @@ function renderPopup(){
   $("encoderState").textContent = `Encoder mode: ${mode}`;
 }
 
-function openPopup(colIdx){
-  activeColumn = colIdx;
-  mode = "position";
-  renderPopup();
-}
-
-function closePopup(){
-  activeColumn = null;
-  mode = "position";
-  renderPopup();
-}
-
 function cyclePosition(dir){
   if (activeColumn === null) return;
-  const p = activePosIndexByColumn[activeColumn] || 0;
-  let n = p + dir;
+  let n = (activePosIndexByColumn[activeColumn] || 0) + dir;
   if (n < 0) n = POS_PER_COL - 1;
   if (n >= POS_PER_COL) n = 0;
   activePosIndexByColumn[activeColumn] = n;
@@ -445,15 +303,23 @@ function cycleValue(dir){
   if (activeColumn === null) return;
   const p = activePosIndexByColumn[activeColumn] || 0;
   const slot = getPosition(activeColumn, p);
-  if (!slot.commandKey || !slot.values || !slot.values.length) return;
+  if (!slot.commandKey || !slot.values?.length) return;
   const vals = slot.values;
-  const curRaw = getSlotValue(slot);
-  let idx = vals.findIndex(v => String(v.value) === String(curRaw));
+  let idx = vals.findIndex(v => String(v.value) === String(getSlotValue(slot)));
   if (idx < 0) idx = 0;
   idx += dir;
   if (idx < 0) idx = vals.length - 1;
   if (idx >= vals.length) idx = 0;
-  state.slow_controls[slot.commandKey] = vals[idx].value;
+  if (slot.commandKey.startsWith("shape_")) {
+    const v = vals[idx].value;
+    if (slot.commandKey === "shape_expo") state.shaping.expo = v;
+    else if (slot.commandKey === "shape_top_speed") state.shaping.top_speed = v;
+    else if (slot.commandKey === "shape_invert_yaw") state.shaping.invert.yaw = !!v;
+    else if (slot.commandKey === "shape_invert_pitch") state.shaping.invert.pitch = !!v;
+    else if (slot.commandKey === "shape_invert_roll") state.shaping.invert.roll = !!v;
+  } else {
+    state.slow_controls[slot.commandKey] = vals[idx].value;
+  }
   renderPopup();
 }
 
@@ -461,50 +327,45 @@ function commitActiveValue(){
   if (activeColumn === null) return;
   const p = activePosIndexByColumn[activeColumn] || 0;
   const slot = getPosition(activeColumn, p);
-  if (!slot.commandKey || !slot.values || !slot.values.length) return;
-  const raw = getSlotValue(slot);
-  send({ type: "SET_SLOW_CONTROL", key: slot.commandKey, value: raw });
-  setEvent(`set ${slot.commandKey}=${raw}`);
+  if (!slot.commandKey || !slot.values?.length) return;
+  const v = getSlotValue(slot);
+  if (slot.commandKey.startsWith("shape_")) {
+    if (slot.commandKey === "shape_save_defaults") send({ type: "SAVE_USER_DEFAULTS" });
+    else if (slot.commandKey === "shape_reset_defaults") send({ type: "RESET_USER_DEFAULTS" });
+    else send({ type: "SET_SHAPING", value: state.shaping });
+    setEvent(`shape action ${slot.commandKey}`);
+    return;
+  }
+  if (slot.commandKey === "net_apply") { send({ type: "APPLY_NETWORK_CONFIG" }); return; }
+  if (slot.commandKey === "net_factory_reset") { send({ type: "FACTORY_RESET_NETWORK" }); return; }
+  if (slot.commandKey === "wifi_scan") { send({ type: "WIFI_SCAN" }); return; }
+  if (slot.commandKey === "wifi_disconnect") { send({ type: "WIFI_DISCONNECT" }); return; }
+  send({ type: "SET_SLOW_CONTROL", key: slot.commandKey, value: v });
+  setEvent(`set ${slot.commandKey}=${v}`);
 }
 
 function onEncoderSwitch(colIdx){
-  if (activeColumn === null || activeColumn !== colIdx){
-    openPopup(colIdx);
-    return;
-  }
-  if (mode === "position"){
-    mode = "value";
-    renderPopup();
-    return;
-  }
+  if (activeColumn === null || activeColumn !== colIdx){ activeColumn = colIdx; mode = "position"; renderPopup(); return; }
+  if (mode === "position"){ mode = "value"; renderPopup(); return; }
   commitActiveValue();
   mode = "position";
   renderPopup();
 }
-
-function onEncoderTurn(colIdx, dir){
-  if (activeColumn !== colIdx) return;
-  if (mode === "position") cyclePosition(dir);
-  else cycleValue(dir);
-}
+function onEncoderTurn(colIdx, dir){ if (activeColumn === colIdx) (mode === "position" ? cyclePosition(dir) : cycleValue(dir)); }
 
 function processEncoderButtons(){
   const pads = navigator.getGamepads ? navigator.getGamepads() : [];
   const gp = pads && pads[0];
-  if (!gp || !gp.buttons){
-    requestAnimationFrame(processEncoderButtons);
-    return;
-  }
-
+  if (!gp || !gp.buttons){ requestAnimationFrame(processEncoderButtons); return; }
   for (const e of (LAYOUT.encoders || [])){
     const colIdx = Math.max(0, (e.column || 1) - 1);
     const map = [
-      { id: `e${e.id}_cw`, btn: e.cwButton, onRise: () => onEncoderTurn(colIdx, +1) },
-      { id: `e${e.id}_ccw`, btn: e.ccwButton, onRise: () => onEncoderTurn(colIdx, -1) },
-      { id: `e${e.id}_sw`, btn: e.swButton, onRise: () => onEncoderSwitch(colIdx) },
+      { id:`e${e.id}_cw`, btn:e.cwButton, onRise:() => onEncoderTurn(colIdx, +1) },
+      { id:`e${e.id}_ccw`, btn:e.ccwButton, onRise:() => onEncoderTurn(colIdx, -1) },
+      { id:`e${e.id}_sw`, btn:e.swButton, onRise:() => onEncoderSwitch(colIdx) },
     ];
     for (const m of map){
-      if (m.btn === null || m.btn === undefined || m.btn < 0) continue;
+      if (m.btn == null || m.btn < 0) continue;
       const pressed = gp.buttons[m.btn] && gp.buttons[m.btn].pressed ? 1 : 0;
       const prev = prevButtonState[m.id] || 0;
       if (pressed && !prev) m.onRise();
@@ -514,66 +375,197 @@ function processEncoderButtons(){
   requestAnimationFrame(processEncoderButtons);
 }
 
-$("connect").onclick = () => {
+function renderState(){
+  $("slowState").textContent = `Slow state:\n${JSON.stringify(state.slow_controls, null, 2)}`;
+  $("applyState").textContent = `Apply status:\n${JSON.stringify(state.slow_apply_status || {}, null, 2)}`;
+  $("shapingState").textContent = `Shaping:\n${JSON.stringify(state.shaping || {}, null, 2)}`;
+  $("connectionState").textContent = `Connection:\n${JSON.stringify(state.connection_status || {}, null, 2)}`;
+  $("telemetryState").textContent = `Head feedback:\n${JSON.stringify(state.head_feedback || {}, null, 2)}`;
+  $("networkInfo").textContent = `Network:\n${JSON.stringify(state.network_config || {}, null, 2)}`;
+  $("wifiStatus").textContent = `WiFi:\n${JSON.stringify(state.wifi_status || {}, null, 2)}`;
+  renderPopup();
+  renderIpConfigTable();
+}
+
+function openKeyboard(target){
+  kbdTarget = target;
+  $("kbdTargetLabel").textContent = `Editing: ${target.id}`;
+  $("kbdBuffer").value = target.value || "";
+  $("kbd").classList.add("open");
+}
+function closeKeyboard(){ $("kbd").classList.remove("open"); kbdTarget = null; }
+
+function renderKeyboard(){
+  const rows = [
+    "1234567890.-",
+    "qwertyuiop",
+    "asdfghjkl",
+    "zxcvbnm",
+    "_@!#$%^&*()+=/:",
+  ];
+  const host = $("kbdRows");
+  host.innerHTML = "";
+  for (const r of rows){
+    const row = document.createElement("div");
+    row.className = "kbd-row";
+    for (const ch of r){
+      const b = document.createElement("button");
+      b.className = "kbd-key";
+      b.textContent = ch;
+      b.onclick = () => { $("kbdBuffer").value += ch; };
+      row.appendChild(b);
+    }
+    host.appendChild(row);
+  }
+  const space = document.createElement("div");
+  space.className = "kbd-row";
+  const b = document.createElement("button");
+  b.className = "kbd-key";
+  b.style.minWidth = "180px";
+  b.textContent = "space";
+  b.onclick = () => { $("kbdBuffer").value += " "; };
+  space.appendChild(b);
+  host.appendChild(space);
+}
+
+function renderIpConfigTable(){
+  const pi = state.network_config?.pi_lan || {};
+  $("piAddress").value = pi.address || "";
+  $("piPrefix").value = String(pi.prefix ?? 24);
+  $("piGateway").value = pi.gateway || "";
+  const body = $("headTableBody");
+  body.innerHTML = "";
+  const heads = state.network_config?.heads || [];
+  for (let i = 0; i < Math.min(15, heads.length); i++){
+    const h = heads[i] || {};
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${i+1}</td>
+      <td><input id="h_name_${i}" readonly value="${h.name || ""}" /></td>
+      <td><input id="h_ip_${i}" readonly value="${h.ip || ""}" /></td>
+      <td><input id="h_prefix_${i}" readonly value="${h.prefix ?? 24}" /></td>
+      <td><input id="h_gw_${i}" readonly value="${h.gateway || ""}" /></td>
+      <td><button id="h_save_${i}">Save</button></td>
+    `;
+    body.appendChild(tr);
+    ["name","ip","prefix","gw"].forEach(k => {
+      const id = k === "gw" ? `h_gw_${i}` : `h_${k}_${i}`;
+      $(id).onclick = () => openKeyboard($(id));
+    });
+    $(`h_save_${i}`).onclick = () => {
+      send({
+        type: "SET_HEAD_CONFIG",
+        index: i,
+        value: {
+          name: $(`h_name_${i}`).value,
+          ip: $(`h_ip_${i}`).value,
+          prefix: parseInt($(`h_prefix_${i}`).value, 10) || 24,
+          gateway: $(`h_gw_${i}`).value,
+        },
+      });
+      setEvent(`save head config #${i+1}`);
+    };
+  }
+}
+
+function renderWifiTable(rows){
+  const body = $("wifiTableBody");
+  body.innerHTML = "";
+  for (const r of rows || []){
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${r.ssid || ""}</td><td>${r.signal ?? ""}</td><td>${r.security || ""}</td><td><button>Use</button></td>`;
+    tr.querySelector("button").onclick = () => { $("wifiSsid").value = r.ssid || ""; };
+    body.appendChild(tr);
+  }
+}
+
+function connectWs(){
   ws = new WebSocket(($("wsurl").value || WS_DEFAULT).trim());
   setWsPill("WS Connecting", false);
-  ws.onopen = () => setWsPill("WS Online", true);
+  ws.onopen = () => { setWsPill("WS Online", true); send({ type: "REQUEST_STATE" }); };
   ws.onclose = () => setWsPill("WS Offline", false);
   ws.onerror = () => setWsPill("WS Error", false);
   ws.onmessage = (ev) => {
     try {
       const msg = JSON.parse(ev.data);
       if (msg.type === "STATE"){
-        state.heads = msg.heads || [];
-        state.selected = msg.selected || 0;
-        state.slow_controls = msg.slow_controls || {};
+        state = Object.assign(state, msg);
         buildHeads();
-        renderPopup();
-        $("slowState").textContent = `Slow state: ${JSON.stringify(state.slow_controls)}`;
-        setEvent("received STATE");
-      } else if (msg.type === "SELECTED"){
-        state.selected = msg.selected || 0;
-        $("heads").value = String(state.selected);
-        setEvent(`head selected ${state.selected}`);
-      } else if (msg.type === "SLOW_APPLIED"){
-        state.slow_controls[msg.key] = msg.value;
-        $("slowState").textContent = `Slow state: ${JSON.stringify(state.slow_controls)}`;
-        renderPopup();
-        setEvent(`applied ${msg.key}=${msg.value}`);
+        renderState();
+      } else if (msg.type === "WIFI_SCAN_RESULT"){
+        renderWifiTable(msg.networks || []);
+        setEvent(msg.ok ? "wifi scan complete" : `wifi scan failed: ${msg.message}`);
+      } else if (msg.type && msg.type.endsWith("_RESULT")) {
+        setEvent(`${msg.type}: ${msg.ok ? "ok" : "fail"} ${msg.message || ""}`);
+      } else if (msg.type === "SHAPING_APPLIED"){
+        setEvent(msg.ok ? "shaping applied" : `shaping failed: ${msg.message}`);
       }
     } catch {
       setEvent("invalid WS message");
     }
   };
-};
+}
 
-$("heads").onchange = (e) => {
-  const idx = parseInt(e.target.value, 10) || 0;
-  send({ type: "SELECT_HEAD", index: idx });
-};
+function bindUI(){
+  $("connect").onclick = connectWs;
+  $("heads").onchange = (e) => send({ type: "SELECT_HEAD", index: parseInt(e.target.value, 10) || 0 });
+  $("touchMotorsOn").onclick = () => send({ type: "SET_SLOW_CONTROL", key: "motors_on", value: 1 });
+  $("touchMotorsOff").onclick = () => send({ type: "SET_SLOW_CONTROL", key: "motors_on", value: 0 });
+  $("touchGyroSend").onclick = () => send({ type: "SET_SLOW_CONTROL", key: "gyro_heading_correction", value: parseInt($("touchGyroValue").value, 10) || 0 });
+  $("touchSaveDefaults").onclick = () => send({ type: "SAVE_USER_DEFAULTS" });
+  $("touchResetDefaults").onclick = () => send({ type: "RESET_USER_DEFAULTS" });
+  $("touchToggleMode").onclick = () => {
+    if (activeColumn === null) return;
+    if (mode === "position") mode = "value";
+    else { commitActiveValue(); mode = "position"; }
+    renderPopup();
+  };
+  $("touchClosePopup").onclick = () => { activeColumn = null; mode = "position"; renderPopup(); };
+  $("savePiLan").onclick = () => {
+    send({
+      type: "SET_PI_LAN_CONFIG",
+      value: { address: $("piAddress").value, prefix: parseInt($("piPrefix").value, 10) || 24, gateway: $("piGateway").value },
+    });
+  };
+  $("applyNetwork").onclick = () => send({ type: "APPLY_NETWORK_CONFIG" });
+  $("factoryResetNetwork").onclick = () => send({ type: "FACTORY_RESET_NETWORK" });
+  $("wifiScan").onclick = () => send({ type: "WIFI_SCAN" });
+  $("wifiConnect").onclick = () => send({ type: "WIFI_CONNECT", ssid: $("wifiSsid").value, password: $("wifiPassword").value });
+  $("wifiDisconnect").onclick = () => send({ type: "WIFI_DISCONNECT" });
+  $("wifiSsid").onclick = () => openKeyboard($("wifiSsid"));
+  $("wifiPassword").onclick = () => openKeyboard($("wifiPassword"));
+  ["piAddress","piPrefix","piGateway"].forEach(id => { $(id).onclick = () => openKeyboard($(id)); });
+  document.querySelectorAll(".tab").forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+      btn.classList.add("active");
+      const page = btn.getAttribute("data-page");
+      document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+      $(`page-${page}`).classList.add("active");
+    };
+  });
+  $("kbdBack").onclick = () => { $("kbdBuffer").value = $("kbdBuffer").value.slice(0, -1); };
+  $("kbdClear").onclick = () => { $("kbdBuffer").value = ""; };
+  $("kbdCancel").onclick = closeKeyboard;
+  $("kbdOk").onclick = () => { if (kbdTarget) kbdTarget.value = $("kbdBuffer").value; closeKeyboard(); };
+}
 
-$("touchMotorsOn").onclick = () => send({ type: "SET_SLOW_CONTROL", key: "motors_on", value: 1 });
-$("touchMotorsOff").onclick = () => send({ type: "SET_SLOW_CONTROL", key: "motors_on", value: 0 });
-$("touchGyroSend").onclick = () => {
-  const v = parseInt($("touchGyroValue").value, 10) || 0;
-  send({ type: "SET_SLOW_CONTROL", key: "gyro_heading_correction", value: v });
-  setEvent(`set gyro_heading_correction=${v}`);
-};
-
-$("touchToggleMode").onclick = () => {
-  if (activeColumn === null) return;
-  if (mode === "position") mode = "value";
-  else {
-    commitActiveValue();
-    mode = "position";
+function buildTouchGyroSelect(){
+  const sel = $("touchGyroValue");
+  sel.innerHTML = "";
+  const vals = (((LAYOUT.columns[0] || {}).positions || [])[3] || {}).values || [];
+  for (const item of vals){
+    const opt = document.createElement("option");
+    opt.value = String(item.value);
+    opt.textContent = item.label;
+    sel.appendChild(opt);
   }
-  renderPopup();
-};
-
-$("touchClosePopup").onclick = () => closePopup();
+}
 
 function init(){
   $("wsurl").value = WS_DEFAULT;
+  renderKeyboard();
+  bindUI();
   buildTouchGyroSelect();
   buildDock();
   renderPopup();
