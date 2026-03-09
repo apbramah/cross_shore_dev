@@ -68,6 +68,7 @@ Outcome:
   - `wsbridge.service`
   - `kiosk.service`
   - `boot-splash-lock.service`
+  - `hydravision-boot-selfheal.service`
 - Removed Plymouth dependency in this profile.
 - Moved to `multi-user.target`, no display-manager dependency.
 
@@ -129,6 +130,7 @@ Observed operational result:
 - **Local systemd override damage can block kiosk startup**; zero-byte unit files or masked unit symlinks in `/etc/systemd/system/` override canonical installed units.
 - **Corrupted local git objects can break deployment**; always run `git fsck --full` on target Pi before `fetch/reset/install`, and reclone if corruption is detected.
 - **Goodix touch panels may fail warm-reboot validation** on some units; use full power cycle (cold boot) for touch acceptance checks after rotation/touch config changes.
+- **Boot-critical files on `/boot/firmware` are vulnerable to interruption if written in-place**; do not rely on non-atomic write paths for `cmdline.txt`.
 
 ---
 
@@ -167,6 +169,50 @@ Observed operational result:
   - validate service state and visual sequence
 
 This process is now repeatable and tuned for fast appliance-style boot with minimal transition artifacts.
+
+---
+
+## Last 14h Incident + Recovery + Hardening Record
+
+### Incident observed
+
+- Symptom set:
+  - early boot text flood reappeared
+  - UI appeared stale after pull/reboot sequence
+- Forensics result:
+  - `/boot/firmware/cmdline.txt` was `0` bytes and mode `0755`
+  - running kernel cmdline lacked intended quiet policy (default console path active)
+  - `/opt/ui/mvp_ui_3_layout.js` hash drifted from repo source during one cycle
+- Causality note:
+  - application-only commit (`2c950b6`) did not touch boot files; issue domain was appliance deploy/runtime state.
+
+### Phase 1 recovery (validated)
+
+- Recovered clean baseline by:
+  - hard reset to branch head
+  - reseeding cmdline from `/proc/cmdline` when empty
+  - rerunning appliance installer
+  - pre-reboot gate checks:
+    - cmdline non-empty and quiet tokens present
+    - `/opt/ui` hashes match repo
+    - core services active (`boot-splash-lock`, `controller`, `wsbridge`, `kiosk`)
+- Outcome: clean boot restored and current UI deployed.
+
+### Phase 2 hardening implemented (`0e7fc91`)
+
+- Added crash-resilient boot protections in appliance installer:
+  - atomic write of `/boot/firmware/cmdline.txt` (temp + fsync + replace)
+  - last-known-good (LKG) snapshot at `/boot/firmware/hydravision_lkg/cmdline.txt`
+  - `/usr/local/bin/hydravision-boot-guard` validator and repair helper
+  - `hydravision-boot-selfheal.service` to auto-restore cmdline from LKG and reboot once if needed
+  - install-time fail-fast guard checks for cmdline validity and `/opt/ui` parity
+  - persistent journald config (`Storage=persistent`) for future forensic attribution
+
+### Operational policy after hardening
+
+- Do not reboot immediately after pull-only updates when appliance files are expected to change; rerun installer first.
+- Keep pre-reboot gate checks mandatory on no-UPS units.
+- Treat cmdline integrity and `/opt/ui` hash parity as release gates, not optional diagnostics.
 
 ---
 

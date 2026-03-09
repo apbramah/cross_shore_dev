@@ -1,54 +1,63 @@
 # Controller End - One-Page Sequence Diagram
 
-## Runtime Sequence (Slow + Fast Split)
+## Runtime Sequence (Current `mvp_ui_3` stack)
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant GP as USB Gamepad (Encoders)
-    participant UI as mvp_ui_2.html
+    participant UI as mvp_ui_3.html
     participant SWS as Slow WS Bridge (:8766)
     participant FBridge as ADC Bridge (mvp_bridge_adc.py)
     participant CDC as USB CDC ADC Stream
-    participant HeadFile as mvp_selected_head.json
+    participant Files as Runtime JSON Files
     participant Head as Head Controller
 
-    Note over UI,SWS: Slow control plane (encoder/menu events)
+    Note over UI,SWS: Slow/control plane
     UI->>SWS: WS connect
-    SWS-->>UI: STATE {heads, selected, slow_controls}
+    SWS-->>UI: STATE {slow_controls, shaping, network, telemetry, calibration...}
     GP->>UI: Button edges (CW/CCW/SW)
-    UI->>SWS: SELECT_HEAD {index}
-    SWS->>HeadFile: Persist selected_index
-    SWS-->>UI: SELECTED {selected}
-    UI->>SWS: SET_SLOW_CONTROL {key, value}
-    SWS-->>UI: SLOW_APPLIED {key, value}
+    UI->>SWS: SELECT_HEAD / SET_SLOW_CONTROL / SET_SHAPING
+    UI->>SWS: WIFI_* / SET_*_CONFIG / CALIBRATE_INPUTS
+    SWS->>Files: Persist selected/state/defaults/network
     loop every 0.5s
-      SWS->>Head: UDP SLOW_CMD (8890): motors_on, gyro_heading_correction
+      SWS->>Head: UDP SLOW_CMD (8890) for full key set
     end
-    Note over SWS,Head: gyro_heading_correction also sent immediately on apply
+    Head-->>SWS: UDP SLOW_ACK + SLOW_TELEM
+    SWS-->>UI: STATE updates (apply status + telemetry + connection)
 
-    Note over CDC,FBridge: Fast motion plane (USB ADC -> UDP fast)
+    Note over CDC,FBridge: Fast motion plane
     CDC->>FBridge: ADCv1,seq,teensy_us,x,y,z,rx,ry,rz
-    FBridge->>FBridge: Parse + clamp raw ADC [0..4095]
-    FBridge->>FBridge: Shape -> normalized axes [-1..1]
-    FBridge->>HeadFile: Read selected_index (poll)
-    FBridge->>Head: UDP FAST v2 (8888): seq,zoom,focus,iris,yaw,pitch,roll
+    FBridge->>Files: Read selected_head + shaping profile
+    FBridge->>FBridge: Normalize + shape + deadband/expo/gain/invert
+    FBridge->>Head: UDP FAST v2 (8888): zoom/focus/iris/yaw/pitch/roll
+
+    Note over UI,FBridge: Calibration side channel
+    UI->>SWS: CALIBRATE_INPUTS
+    SWS->>Files: Write calibration request JSON
+    FBridge->>Files: Read request, sample median centers, write result JSON
+    SWS-->>UI: Calibration status/result in STATE
 ```
 
 ## Message/API Snapshot
 
 - Slow WS API (`:8766`)
-  - Client -> server: `SELECT_HEAD`, `SET_SLOW_CONTROL`
-  - Server -> client: `STATE`, `SELECTED`, `SLOW_APPLIED`
+  - Client -> server:
+    - `REQUEST_STATE`, `SELECT_HEAD`, `SET_SLOW_CONTROL`
+    - `SET_SHAPING`, `SAVE_USER_DEFAULTS`, `RESET_USER_DEFAULTS`
+    - `SET_PI_LAN_CONFIG`, `SET_HEAD_CONFIG`, `APPLY_NETWORK_CONFIG`, `FACTORY_RESET_NETWORK`
+    - `WIFI_SCAN`, `WIFI_CONNECT`, `WIFI_DISCONNECT`, `WIFI_STATUS`
+    - `CALIBRATE_INPUTS`
+  - Server -> client:
+    - `STATE`
+    - result envelopes (`*_RESULT`, `*_SAVED`, `SHAPING_APPLIED`, `CALIBRATE_INPUTS_ACCEPTED`)
 - Slow UDP API (`8890`)
-  - Packet type: `PKT_SLOW_CMD (0x20)`
-  - Active keys in current slow bridge loop: `motors_on`, `gyro_heading_correction`
+  - Packet type: `PKT_SLOW_CMD (0x20)` + ACK/telemetry ingest path.
 - Fast UDP API (`8888`)
-  - Packet format: v2 fast packet `<BBBHhHHHHHH>`
-  - Carries axis/motion controls continuously at configured rate (default ~50 Hz)
+  - Packet format: v2 fast packet `<BBBHhHHHHHH>` at configured stream rate.
 
 ## Key Integration Point
 
-- `mvp_selected_head.json` is the shared contract between planes:
-  - Slow bridge writes selected head index.
-  - ADC fast bridge follows that index for retargeting fast UDP output.
+- `heads.json` + `mvp_selected_head.json` remain the shared targeting contract:
+  - slow bridge owns selection persistence,
+  - ADC fast bridge follows same selection for fast-path routing.
