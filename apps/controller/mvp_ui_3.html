@@ -229,7 +229,10 @@ let keyboardCaps = false;
 let networkDraft = null;
 let networkDirty = { pi_lan: false, heads: {} };
 let inputDebounceMs = 60;
-let inputRiseCount = Array(15).fill(0);
+let inputRawRiseCount = Array(15).fill(0);
+let inputAcceptedRiseCount = Array(15).fill(0);
+let inputSuppressedDebounceCount = Array(15).fill(0);
+let inputSuppressedGroupCount = Array(15).fill(0);
 let inputPressed = Array(15).fill(0);
 let inputLastRiseMs = Array(15).fill(0);
 let inputLastActionMs = Array(15).fill(0);
@@ -255,13 +258,20 @@ function renderInputTests(){
   for (let i = 0; i < 15; i++){
     const b = document.createElement("div");
     b.className = "input-test-btn" + (inputPressed[i] ? " active" : "");
-    b.innerHTML = `<div class="input-test-label">Btn ${i}</div><div class="input-test-count">Count: ${inputRiseCount[i]}</div>`;
+    b.innerHTML =
+      `<div class="input-test-label">Btn ${i}</div>` +
+      `<div class="input-test-count">Raw:${inputRawRiseCount[i]} Acc:${inputAcceptedRiseCount[i]}</div>` +
+      `<div class="input-test-count">Deb:${inputSuppressedDebounceCount[i]} Grp:${inputSuppressedGroupCount[i]}</div>`;
     grid.appendChild(b);
   }
   $("inputDebounceMs").value = String(inputDebounceMs);
   $("inputGroupLockoutMs").value = String(inputGroupLockoutMs);
   const active = inputPressed.reduce((n, v) => n + (v ? 1 : 0), 0);
-  $("inputTestSummary").textContent = `Input tests: active=${active} debounce=${inputDebounceMs}ms group_lockout=${inputGroupLockoutMs}ms`;
+  const sumRaw = inputRawRiseCount.reduce((a, b) => a + b, 0);
+  const sumAcc = inputAcceptedRiseCount.reduce((a, b) => a + b, 0);
+  const sumDeb = inputSuppressedDebounceCount.reduce((a, b) => a + b, 0);
+  const sumGrp = inputSuppressedGroupCount.reduce((a, b) => a + b, 0);
+  $("inputTestSummary").textContent = `Input tests: active=${active} debounce=${inputDebounceMs}ms group_lockout=${inputGroupLockoutMs}ms raw=${sumRaw} accepted=${sumAcc} suppressed(deb/group)=${sumDeb}/${sumGrp}`;
 }
 
 function getColumn(i){ return LAYOUT.columns[i] || { id:`C${i+1}`, title:`Column ${i+1}`, positions:[] }; }
@@ -440,10 +450,8 @@ function processEncoderButtons(){
     const prev = prevButtonState[`raw_${i}`] || 0;
     inputPressed[i] = pressed;
     if (pressed && !prev){
-      if (now - inputLastRiseMs[i] >= inputDebounceMs){
-        inputLastRiseMs[i] = now;
-        inputRiseCount[i] += 1;
-      }
+      inputRawRiseCount[i] += 1;
+      inputLastRiseMs[i] = now;
     }
     prevButtonState[`raw_${i}`] = pressed;
   }
@@ -468,8 +476,13 @@ function processEncoderButtons(){
             inputLastActionMs[m.btn] = now;
             inputGroupLastActionMs[g] = now;
             inputGroupLastBtn[g] = m.btn;
+            inputAcceptedRiseCount[m.btn] += 1;
             m.onRise();
+          } else {
+            inputSuppressedGroupCount[m.btn] += 1;
           }
+        } else {
+          inputSuppressedDebounceCount[m.btn] += 1;
         }
       }
       prevButtonState[m.id] = pressed;
@@ -730,7 +743,10 @@ function bindUI(){
   $("inputGroupLockoutDec").onclick = () => { inputGroupLockoutMs = Math.max(0, inputGroupLockoutMs - 5); renderInputTests(); };
   $("inputGroupLockoutInc").onclick = () => { inputGroupLockoutMs = Math.min(300, inputGroupLockoutMs + 5); renderInputTests(); };
   $("inputResetCounters").onclick = () => {
-    inputRiseCount = Array(15).fill(0);
+    inputRawRiseCount = Array(15).fill(0);
+    inputAcceptedRiseCount = Array(15).fill(0);
+    inputSuppressedDebounceCount = Array(15).fill(0);
+    inputSuppressedGroupCount = Array(15).fill(0);
     inputLastRiseMs = Array(15).fill(0);
     inputLastActionMs = Array(15).fill(0);
     inputGroupLastActionMs = Array(5).fill(0);
