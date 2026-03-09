@@ -212,7 +212,13 @@ let state = {
   selected: 0,
   slow_controls: {},
   slow_apply_status: {},
-  shaping: { expo: 0, top_speed: 1, invert: { yaw:false, pitch:false, roll:false }, deadband: { yaw:0, pitch:0, roll:0, zoom:0 } },
+  shaping: {
+    expo: 5,
+    expo_zoom: 5,
+    top_speed: { yaw: 5, pitch: 5, roll: 5, zoom: 5 },
+    invert: { yaw:false, pitch:false, roll:false },
+    deadband: { yaw:0, pitch:0, roll:0, zoom:0 },
+  },
   defaults: {},
   head_feedback: {},
   connection_status: {},
@@ -307,10 +313,16 @@ function setCommandValue(commandKey, value){
   if (!commandKey) return false;
   if (commandKey.startsWith("shape_")) {
     state.shaping = state.shaping || {};
+    state.shaping.top_speed = state.shaping.top_speed || { yaw:5, pitch:5, roll:5, zoom:5 };
     state.shaping.invert = state.shaping.invert || { yaw:false, pitch:false, roll:false };
     state.shaping.deadband = state.shaping.deadband || { yaw:0, pitch:0, roll:0, zoom:0 };
     if (commandKey === "shape_expo") state.shaping.expo = value;
+    else if (commandKey === "shape_expo_zoom") state.shaping.expo_zoom = value;
     else if (commandKey === "shape_top_speed") state.shaping.top_speed = value;
+    else if (commandKey === "shape_top_speed_yaw") state.shaping.top_speed.yaw = Number(value) || 0;
+    else if (commandKey === "shape_top_speed_pitch") state.shaping.top_speed.pitch = Number(value) || 0;
+    else if (commandKey === "shape_top_speed_roll") state.shaping.top_speed.roll = Number(value) || 0;
+    else if (commandKey === "shape_top_speed_zoom") state.shaping.top_speed.zoom = Number(value) || 0;
     else if (commandKey === "shape_invert_yaw") state.shaping.invert.yaw = !!value;
     else if (commandKey === "shape_invert_pitch") state.shaping.invert.pitch = !!value;
     else if (commandKey === "shape_invert_roll") state.shaping.invert.roll = !!value;
@@ -382,7 +394,12 @@ function getSlotValue(pos){
   if (!pos || !pos.commandKey) return null;
   if (pos.commandKey.startsWith("shape_")) {
     if (pos.commandKey === "shape_expo") return state.shaping.expo;
+    if (pos.commandKey === "shape_expo_zoom") return state.shaping.expo_zoom;
     if (pos.commandKey === "shape_top_speed") return state.shaping.top_speed;
+    if (pos.commandKey === "shape_top_speed_yaw") return state.shaping.top_speed?.yaw ?? 5;
+    if (pos.commandKey === "shape_top_speed_pitch") return state.shaping.top_speed?.pitch ?? 5;
+    if (pos.commandKey === "shape_top_speed_roll") return state.shaping.top_speed?.roll ?? 5;
+    if (pos.commandKey === "shape_top_speed_zoom") return state.shaping.top_speed?.zoom ?? 5;
     if (pos.commandKey === "shape_invert_yaw") return state.shaping.invert.yaw ? 1 : 0;
     if (pos.commandKey === "shape_invert_pitch") return state.shaping.invert.pitch ? 1 : 0;
     if (pos.commandKey === "shape_invert_roll") return state.shaping.invert.roll ? 1 : 0;
@@ -599,6 +616,21 @@ function processEncoderButtons(){
 
 function renderState(){
   state.shaping = state.shaping || {};
+  state.shaping.top_speed = state.shaping.top_speed || { yaw:5, pitch:5, roll:5, zoom:5 };
+  if (typeof state.shaping.top_speed === "number"){
+    const s = Number(state.shaping.top_speed) || 0;
+    state.shaping.top_speed = { yaw:s, pitch:s, roll:s, zoom:s };
+  } else {
+    state.shaping.top_speed = {
+      yaw: Number(state.shaping.top_speed.yaw ?? 5),
+      pitch: Number(state.shaping.top_speed.pitch ?? 5),
+      roll: Number(state.shaping.top_speed.roll ?? 5),
+      zoom: Number(state.shaping.top_speed.zoom ?? 5),
+    };
+  }
+  if (state.shaping.expo_zoom === undefined || state.shaping.expo_zoom === null){
+    state.shaping.expo_zoom = state.shaping.expo;
+  }
   state.shaping.invert = state.shaping.invert || { yaw:false, pitch:false, roll:false };
   state.shaping.deadband = state.shaping.deadband || { yaw:0, pitch:0, roll:0, zoom:0 };
   if (!inputFilterDefaultsLoaded){

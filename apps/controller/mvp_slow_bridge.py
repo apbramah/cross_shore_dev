@@ -107,7 +107,8 @@ def _default_shaping_profile() -> dict[str, Any]:
     return {
         "ui_scale": True,
         "expo": 5.0,
-        "top_speed": 5.0,
+        "expo_zoom": 5.0,
+        "top_speed": {"yaw": 5.0, "pitch": 5.0, "roll": 5.0, "zoom": 5.0},
         "invert": {"yaw": False, "pitch": False, "roll": False},
         "deadband": {"yaw": 0.0, "pitch": 0.0, "roll": 0.0, "zoom": 0.0},
     }
@@ -141,26 +142,60 @@ def _normalized_shaping_profile(raw: Any) -> dict[str, Any]:
     if is_ui_scale:
         if "expo" in raw:
             try:
-                base["expo"] = _clamp(float(raw.get("expo", base["expo"])), 0.0, 10.0)
+                base["expo"] = _clamp(float(raw.get("expo", base["expo"])), 1.0, 10.0)
+            except Exception:
+                pass
+        if "expo_zoom" in raw:
+            try:
+                base["expo_zoom"] = _clamp(float(raw.get("expo_zoom", base["expo_zoom"])), 1.0, 10.0)
             except Exception:
                 pass
         if "top_speed" in raw:
-            try:
-                base["top_speed"] = _clamp(float(raw.get("top_speed", base["top_speed"])), 0.0, 10.0)
-            except Exception:
-                pass
+            ts = raw.get("top_speed")
+            if isinstance(ts, dict):
+                for k in ("yaw", "pitch", "roll", "zoom"):
+                    if k in ts:
+                        try:
+                            base["top_speed"][k] = _clamp(float(ts[k]), 0.0, 10.0)
+                        except Exception:
+                            pass
+            else:
+                try:
+                    v = _clamp(float(ts), 0.0, 10.0)
+                    for k in ("yaw", "pitch", "roll", "zoom"):
+                        base["top_speed"][k] = v
+                except Exception:
+                    pass
     else:
         # Backward-compat migration from engineering units to normalized UI units.
         if "expo" in raw:
             try:
-                base["expo"] = _map_range_to_0_10(float(raw.get("expo", 0.0)), -1.0, 1.0)
+                base["expo"] = _clamp(_map_range_to_0_10(float(raw.get("expo", 0.0)), -1.0, 1.0), 1.0, 10.0)
             except Exception:
                 pass
-        if "top_speed" in raw:
+        if "expo_zoom" in raw:
             try:
-                base["top_speed"] = _map_range_to_0_10(float(raw.get("top_speed", 1.0)), 0.0, 2.0)
+                base["expo_zoom"] = _clamp(_map_range_to_0_10(float(raw.get("expo_zoom", 0.0)), -1.0, 1.0), 1.0, 10.0)
             except Exception:
                 pass
+        else:
+            base["expo_zoom"] = base["expo"]
+        if "top_speed" in raw:
+            ts = raw.get("top_speed")
+            if isinstance(ts, dict):
+                for k in ("yaw", "pitch", "roll", "zoom"):
+                    if k in ts:
+                        try:
+                            base["top_speed"][k] = _map_range_to_0_10(float(ts[k]), 0.0, 2.0)
+                        except Exception:
+                            pass
+            else:
+                try:
+                    v = _map_range_to_0_10(float(ts), 0.0, 2.0)
+                    for k in ("yaw", "pitch", "roll", "zoom"):
+                        base["top_speed"][k] = v
+                except Exception:
+                    pass
     inv = raw.get("invert", {})
     if isinstance(inv, dict):
         for k in ("yaw", "pitch", "roll"):
@@ -406,14 +441,22 @@ def _load_adc_profile() -> dict[str, Any]:
 def _apply_shaping_to_adc_profile() -> tuple[bool, str]:
     profile = _load_adc_profile()
     axes = profile.setdefault("axes", {})
-    expo = _map_0_10_to_range(float(shaping_state.get("expo", 5.0)), -1.0, 1.0)
-    gain = _map_0_10_to_range(float(shaping_state.get("top_speed", 5.0)), 0.0, 2.0)
+    expo_ui_ptr = _clamp(float(shaping_state.get("expo", 5.0)), 1.0, 10.0)
+    expo_ui_zoom = _clamp(float(shaping_state.get("expo_zoom", expo_ui_ptr)), 1.0, 10.0)
+    # Inverted expo UI direction: higher UI value maps toward lower engineering expo.
+    expo_ptr = _map_0_10_to_range(10.0 - expo_ui_ptr, -1.0, 1.0)
+    expo_zoom = _map_0_10_to_range(10.0 - expo_ui_zoom, -1.0, 1.0)
+    top_speed = shaping_state.get("top_speed", {})
     invert = shaping_state.get("invert", {})
     deadband = shaping_state.get("deadband", {})
     for axis, inv_key in (("X", "yaw"), ("Y", "pitch"), ("Z", "roll"), ("Zrotate", "zoom")):
         t = axes.setdefault(axis, {})
-        t["expo"] = expo
-        t["gain"] = gain
+        t["expo"] = expo_zoom if axis == "Zrotate" else expo_ptr
+        try:
+            ui_gain = float(top_speed.get(inv_key, 5.0)) if isinstance(top_speed, dict) else float(top_speed)
+        except Exception:
+            ui_gain = 5.0
+        t["gain"] = _map_0_10_to_range(_clamp(ui_gain, 0.0, 10.0), 0.0, 2.0)
         if axis != "Zrotate":
             t["invert"] = bool(invert.get(inv_key, False))
         try:
@@ -825,10 +868,29 @@ async def handler(websocket: Any) -> None:
                     _send_one_slow_key_now(key)
             elif msg_type == "SET_SHAPING":
                 payload = data.get("value", {}) or {}
+                if not isinstance(shaping_state.get("top_speed"), dict):
+                    try:
+                        sv = float(shaping_state.get("top_speed", 5.0))
+                    except Exception:
+                        sv = 5.0
+                    shaping_state["top_speed"] = {"yaw": sv, "pitch": sv, "roll": sv, "zoom": sv}
                 if "expo" in payload:
-                    shaping_state["expo"] = _clamp(float(payload["expo"]), 0.0, 10.0)
+                    shaping_state["expo"] = _clamp(float(payload["expo"]), 1.0, 10.0)
+                if "expo_zoom" in payload:
+                    shaping_state["expo_zoom"] = _clamp(float(payload["expo_zoom"]), 1.0, 10.0)
                 if "top_speed" in payload:
-                    shaping_state["top_speed"] = _clamp(float(payload["top_speed"]), 0.0, 10.0)
+                    ts = payload.get("top_speed")
+                    if isinstance(ts, dict):
+                        for k in ("yaw", "pitch", "roll", "zoom"):
+                            if k in ts:
+                                try:
+                                    shaping_state["top_speed"][k] = _clamp(float(ts[k]), 0.0, 10.0)
+                                except Exception:
+                                    pass
+                    else:
+                        v = _clamp(float(ts), 0.0, 10.0)
+                        for k in ("yaw", "pitch", "roll", "zoom"):
+                            shaping_state["top_speed"][k] = v
                 inv = payload.get("invert", {})
                 if isinstance(inv, dict):
                     for k in ("yaw", "pitch", "roll"):
