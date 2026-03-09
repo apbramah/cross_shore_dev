@@ -105,27 +105,62 @@ def _default_slow_state() -> dict[str, Any]:
 
 def _default_shaping_profile() -> dict[str, Any]:
     return {
-        "expo": 0.0,
-        "top_speed": 1.0,
+        "ui_scale": True,
+        "expo": 5.0,
+        "top_speed": 5.0,
         "invert": {"yaw": False, "pitch": False, "roll": False},
         "deadband": {"yaw": 0.0, "pitch": 0.0, "roll": 0.0, "zoom": 0.0},
     }
+
+
+def _clamp(v: float, lo: float, hi: float) -> float:
+    if v < lo:
+        return lo
+    if v > hi:
+        return hi
+    return v
+
+
+def _map_0_10_to_range(ui_val: float, out_min: float, out_max: float) -> float:
+    u = _clamp(float(ui_val), 0.0, 10.0)
+    return out_min + ((out_max - out_min) * (u / 10.0))
+
+
+def _map_range_to_0_10(raw_val: float, in_min: float, in_max: float) -> float:
+    if in_max <= in_min:
+        return 0.0
+    x = (float(raw_val) - in_min) / (in_max - in_min)
+    return _clamp(x * 10.0, 0.0, 10.0)
 
 
 def _normalized_shaping_profile(raw: Any) -> dict[str, Any]:
     base = _default_shaping_profile()
     if not isinstance(raw, dict):
         return base
-    if "expo" in raw:
-        try:
-            base["expo"] = float(raw.get("expo", base["expo"]))
-        except Exception:
-            pass
-    if "top_speed" in raw:
-        try:
-            base["top_speed"] = float(raw.get("top_speed", base["top_speed"]))
-        except Exception:
-            pass
+    is_ui_scale = bool(raw.get("ui_scale", False))
+    if is_ui_scale:
+        if "expo" in raw:
+            try:
+                base["expo"] = _clamp(float(raw.get("expo", base["expo"])), 0.0, 10.0)
+            except Exception:
+                pass
+        if "top_speed" in raw:
+            try:
+                base["top_speed"] = _clamp(float(raw.get("top_speed", base["top_speed"])), 0.0, 10.0)
+            except Exception:
+                pass
+    else:
+        # Backward-compat migration from engineering units to normalized UI units.
+        if "expo" in raw:
+            try:
+                base["expo"] = _map_range_to_0_10(float(raw.get("expo", 0.0)), -1.0, 1.0)
+            except Exception:
+                pass
+        if "top_speed" in raw:
+            try:
+                base["top_speed"] = _map_range_to_0_10(float(raw.get("top_speed", 1.0)), 0.0, 2.0)
+            except Exception:
+                pass
     inv = raw.get("invert", {})
     if isinstance(inv, dict):
         for k in ("yaw", "pitch", "roll"):
@@ -137,13 +172,13 @@ def _normalized_shaping_profile(raw: Any) -> dict[str, Any]:
             if k in db:
                 try:
                     v = float(db[k])
-                    if v < 0.0:
-                        v = 0.0
-                    if v > 0.25:
-                        v = 0.25
-                    base["deadband"][k] = v
+                    if is_ui_scale:
+                        base["deadband"][k] = _clamp(v, 0.0, 10.0)
+                    else:
+                        base["deadband"][k] = _map_range_to_0_10(v, 0.0, 0.25)
                 except Exception:
                     pass
+    base["ui_scale"] = True
     return base
 
 
@@ -371,8 +406,8 @@ def _load_adc_profile() -> dict[str, Any]:
 def _apply_shaping_to_adc_profile() -> tuple[bool, str]:
     profile = _load_adc_profile()
     axes = profile.setdefault("axes", {})
-    expo = float(shaping_state.get("expo", 0.0))
-    gain = float(shaping_state.get("top_speed", 1.0))
+    expo = _map_0_10_to_range(float(shaping_state.get("expo", 5.0)), -1.0, 1.0)
+    gain = _map_0_10_to_range(float(shaping_state.get("top_speed", 5.0)), 0.0, 2.0)
     invert = shaping_state.get("invert", {})
     deadband = shaping_state.get("deadband", {})
     for axis, inv_key in (("X", "yaw"), ("Y", "pitch"), ("Z", "roll"), ("Zrotate", "zoom")):
@@ -382,14 +417,10 @@ def _apply_shaping_to_adc_profile() -> tuple[bool, str]:
         if axis != "Zrotate":
             t["invert"] = bool(invert.get(inv_key, False))
         try:
-            db = float(deadband.get(inv_key, t.get("deadband", 0.0)))
+            db_ui = float(deadband.get(inv_key, 0.0))
         except Exception:
-            db = 0.0
-        if db < 0.0:
-            db = 0.0
-        if db > 0.25:
-            db = 0.25
-        t["deadband"] = db
+            db_ui = 0.0
+        t["deadband"] = _map_0_10_to_range(db_ui, 0.0, 0.25)
     try:
         _safe_save_json(_build_adc_profile_file_path(), profile)
         return True, "adc_profile_updated"
@@ -795,9 +826,9 @@ async def handler(websocket: Any) -> None:
             elif msg_type == "SET_SHAPING":
                 payload = data.get("value", {}) or {}
                 if "expo" in payload:
-                    shaping_state["expo"] = float(payload["expo"])
+                    shaping_state["expo"] = _clamp(float(payload["expo"]), 0.0, 10.0)
                 if "top_speed" in payload:
-                    shaping_state["top_speed"] = float(payload["top_speed"])
+                    shaping_state["top_speed"] = _clamp(float(payload["top_speed"]), 0.0, 10.0)
                 inv = payload.get("invert", {})
                 if isinstance(inv, dict):
                     for k in ("yaw", "pitch", "roll"):
@@ -811,11 +842,8 @@ async def handler(websocket: Any) -> None:
                                 v = float(db[k])
                             except Exception:
                                 continue
-                            if v < 0.0:
-                                v = 0.0
-                            if v > 0.25:
-                                v = 0.25
-                            shaping_state["deadband"][k] = v
+                            shaping_state["deadband"][k] = _clamp(v, 0.0, 10.0)
+                shaping_state["ui_scale"] = True
                 ok, msg = _apply_shaping_to_adc_profile()
                 await websocket.send(json.dumps({"type": "SHAPING_APPLIED", "ok": ok, "message": msg, "value": shaping_state}))
             elif msg_type == "SAVE_USER_DEFAULTS":
