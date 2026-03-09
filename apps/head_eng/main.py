@@ -91,6 +91,7 @@ _last_fast_fields = None
 _last_fast_debug_ms = 0
 _last_slow_sender_ip = None
 _last_telem_ms = 0
+_lens_name_last_try_ms = 0
 
 print("BGC + ENG lens ready")
 if FUJI_DEBUG:
@@ -260,7 +261,7 @@ def _send_slow_ack(target_ip, seq, apply_id, key_id, status=1):
 
 
 def _send_slow_telem():
-    global _last_telem_ms
+    global _last_telem_ms, _lens_name_last_try_ms
     if not _last_slow_sender_ip:
         return
     now = time.ticks_ms()
@@ -268,6 +269,10 @@ def _send_slow_telem():
         return
     _last_telem_ms = now
     try:
+        lens_name = lens.get_lens_full_name()
+        if not lens_name and time.ticks_diff(now, _lens_name_last_try_ms) >= 5000:
+            _lens_name_last_try_ms = now
+            lens_name = lens.get_lens_full_name()
         payload = {
             "slow": {
                 "motors_on": 1 if slow_motors_on else 0,
@@ -276,6 +281,12 @@ def _send_slow_telem():
             },
             "lens": {
                 "lens_id": lens.get_lens_type(),
+                "lens_full_name": lens_name or "",
+                "positions": {
+                    "zoom": int(getattr(getattr(lens, "active_lens", None), "zoom", 0)),
+                    "focus": int(getattr(getattr(lens, "active_lens", None), "focus", 0)),
+                    "iris": int(getattr(getattr(lens, "active_lens", None), "iris", 0)),
+                },
                 "zoom_position": int(getattr(getattr(lens, "active_lens", None), "zoom", 0)),
                 "focus_position": int(getattr(getattr(lens, "active_lens", None), "focus", 0)),
                 "iris_position": int(getattr(getattr(lens, "active_lens", None), "iris", 0)),

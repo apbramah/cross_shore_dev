@@ -54,6 +54,7 @@ class FujiLens(FujiCalibration):
         self.zoom_speed = 0x8000
         self.focus = 0x7FFF
         self.iris = 0x7FFF
+        self.lens_name_cached = None
         self.zoom_mode = DEFAULT_ZOOM_MODE
         self.axis_sources = {axis: SOURCE_PC for axis in AXES}
         self._next_control_tx_ms = 0
@@ -160,8 +161,15 @@ class FujiLens(FujiCalibration):
         # Telemetry-only path; runtime loop is intentionally ungated.
         lens_name = self._read_lens_name()
         if lens_name:
+            self.lens_name_cached = lens_name
             print("[LENS][Fuji] Lens ID:", lens_name)
         return True
+
+    def read_lens_name(self):
+        lens_name = self._read_lens_name()
+        if lens_name:
+            self.lens_name_cached = lens_name
+        return lens_name
 
     def _send_runtime_controls(self):
         if FUJI_FOCUS_DEBUG:

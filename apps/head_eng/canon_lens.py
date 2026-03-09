@@ -38,6 +38,7 @@ class CanonLens:
         self.zoom = 30000
         self.focus = 30000
         self.iris = 30000
+        self.lens_name_cached = None
         self.axis_sources = {axis: SOURCE_PC for axis in AXES}
         self._next_keepalive_ms = 0
         self._next_source_refresh_ms = 0
@@ -122,7 +123,10 @@ class CanonLens:
         frame = self._wait_for_prefix((0xBE, 0x80, 0x81), 1200)
         if not frame:
             return None
-        return decode_lens_name_type_c(frame)
+        name = decode_lens_name_type_c(frame)
+        if name:
+            self.lens_name_cached = name
+        return name
 
     def run_bit(self):
         # Similar to tester: init, source PC for all axes, sweep and expect Type-B feedback.

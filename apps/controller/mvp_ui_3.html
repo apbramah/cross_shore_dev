@@ -398,7 +398,18 @@ function renderState(){
   $("applyState").textContent = `Apply status:\n${JSON.stringify(state.slow_apply_status || {}, null, 2)}`;
   $("shapingState").textContent = `Shaping:\n${JSON.stringify(state.shaping || {}, null, 2)}`;
   $("connectionState").textContent = `Connection:\n${JSON.stringify(state.connection_status || {}, null, 2)}`;
-  $("telemetryState").textContent = `Head feedback:\n${JSON.stringify(state.head_feedback || {}, null, 2)}`;
+  const lens = (state.head_feedback || {}).lens || {};
+  const pos = lens.positions || {};
+  const lensId = lens.lens_id || "-";
+  const lensName = lens.lens_full_name || "(unknown)";
+  const z = (pos.zoom !== undefined ? pos.zoom : lens.zoom_position);
+  const f = (pos.focus !== undefined ? pos.focus : lens.focus_position);
+  const i = (pos.iris !== undefined ? pos.iris : lens.iris_position);
+  $("telemetryState").textContent =
+    `Lens ID: ${lensId}\n` +
+    `Lens Name: ${lensName}\n` +
+    `Positions (zoom/focus/iris): ${z ?? "-"} / ${f ?? "-"} / ${i ?? "-"}\n\n` +
+    `Head feedback:\n${JSON.stringify(state.head_feedback || {}, null, 2)}`;
   $("networkInfo").textContent = `Network:\n${JSON.stringify(state.network_config || {}, null, 2)}`;
   $("wifiStatus").textContent = `WiFi:\n${JSON.stringify(state.wifi_status || {}, null, 2)}`;
   renderPopup();

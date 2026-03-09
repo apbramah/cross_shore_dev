@@ -350,6 +350,22 @@ def _selected_head_ip() -> str:
     return ""
 
 
+def _normalize_lens_feedback(lens_payload: dict[str, Any]) -> dict[str, Any]:
+    lens_payload = dict(lens_payload or {})
+    pos = lens_payload.get("positions", {}) or {}
+    zoom = pos.get("zoom", lens_payload.get("zoom_position", 0))
+    focus = pos.get("focus", lens_payload.get("focus_position", 0))
+    iris = pos.get("iris", lens_payload.get("iris_position", 0))
+    lens_payload["positions"] = {
+        "zoom": int(zoom) if zoom is not None else 0,
+        "focus": int(focus) if focus is not None else 0,
+        "iris": int(iris) if iris is not None else 0,
+    }
+    if "lens_full_name" not in lens_payload:
+        lens_payload["lens_full_name"] = ""
+    return lens_payload
+
+
 def _state_payload() -> dict[str, Any]:
     return {
         "type": "STATE",
@@ -426,7 +442,7 @@ async def telemetry_receiver_task() -> None:
         telem = mvp_protocol.decode_slow_telem_packet(data)
         if telem:
             head_feedback["slow"] = telem.get("slow", {})
-            head_feedback["lens"] = telem.get("lens", {})
+            head_feedback["lens"] = _normalize_lens_feedback(telem.get("lens", {}))
             head_feedback["bgc"] = telem.get("bgc", {})
             head_feedback["updated_at"] = time.time()
 
