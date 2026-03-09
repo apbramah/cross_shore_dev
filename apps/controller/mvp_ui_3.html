@@ -402,12 +402,17 @@ function renderState(){
   const pos = lens.positions || {};
   const lensId = lens.lens_id || "-";
   const lensName = lens.lens_full_name || "(unknown)";
+  const zoomMode = lens.zoom_control_mode || "position";
+  const zoomCmd = lens.zoom_velocity_cmd ?? 0;
+  const zoomRaw = lens.zoom_speed_raw ?? 0;
   const z = (pos.zoom !== undefined ? pos.zoom : lens.zoom_position);
   const f = (pos.focus !== undefined ? pos.focus : lens.focus_position);
   const i = (pos.iris !== undefined ? pos.iris : lens.iris_position);
   $("telemetryState").textContent =
     `Lens ID: ${lensId}\n` +
     `Lens Name: ${lensName}\n` +
+    `Zoom Mode: ${zoomMode}\n` +
+    `Zoom Velocity Cmd: ${zoomCmd} (raw:${zoomRaw})\n` +
     `Positions (zoom/focus/iris): ${z ?? "-"} / ${f ?? "-"} / ${i ?? "-"}\n\n` +
     `Head feedback:\n${JSON.stringify(state.head_feedback || {}, null, 2)}`;
   $("networkInfo").textContent = `Network:\n${JSON.stringify(state.network_config || {}, null, 2)}`;

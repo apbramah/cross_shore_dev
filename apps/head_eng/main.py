@@ -273,6 +273,10 @@ def _send_slow_telem():
         if not lens_name and time.ticks_diff(now, _lens_name_last_try_ms) >= 5000:
             _lens_name_last_try_ms = now
             lens_name = lens.get_lens_full_name()
+        active_lens = getattr(lens, "active_lens", None)
+        zoom_mode = str(getattr(active_lens, "zoom_mode", "position"))
+        zoom_velocity_cmd = int((_last_fast_fields or {}).get("zoom", 0))
+        zoom_speed_raw = int(getattr(active_lens, "zoom_speed", 0))
         payload = {
             "slow": {
                 "motors_on": 1 if slow_motors_on else 0,
@@ -282,14 +286,17 @@ def _send_slow_telem():
             "lens": {
                 "lens_id": lens.get_lens_type(),
                 "lens_full_name": lens_name or "",
+                "zoom_control_mode": zoom_mode,
+                "zoom_velocity_cmd": zoom_velocity_cmd,
+                "zoom_speed_raw": zoom_speed_raw,
                 "positions": {
-                    "zoom": int(getattr(getattr(lens, "active_lens", None), "zoom", 0)),
-                    "focus": int(getattr(getattr(lens, "active_lens", None), "focus", 0)),
-                    "iris": int(getattr(getattr(lens, "active_lens", None), "iris", 0)),
+                    "zoom": int(getattr(active_lens, "zoom", 0)),
+                    "focus": int(getattr(active_lens, "focus", 0)),
+                    "iris": int(getattr(active_lens, "iris", 0)),
                 },
-                "zoom_position": int(getattr(getattr(lens, "active_lens", None), "zoom", 0)),
-                "focus_position": int(getattr(getattr(lens, "active_lens", None), "focus", 0)),
-                "iris_position": int(getattr(getattr(lens, "active_lens", None), "iris", 0)),
+                "zoom_position": int(getattr(active_lens, "zoom", 0)),
+                "focus_position": int(getattr(active_lens, "focus", 0)),
+                "iris_position": int(getattr(active_lens, "iris", 0)),
             },
             "bgc": {
                 "power_level_main": None,

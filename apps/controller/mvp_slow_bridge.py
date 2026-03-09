@@ -363,6 +363,9 @@ def _normalize_lens_feedback(lens_payload: dict[str, Any]) -> dict[str, Any]:
     }
     if "lens_full_name" not in lens_payload:
         lens_payload["lens_full_name"] = ""
+    lens_payload["zoom_control_mode"] = str(lens_payload.get("zoom_control_mode", "position"))
+    lens_payload["zoom_velocity_cmd"] = int(lens_payload.get("zoom_velocity_cmd", 0) or 0)
+    lens_payload["zoom_speed_raw"] = int(lens_payload.get("zoom_speed_raw", 0) or 0)
     return lens_payload
 
 
