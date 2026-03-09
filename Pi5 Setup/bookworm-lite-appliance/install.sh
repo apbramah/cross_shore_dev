@@ -12,6 +12,7 @@ WS_BIN="/usr/local/bin/wsbridge_daemon"
 KIOSK_BROWSER_BIN="/usr/local/bin/kiosk-browser"
 KIOSK_SELECT_BIN="/usr/local/bin/hydravision-kiosk-browser-select"
 APPLIANCE_ENV="/etc/default/hydravision-appliance"
+TOUCH_RULE="/etc/udev/rules.d/99-hydravision-touch-rotation.rules"
 SYSTEMD_DIR="/etc/systemd/system"
 
 UI_SRC_HTML="${APP_ROOT}/apps/controller/mvp_ui_3.html"
@@ -37,6 +38,17 @@ cleanup_stale_unit_override() {
     echo "Removing empty unit override: ${unit_path}"
     rm -f "$unit_path"
   fi
+}
+
+touch_matrix_for_transform() {
+  local transform="$1"
+  case "$transform" in
+    90) echo "0 -1 1 1 0 0" ;;     # clockwise
+    270) echo "0 1 0 -1 0 1" ;;    # counter-clockwise
+    180) echo "-1 0 1 0 -1 1" ;;
+    0|normal) echo "1 0 0 0 1 0" ;;
+    *) echo "0 -1 1 1 0 0" ;;      # default to kiosk baseline
+  esac
 }
 
 echo "[1/8] Installing required packages..."
@@ -185,8 +197,33 @@ if grep -q '^HYDRAVISION_KIOSK_BROWSER=' "$APPLIANCE_ENV"; then
 else
   printf '\nHYDRAVISION_KIOSK_BROWSER=chromium\n' >>"$APPLIANCE_ENV"
 fi
+# Migration: historical typo caused transform to be ignored.
+if grep -q '^HYDRAVISION_ROTATION_TRANSFOR=' "$APPLIANCE_ENV"; then
+  sed -i 's/^HYDRAVISION_ROTATION_TRANSFOR=/HYDRAVISION_ROTATION_TRANSFORM=/' "$APPLIANCE_ENV"
+fi
+if ! grep -q '^HYDRAVISION_ROTATION_TRANSFORM=' "$APPLIANCE_ENV"; then
+  printf '\nHYDRAVISION_ROTATION_TRANSFORM=90\n' >>"$APPLIANCE_ENV"
+fi
+if ! grep -q '^HYDRAVISION_ROTATION_OUTPUT=' "$APPLIANCE_ENV"; then
+  printf 'HYDRAVISION_ROTATION_OUTPUT=DSI-2\n' >>"$APPLIANCE_ENV"
+fi
 chown root:root "$APPLIANCE_ENV"
 chmod 644 "$APPLIANCE_ENV"
+
+# Install persistent touchscreen transform aligned to display transform.
+# Match touchscreen class by name pattern to cover Goodix variants that do not
+# expose ID_INPUT_TOUCHSCREEN in udev properties.
+# shellcheck disable=SC1090
+. "$APPLIANCE_ENV" || true
+ROT_FOR_TOUCH="${HYDRAVISION_ROTATION_TRANSFORM:-90}"
+TOUCH_MATRIX="$(touch_matrix_for_transform "$ROT_FOR_TOUCH")"
+cat >"$TOUCH_RULE" <<EOF
+# HydraVision touchscreen rotation rule (managed by install.sh)
+SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="*TouchScreen*", ENV{LIBINPUT_CALIBRATION_MATRIX}="${TOUCH_MATRIX}"
+EOF
+chmod 644 "$TOUCH_RULE"
+udevadm control --reload-rules || true
+udevadm trigger || true
 
 cat >"$KIOSK_BROWSER_BIN" <<'EOF'
 #!/usr/bin/env bash

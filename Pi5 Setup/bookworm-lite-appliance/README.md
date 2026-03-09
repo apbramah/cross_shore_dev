@@ -73,6 +73,12 @@ HYDRAVISION_ETH_DNS=192.168.60.1
 # HYDRAVISION_ETH_STATIC_IP=192.168.60.103
 ```
 
+Rotation/touch alignment:
+
+- `HYDRAVISION_ROTATION_OUTPUT` and `HYDRAVISION_ROTATION_TRANSFORM` control display rotation.
+- Installer writes `/etc/udev/rules.d/99-hydravision-touch-rotation.rules` from the same transform value to keep touchscreen coordinates aligned after reboot.
+- Installer auto-migrates historical typo key `HYDRAVISION_ROTATION_TRANSFOR` to `HYDRAVISION_ROTATION_TRANSFORM`.
+
 ## Install and enable
 
 From repo root on Pi:
