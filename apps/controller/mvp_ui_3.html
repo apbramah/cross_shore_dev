@@ -160,6 +160,10 @@
             <input id="inputDebounceMs" readonly style="max-width:120px;" />
             <button id="inputDebounceDec">-</button>
             <button id="inputDebounceInc">+</button>
+            <label for="inputGroupLockoutMs">Group lockout ms</label>
+            <input id="inputGroupLockoutMs" readonly style="max-width:120px;" />
+            <button id="inputGroupLockoutDec">-</button>
+            <button id="inputGroupLockoutInc">+</button>
             <button id="inputResetCounters">Reset Counters</button>
           </div>
           <div id="inputTestGrid" class="input-test-grid"></div>
@@ -229,6 +233,9 @@ let inputRiseCount = Array(15).fill(0);
 let inputPressed = Array(15).fill(0);
 let inputLastRiseMs = Array(15).fill(0);
 let inputLastActionMs = Array(15).fill(0);
+let inputGroupLockoutMs = 40;
+let inputGroupLastActionMs = Array(5).fill(0);
+let inputGroupLastBtn = Array(5).fill(-1);
 
 function $(id){ return document.getElementById(id); }
 function send(obj){ if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj)); }
@@ -252,8 +259,9 @@ function renderInputTests(){
     grid.appendChild(b);
   }
   $("inputDebounceMs").value = String(inputDebounceMs);
+  $("inputGroupLockoutMs").value = String(inputGroupLockoutMs);
   const active = inputPressed.reduce((n, v) => n + (v ? 1 : 0), 0);
-  $("inputTestSummary").textContent = `Input tests: active=${active} debounce=${inputDebounceMs}ms`;
+  $("inputTestSummary").textContent = `Input tests: active=${active} debounce=${inputDebounceMs}ms group_lockout=${inputGroupLockoutMs}ms`;
 }
 
 function getColumn(i){ return LAYOUT.columns[i] || { id:`C${i+1}`, title:`Column ${i+1}`, positions:[] }; }
@@ -452,8 +460,16 @@ function processEncoderButtons(){
       const prev = prevButtonState[m.id] || 0;
       if (pressed && !prev){
         if (now - inputLastActionMs[m.btn] >= inputDebounceMs){
-          inputLastActionMs[m.btn] = now;
-          m.onRise();
+          const g = colIdx;
+          const lastBtn = inputGroupLastBtn[g];
+          const withinGroupLockout = (now - inputGroupLastActionMs[g]) < inputGroupLockoutMs;
+          const differentButton = lastBtn !== -1 && lastBtn !== m.btn;
+          if (!(withinGroupLockout && differentButton)){
+            inputLastActionMs[m.btn] = now;
+            inputGroupLastActionMs[g] = now;
+            inputGroupLastBtn[g] = m.btn;
+            m.onRise();
+          }
         }
       }
       prevButtonState[m.id] = pressed;
@@ -711,10 +727,14 @@ function bindUI(){
   $("touchCalibrateInputs").onclick = () => send({ type: "CALIBRATE_INPUTS", duration_s: 2.5 });
   $("inputDebounceDec").onclick = () => { inputDebounceMs = Math.max(0, inputDebounceMs - 5); renderInputTests(); };
   $("inputDebounceInc").onclick = () => { inputDebounceMs = Math.min(300, inputDebounceMs + 5); renderInputTests(); };
+  $("inputGroupLockoutDec").onclick = () => { inputGroupLockoutMs = Math.max(0, inputGroupLockoutMs - 5); renderInputTests(); };
+  $("inputGroupLockoutInc").onclick = () => { inputGroupLockoutMs = Math.min(300, inputGroupLockoutMs + 5); renderInputTests(); };
   $("inputResetCounters").onclick = () => {
     inputRiseCount = Array(15).fill(0);
     inputLastRiseMs = Array(15).fill(0);
     inputLastActionMs = Array(15).fill(0);
+    inputGroupLastActionMs = Array(5).fill(0);
+    inputGroupLastBtn = Array(5).fill(-1);
     renderInputTests();
   };
   $("touchToggleMode").onclick = () => {
