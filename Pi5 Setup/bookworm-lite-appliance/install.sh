@@ -165,6 +165,8 @@ echo "[5/8] Installing daemon launchers..."
 cat >"$CTRL_BIN" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
+export MVP_HEADS_FILE="/opt/wsbridge/heads.json"
+export MVP_SELECTED_HEAD_FILE="/opt/wsbridge/mvp_selected_head.json"
 exec /usr/bin/python3 "$CTRL_SRC" -p /dev/ttyACM0 --host 127.0.0.1
 EOF
 chmod 755 "$CTRL_BIN"

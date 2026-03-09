@@ -31,6 +31,23 @@ except ImportError:
     MVP_PROTOCOL_AVAILABLE = False
 
 
+def _heads_file_override() -> str | None:
+    p = os.environ.get("MVP_HEADS_FILE", "").strip()
+    return p if p else None
+
+
+def _selected_head_file_candidates() -> list[str]:
+    local_default = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mvp_selected_head.json")
+    out = [local_default]
+    env_p = os.environ.get("MVP_SELECTED_HEAD_FILE", "").strip()
+    if env_p:
+        out.insert(0, env_p)
+    opt_ws = "/opt/wsbridge/mvp_selected_head.json"
+    if opt_ws not in out:
+        out.append(opt_ws)
+    return out
+
+
 def _port_is_open(port) -> bool:
     """True if port exists and is open; works whether is_open is a property (bool) or method."""
     if port is None:
@@ -46,7 +63,7 @@ def _resolve_head_host_port(host: str, fast_port: int, slow_port: int, head_inde
     if host != DEFAULT_HEAD_ADDR or not MVP_PROTOCOL_AVAILABLE:
         return host, fast_port, slow_port
     try:
-        heads = mvp_protocol.load_heads()
+        heads = mvp_protocol.load_heads(_heads_file_override() or mvp_protocol.HEADS_FILE)
         if not heads or not (0 <= head_index < len(heads)):
             return host, fast_port, slow_port
         h = heads[head_index]
@@ -62,13 +79,14 @@ def _resolve_head_host_port(host: str, fast_port: int, slow_port: int, head_inde
 
 def _load_selected_head_index(default_index: int = 0) -> int:
     """Read selected head index persisted by slow bridge UI."""
-    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mvp_selected_head.json")
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        return int(data.get("selected_index", default_index))
-    except Exception:
-        return default_index
+    for path in _selected_head_file_candidates():
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return int(data.get("selected_index", default_index))
+        except Exception:
+            continue
+    return default_index
 
 
 def _run_ingest_loop(

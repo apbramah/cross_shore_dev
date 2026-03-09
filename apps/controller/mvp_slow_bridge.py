@@ -344,6 +344,12 @@ def _send_one_slow_key_now(key: str) -> bool:
     return bool(ok)
 
 
+def _selected_head_ip() -> str:
+    if 0 <= selected_index < len(heads):
+        return str(heads[selected_index].get("ip", "")).strip()
+    return ""
+
+
 def _state_payload() -> dict[str, Any]:
     return {
         "type": "STATE",
@@ -397,9 +403,14 @@ async def telemetry_receiver_task() -> None:
     loop = asyncio.get_running_loop()
     while True:
         try:
-            data, _addr = await loop.sock_recvfrom(telem_sock, 8192)
+            data, addr = await loop.sock_recvfrom(telem_sock, 8192)
         except Exception:
             await asyncio.sleep(0.05)
+            continue
+        src_ip = str((addr or ("", 0))[0]).strip()
+        want_ip = _selected_head_ip()
+        # Bind feedback to selected head only so runtime status flips correctly.
+        if want_ip and src_ip and src_ip != want_ip:
             continue
         ack = mvp_protocol.decode_slow_ack_packet(data)
         if ack:
@@ -432,6 +443,7 @@ def _refresh_connection_status() -> None:
         head_state = "trying"
     connection_status["head"]["state"] = head_state
     connection_status["head"]["last_telem_age_s"] = age_s
+    connection_status["head"]["selected_ip"] = _selected_head_ip()
     connection_status["bridge"]["ws_clients"] = len(clients)
     lan = _parse_iface_ipv4(ETH_IFACE)
     # Keep desired Pi LAN config persistent; expose live interface status separately.
@@ -608,6 +620,9 @@ async def handler(websocket: Any) -> None:
                     selected_index = idx
                     _save_selected_head_index()
                     _save_state()
+                    # Force status to re-evaluate selected-head connectivity.
+                    head_feedback["updated_at"] = 0.0
+                    connection_status["head"]["last_send_ok"] = False
             elif msg_type == "SET_SLOW_CONTROL":
                 key = str(data.get("key", "")).strip()
                 if key in mvp_protocol.SLOW_KEY_IDS:
