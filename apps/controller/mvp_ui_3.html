@@ -293,6 +293,37 @@ function getColumn(i){ return LAYOUT.columns[i] || { id:`C${i+1}`, title:`Column
 function getPosition(c, p){ const col = getColumn(c); return col.positions[p] || { id:`C${c+1}P${p+1}`, label:"Spare", commandKey:null, values:[] }; }
 function isHighResSlot(pos){ return !!(pos && pos.high_res === true); }
 
+function setCommandValue(commandKey, value){
+  if (!commandKey) return false;
+  if (commandKey.startsWith("shape_")) {
+    state.shaping = state.shaping || {};
+    state.shaping.invert = state.shaping.invert || { yaw:false, pitch:false, roll:false };
+    state.shaping.deadband = state.shaping.deadband || { yaw:0, pitch:0, roll:0, zoom:0 };
+    if (commandKey === "shape_expo") state.shaping.expo = value;
+    else if (commandKey === "shape_top_speed") state.shaping.top_speed = value;
+    else if (commandKey === "shape_invert_yaw") state.shaping.invert.yaw = !!value;
+    else if (commandKey === "shape_invert_pitch") state.shaping.invert.pitch = !!value;
+    else if (commandKey === "shape_invert_roll") state.shaping.invert.roll = !!value;
+    else if (commandKey === "shape_deadband_yaw") state.shaping.deadband.yaw = Number(value) || 0;
+    else if (commandKey === "shape_deadband_pitch") state.shaping.deadband.pitch = Number(value) || 0;
+    else if (commandKey === "shape_deadband_roll") state.shaping.deadband.roll = Number(value) || 0;
+    else if (commandKey === "shape_deadband_zoom") state.shaping.deadband.zoom = Number(value) || 0;
+    else return false;
+    return true;
+  }
+  state.slow_controls = state.slow_controls || {};
+  state.slow_controls[commandKey] = value;
+  return true;
+}
+
+function getFrozenActiveSlot(){
+  if (activeColumn === null) return null;
+  const p = activePosIndexByColumn[activeColumn] || 0;
+  const slot = getPosition(activeColumn, p);
+  if (!slot || !slot.commandKey) return null;
+  return { key: slot.commandKey, value: getSlotValue(slot) };
+}
+
 function getSlotValue(pos){
   if (!pos || !pos.commandKey) return null;
   if (pos.commandKey.startsWith("shape_")) {
@@ -411,17 +442,9 @@ function cycleValue(dir){
   if (idx >= vals.length) idx = vals.length - 1;
   if (slot.commandKey.startsWith("shape_")) {
     const v = vals[idx].value;
-    if (slot.commandKey === "shape_expo") state.shaping.expo = v;
-    else if (slot.commandKey === "shape_top_speed") state.shaping.top_speed = v;
-    else if (slot.commandKey === "shape_invert_yaw") state.shaping.invert.yaw = !!v;
-    else if (slot.commandKey === "shape_invert_pitch") state.shaping.invert.pitch = !!v;
-    else if (slot.commandKey === "shape_invert_roll") state.shaping.invert.roll = !!v;
-    else if (slot.commandKey === "shape_deadband_yaw") state.shaping.deadband.yaw = Number(v) || 0;
-    else if (slot.commandKey === "shape_deadband_pitch") state.shaping.deadband.pitch = Number(v) || 0;
-    else if (slot.commandKey === "shape_deadband_roll") state.shaping.deadband.roll = Number(v) || 0;
-    else if (slot.commandKey === "shape_deadband_zoom") state.shaping.deadband.zoom = Number(v) || 0;
+    setCommandValue(slot.commandKey, v);
   } else {
-    state.slow_controls[slot.commandKey] = vals[idx].value;
+    setCommandValue(slot.commandKey, vals[idx].value);
   }
   renderPopup();
 }
@@ -735,7 +758,9 @@ function connectWs(){
     try {
       const msg = JSON.parse(ev.data);
       if (msg.type === "STATE"){
+        const frozen = getFrozenActiveSlot();
         state = Object.assign(state, msg);
+        if (frozen) setCommandValue(frozen.key, frozen.value);
         buildHeads();
         renderState();
       } else if (msg.type === "WIFI_SCAN_RESULT"){
