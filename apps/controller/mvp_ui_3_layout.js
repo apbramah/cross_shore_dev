@@ -29,7 +29,7 @@ window.MVP_UI3_LAYOUT = {
         { id: "C1P1", label: "Motors", commandKey: "motors_on", defaultValue: 1, values: [{ label: "OFF", value: 0 }, { label: "ON", value: 1 }] },
         { id: "C1P2", label: "Control Mode", commandKey: "control_mode", defaultValue: "speed", values: [{ label: "Speed", value: "speed" }, { label: "Angle", value: "angle" }] },
         { id: "C1P3", label: "Lens Select", commandKey: "lens_select", defaultValue: "fuji", values: [{ label: "Fuji", value: "fuji" }, { label: "Canon", value: "canon" }] },
-        { id: "C1P4", label: "Gyro Heading", commandKey: "gyro_heading_correction", defaultValue: 5376, values: [{ label: "-8192", value: -8192 }, { label: "-4096", value: -4096 }, { label: "-2048", value: -2048 }, { label: "-1024", value: -1024 }, { label: "0", value: 0 }, { label: "1024", value: 1024 }, { label: "2048", value: 2048 }, { label: "4096", value: 4096 }, { label: "5376", value: 5376 }, { label: "8192", value: 8192 }] },
+        { id: "C1P4", label: "Gyro Heading", commandKey: "gyro_heading_correction", high_res: true, defaultValue: 5376, values: [{ label: "-8192", value: -8192 }, { label: "-4096", value: -4096 }, { label: "-2048", value: -2048 }, { label: "-1024", value: -1024 }, { label: "0", value: 0 }, { label: "1024", value: 1024 }, { label: "2048", value: 2048 }, { label: "4096", value: 4096 }, { label: "5376", value: 5376 }, { label: "8192", value: 8192 }] },
         { id: "C1P5", label: "Spare", commandKey: null, values: [] },
         { id: "C1P6", label: "Spare", commandKey: null, values: [] },
         { id: "C1P7", label: "Spare", commandKey: null, values: [] },

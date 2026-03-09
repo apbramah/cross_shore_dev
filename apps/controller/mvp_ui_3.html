@@ -289,6 +289,7 @@ function applyEncoderTestValue(colIdx, kind){
 
 function getColumn(i){ return LAYOUT.columns[i] || { id:`C${i+1}`, title:`Column ${i+1}`, positions:[] }; }
 function getPosition(c, p){ const col = getColumn(c); return col.positions[p] || { id:`C${c+1}P${p+1}`, label:"Spare", commandKey:null, values:[] }; }
+function isHighResSlot(pos){ return !!(pos && pos.high_res === true); }
 
 function getSlotValue(pos){
   if (!pos || !pos.commandKey) return null;
@@ -371,7 +372,7 @@ function renderPopup(){
   const raw = getSlotValue(slot);
   $("activeSlotState").textContent = `Active slot: ${slot.id} (${slot.label || "Spare"})`;
   $("activeValueState").textContent = `Active value: ${valueToLabel(slot, raw)} (${raw === null ? "-" : raw})`;
-  $("encoderState").textContent = `Encoder mode: ${mode}`;
+  $("encoderState").textContent = `Encoder mode: ${mode}${isHighResSlot(slot) ? " (high-res)" : ""}`;
 }
 
 function openPopup(colIdx){
@@ -389,8 +390,8 @@ function closePopup(){
 function cyclePosition(dir){
   if (activeColumn === null) return;
   let n = (activePosIndexByColumn[activeColumn] || 0) + dir;
-  if (n < 0) n = POS_PER_COL - 1;
-  if (n >= POS_PER_COL) n = 0;
+  if (n < 0) n = 0;
+  if (n >= POS_PER_COL) n = POS_PER_COL - 1;
   activePosIndexByColumn[activeColumn] = n;
   renderPopup();
 }
@@ -404,8 +405,8 @@ function cycleValue(dir){
   let idx = vals.findIndex(v => String(v.value) === String(getSlotValue(slot)));
   if (idx < 0) idx = 0;
   idx += dir;
-  if (idx < 0) idx = vals.length - 1;
-  if (idx >= vals.length) idx = 0;
+  if (idx < 0) idx = 0;
+  if (idx >= vals.length) idx = vals.length - 1;
   if (slot.commandKey.startsWith("shape_")) {
     const v = vals[idx].value;
     if (slot.commandKey === "shape_expo") state.shaping.expo = v;
