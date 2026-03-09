@@ -196,10 +196,15 @@ let mode = "position";
 let activePosIndexByColumn = [0, 0, 0, 0, 0];
 let prevButtonState = {};
 let kbdTarget = null;
+let keyboardShift = false;
+let keyboardCaps = false;
+let networkDraft = null;
+let networkDirty = { pi_lan: false, heads: {} };
 
 function $(id){ return document.getElementById(id); }
 function send(obj){ if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj)); }
 function setEvent(text){ $("eventLog").textContent = `Event: ${text}`; }
+function cloneJson(v){ return JSON.parse(JSON.stringify(v)); }
 
 function setWsPill(text, online){
   const el = $("wsPill");
@@ -290,6 +295,18 @@ function renderPopup(){
   $("encoderState").textContent = `Encoder mode: ${mode}`;
 }
 
+function openPopup(colIdx){
+  activeColumn = colIdx;
+  mode = "position";
+  renderPopup();
+}
+
+function closePopup(){
+  activeColumn = null;
+  mode = "position";
+  renderPopup();
+}
+
 function cyclePosition(dir){
   if (activeColumn === null) return;
   let n = (activePosIndexByColumn[activeColumn] || 0) + dir;
@@ -376,6 +393,7 @@ function processEncoderButtons(){
 }
 
 function renderState(){
+  syncNetworkDraftFromState();
   $("slowState").textContent = `Slow state:\n${JSON.stringify(state.slow_controls, null, 2)}`;
   $("applyState").textContent = `Apply status:\n${JSON.stringify(state.slow_apply_status || {}, null, 2)}`;
   $("shapingState").textContent = `Shaping:\n${JSON.stringify(state.shaping || {}, null, 2)}`;
@@ -391,7 +409,9 @@ function openKeyboard(target){
   kbdTarget = target;
   $("kbdTargetLabel").textContent = `Editing: ${target.id}`;
   $("kbdBuffer").value = target.value || "";
+  keyboardShift = false;
   $("kbd").classList.add("open");
+  renderKeyboard();
 }
 function closeKeyboard(){ $("kbd").classList.remove("open"); kbdTarget = null; }
 
@@ -405,18 +425,45 @@ function renderKeyboard(){
   ];
   const host = $("kbdRows");
   host.innerHTML = "";
+  const caseOn = (keyboardCaps ? 1 : 0) ^ (keyboardShift ? 1 : 0);
+  const mapChar = (ch) => {
+    if (ch >= "a" && ch <= "z") return caseOn ? ch.toUpperCase() : ch;
+    return ch;
+  };
   for (const r of rows){
     const row = document.createElement("div");
     row.className = "kbd-row";
     for (const ch of r){
       const b = document.createElement("button");
       b.className = "kbd-key";
-      b.textContent = ch;
-      b.onclick = () => { $("kbdBuffer").value += ch; };
+      const out = mapChar(ch);
+      b.textContent = out;
+      b.onclick = () => {
+        $("kbdBuffer").value += out;
+        if (keyboardShift){
+          keyboardShift = false;
+          renderKeyboard();
+        }
+      };
       row.appendChild(b);
     }
     host.appendChild(row);
   }
+  const modeRow = document.createElement("div");
+  modeRow.className = "kbd-row";
+  const shiftBtn = document.createElement("button");
+  shiftBtn.className = "kbd-key";
+  shiftBtn.style.minWidth = "90px";
+  shiftBtn.textContent = keyboardShift ? "SHIFT ON" : "SHIFT";
+  shiftBtn.onclick = () => { keyboardShift = !keyboardShift; renderKeyboard(); };
+  const capsBtn = document.createElement("button");
+  capsBtn.className = "kbd-key";
+  capsBtn.style.minWidth = "90px";
+  capsBtn.textContent = keyboardCaps ? "CAPS ON" : "CAPS";
+  capsBtn.onclick = () => { keyboardCaps = !keyboardCaps; renderKeyboard(); };
+  modeRow.appendChild(shiftBtn);
+  modeRow.appendChild(capsBtn);
+  host.appendChild(modeRow);
   const space = document.createElement("div");
   space.className = "kbd-row";
   const b = document.createElement("button");
@@ -428,14 +475,67 @@ function renderKeyboard(){
   host.appendChild(space);
 }
 
+function syncNetworkDraftFromState(force=false){
+  const src = state.network_config || { pi_lan: {}, heads: [] };
+  if (!networkDraft || force){
+    networkDraft = cloneJson(src);
+    networkDraft.pi_lan = networkDraft.pi_lan || {};
+    networkDraft.heads = networkDraft.heads || [];
+    while (networkDraft.heads.length < 15) networkDraft.heads.push({});
+    return;
+  }
+  if (!networkDirty.pi_lan){
+    networkDraft.pi_lan = cloneJson(src.pi_lan || {});
+  }
+  const srcHeads = src.heads || [];
+  for (let i = 0; i < 15; i++){
+    if (!networkDirty.heads[i]){
+      networkDraft.heads[i] = cloneJson(srcHeads[i] || {});
+    }
+  }
+}
+
+function markNetworkDraftDirtyForInput(inputId){
+  if (inputId === "piAddress" || inputId === "piPrefix" || inputId === "piGateway"){
+    networkDirty.pi_lan = true;
+    return;
+  }
+  const m = inputId.match(/^h_(name|ip|prefix|gw)_(\d+)$/);
+  if (!m) return;
+  const idx = parseInt(m[2], 10);
+  if (!Number.isNaN(idx)) networkDirty.heads[idx] = true;
+}
+
+function applyInputToNetworkDraft(inputId, value){
+  syncNetworkDraftFromState();
+  if (inputId === "piAddress") networkDraft.pi_lan.address = value;
+  else if (inputId === "piPrefix") networkDraft.pi_lan.prefix = parseInt(value, 10) || 24;
+  else if (inputId === "piGateway") networkDraft.pi_lan.gateway = value;
+  else {
+    const m = inputId.match(/^h_(name|ip|prefix|gw)_(\d+)$/);
+    if (m){
+      const field = m[1];
+      const idx = parseInt(m[2], 10);
+      const h = networkDraft.heads[idx] || {};
+      if (field === "name") h.name = value;
+      else if (field === "ip") h.ip = value;
+      else if (field === "prefix") h.prefix = parseInt(value, 10) || 24;
+      else if (field === "gw") h.gateway = value;
+      networkDraft.heads[idx] = h;
+    }
+  }
+  markNetworkDraftDirtyForInput(inputId);
+}
+
 function renderIpConfigTable(){
-  const pi = state.network_config?.pi_lan || {};
+  syncNetworkDraftFromState();
+  const pi = networkDraft?.pi_lan || {};
   $("piAddress").value = pi.address || "";
   $("piPrefix").value = String(pi.prefix ?? 24);
   $("piGateway").value = pi.gateway || "";
   const body = $("headTableBody");
   body.innerHTML = "";
-  const heads = state.network_config?.heads || [];
+  const heads = networkDraft?.heads || [];
   for (let i = 0; i < Math.min(15, heads.length); i++){
     const h = heads[i] || {};
     const tr = document.createElement("tr");
@@ -463,6 +563,7 @@ function renderIpConfigTable(){
           gateway: $(`h_gw_${i}`).value,
         },
       });
+      networkDirty.heads[i] = false;
       setEvent(`save head config #${i+1}`);
     };
   }
@@ -526,9 +627,13 @@ function bindUI(){
       type: "SET_PI_LAN_CONFIG",
       value: { address: $("piAddress").value, prefix: parseInt($("piPrefix").value, 10) || 24, gateway: $("piGateway").value },
     });
+    networkDirty.pi_lan = false;
   };
   $("applyNetwork").onclick = () => send({ type: "APPLY_NETWORK_CONFIG" });
-  $("factoryResetNetwork").onclick = () => send({ type: "FACTORY_RESET_NETWORK" });
+  $("factoryResetNetwork").onclick = () => {
+    networkDirty = { pi_lan: false, heads: {} };
+    send({ type: "FACTORY_RESET_NETWORK" });
+  };
   $("wifiScan").onclick = () => send({ type: "WIFI_SCAN" });
   $("wifiConnect").onclick = () => send({ type: "WIFI_CONNECT", ssid: $("wifiSsid").value, password: $("wifiPassword").value });
   $("wifiDisconnect").onclick = () => send({ type: "WIFI_DISCONNECT" });
@@ -547,7 +652,14 @@ function bindUI(){
   $("kbdBack").onclick = () => { $("kbdBuffer").value = $("kbdBuffer").value.slice(0, -1); };
   $("kbdClear").onclick = () => { $("kbdBuffer").value = ""; };
   $("kbdCancel").onclick = closeKeyboard;
-  $("kbdOk").onclick = () => { if (kbdTarget) kbdTarget.value = $("kbdBuffer").value; closeKeyboard(); };
+  $("kbdOk").onclick = () => {
+    if (kbdTarget){
+      const v = $("kbdBuffer").value;
+      kbdTarget.value = v;
+      applyInputToNetworkDraft(kbdTarget.id, v);
+    }
+    closeKeyboard();
+  };
 }
 
 function buildTouchGyroSelect(){
