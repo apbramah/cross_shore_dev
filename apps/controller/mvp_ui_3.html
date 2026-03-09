@@ -244,6 +244,8 @@ let inputGroupLastBtn = Array(5).fill(-1);
 let encoderTestValue = Array(5).fill(0);
 let inputFilterDefaultsLoaded = false;
 let activeValueFreeze = null;
+const LOCAL_AUTO_APPLY_INTERVAL_MS = 60;
+let localAutoApplyTimer = null;
 
 function $(id){ return document.getElementById(id); }
 function send(obj){ if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj)); }
@@ -293,6 +295,13 @@ function applyEncoderTestValue(colIdx, kind){
 function getColumn(i){ return LAYOUT.columns[i] || { id:`C${i+1}`, title:`Column ${i+1}`, positions:[] }; }
 function getPosition(c, p){ const col = getColumn(c); return col.positions[p] || { id:`C${c+1}P${p+1}`, label:"Spare", commandKey:null, values:[] }; }
 function isHighResSlot(pos){ return !!(pos && pos.high_res === true); }
+function controlClassForSlot(slot){
+  if (!slot || !slot.commandKey) return "none";
+  if (slot.control_class) return slot.control_class;
+  if (slot.commandKey.startsWith("shape_")) return "local";
+  if (slot.commandKey.startsWith("net_") || slot.commandKey.startsWith("wifi_")) return "system";
+  return "head";
+}
 
 function setCommandValue(commandKey, value){
   if (!commandKey) return false;
@@ -357,6 +366,16 @@ function valueIndexForSlot(slot){
     }
   }
   return bestIdx;
+}
+
+function flushLocalAutoApply(){
+  localAutoApplyTimer = null;
+  send({ type: "SET_SHAPING", value: state.shaping });
+}
+
+function scheduleLocalAutoApply(){
+  if (localAutoApplyTimer) return;
+  localAutoApplyTimer = setTimeout(flushLocalAutoApply, LOCAL_AUTO_APPLY_INTERVAL_MS);
 }
 
 function getSlotValue(pos){
@@ -487,6 +506,7 @@ function cycleValue(dir){
     setCommandValue(slot.commandKey, v);
     updateActiveValueFreeze(slot, v);
   }
+  if (controlClassForSlot(slot) === "local") scheduleLocalAutoApply();
   renderPopup();
 }
 
@@ -514,7 +534,10 @@ function commitActiveValue(){
 function onEncoderSwitch(colIdx){
   if (activeColumn === null || activeColumn !== colIdx){ activeColumn = colIdx; mode = "position"; clearActiveValueFreeze(); renderPopup(); return; }
   if (mode === "position"){ mode = "value"; const frozen = getFrozenActiveSlot(); activeValueFreeze = frozen ? { key: frozen.key, value: frozen.value } : null; renderPopup(); return; }
-  commitActiveValue();
+  const p = activePosIndexByColumn[activeColumn] || 0;
+  const slot = getPosition(activeColumn, p);
+  if (controlClassForSlot(slot) !== "local") commitActiveValue();
+  else if (localAutoApplyTimer) flushLocalAutoApply();
   mode = "position";
   clearActiveValueFreeze();
   renderPopup();
@@ -850,7 +873,13 @@ function bindUI(){
   $("touchToggleMode").onclick = () => {
     if (activeColumn === null) return;
     if (mode === "position") mode = "value";
-    else { commitActiveValue(); mode = "position"; }
+    else {
+      const p = activePosIndexByColumn[activeColumn] || 0;
+      const slot = getPosition(activeColumn, p);
+      if (controlClassForSlot(slot) !== "local") commitActiveValue();
+      else if (localAutoApplyTimer) flushLocalAutoApply();
+      mode = "position";
+    }
     renderPopup();
   };
   $("touchClosePopup").onclick = () => { activeColumn = null; mode = "position"; renderPopup(); };
