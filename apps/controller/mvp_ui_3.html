@@ -48,6 +48,12 @@
     .table-wrap { max-height:360px; overflow:auto; border:1px solid #34435d; border-radius:8px; }
     table { width:100%; border-collapse:collapse; font-size:13px; }
     th, td { border-bottom:1px solid #2f3e57; padding:6px; text-align:left; }
+    .input-test-controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .input-test-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:8px; }
+    .input-test-btn { height:68px; border-radius:8px; border:1px solid #425171; background:#1f2b40; display:grid; align-content:center; gap:4px; }
+    .input-test-btn.active { border-color:#22c55e; box-shadow:inset 0 0 0 1px rgba(34,197,94,.45); background:#214537; }
+    .input-test-label { font-size:13px; color:#cfe0ff; }
+    .input-test-count { font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:13px; color:#a8bfdc; }
     .kbd { position:fixed; inset:0; background:rgba(0,0,0,.65); display:none; align-items:center; justify-content:center; z-index:20; }
     .kbd.open { display:flex; }
     .kbd-card { width:780px; max-width:95vw; border:1px solid #4a5b7f; border-radius:12px; background:#1a2232; padding:10px; display:grid; gap:8px; }
@@ -68,6 +74,7 @@
       <button class="tab active" data-page="control">Control</button>
       <button class="tab" data-page="ipconfig">IP Config</button>
       <button class="tab" data-page="wifi">WiFi</button>
+      <button class="tab" data-page="inputtests">Input Tests</button>
     </div>
     <div class="surface">
       <div id="page-control" class="page active">
@@ -145,6 +152,20 @@
           </div>
         </div>
       </div>
+      <div id="page-inputtests" class="page">
+        <div class="card" style="grid-column:1 / -1;">
+          <h3>Encoder Input Test (Buttons 0-14)</h3>
+          <div class="input-test-controls">
+            <label for="inputDebounceMs">Debounce ms</label>
+            <input id="inputDebounceMs" readonly style="max-width:120px;" />
+            <button id="inputDebounceDec">-</button>
+            <button id="inputDebounceInc">+</button>
+            <button id="inputResetCounters">Reset Counters</button>
+          </div>
+          <div id="inputTestGrid" class="input-test-grid"></div>
+          <div id="inputTestSummary" class="info">Input tests: waiting for gamepad...</div>
+        </div>
+      </div>
     </div>
     <div class="dock">
       <div id="popup" class="popup">
@@ -203,6 +224,11 @@ let keyboardShift = false;
 let keyboardCaps = false;
 let networkDraft = null;
 let networkDirty = { pi_lan: false, heads: {} };
+let inputDebounceMs = 60;
+let inputRiseCount = Array(15).fill(0);
+let inputPressed = Array(15).fill(0);
+let inputLastRiseMs = Array(15).fill(0);
+let inputLastActionMs = Array(15).fill(0);
 
 function $(id){ return document.getElementById(id); }
 function send(obj){ if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj)); }
@@ -213,6 +239,21 @@ function setWsPill(text, online){
   const el = $("wsPill");
   el.textContent = text;
   el.classList.toggle("on", !!online);
+}
+
+function renderInputTests(){
+  const grid = $("inputTestGrid");
+  if (!grid) return;
+  grid.innerHTML = "";
+  for (let i = 0; i < 15; i++){
+    const b = document.createElement("div");
+    b.className = "input-test-btn" + (inputPressed[i] ? " active" : "");
+    b.innerHTML = `<div class="input-test-label">Btn ${i}</div><div class="input-test-count">Count: ${inputRiseCount[i]}</div>`;
+    grid.appendChild(b);
+  }
+  $("inputDebounceMs").value = String(inputDebounceMs);
+  const active = inputPressed.reduce((n, v) => n + (v ? 1 : 0), 0);
+  $("inputTestSummary").textContent = `Input tests: active=${active} debounce=${inputDebounceMs}ms`;
 }
 
 function getColumn(i){ return LAYOUT.columns[i] || { id:`C${i+1}`, title:`Column ${i+1}`, positions:[] }; }
@@ -385,6 +426,19 @@ function processEncoderButtons(){
   const pads = navigator.getGamepads ? navigator.getGamepads() : [];
   const gp = pads && pads[0];
   if (!gp || !gp.buttons){ requestAnimationFrame(processEncoderButtons); return; }
+  const now = performance.now();
+  for (let i = 0; i < 15; i++){
+    const pressed = gp.buttons[i] && gp.buttons[i].pressed ? 1 : 0;
+    const prev = prevButtonState[`raw_${i}`] || 0;
+    inputPressed[i] = pressed;
+    if (pressed && !prev){
+      if (now - inputLastRiseMs[i] >= inputDebounceMs){
+        inputLastRiseMs[i] = now;
+        inputRiseCount[i] += 1;
+      }
+    }
+    prevButtonState[`raw_${i}`] = pressed;
+  }
   for (const e of (LAYOUT.encoders || [])){
     const colIdx = Math.max(0, (e.column || 1) - 1);
     const map = [
@@ -396,10 +450,16 @@ function processEncoderButtons(){
       if (m.btn == null || m.btn < 0) continue;
       const pressed = gp.buttons[m.btn] && gp.buttons[m.btn].pressed ? 1 : 0;
       const prev = prevButtonState[m.id] || 0;
-      if (pressed && !prev) m.onRise();
+      if (pressed && !prev){
+        if (now - inputLastActionMs[m.btn] >= inputDebounceMs){
+          inputLastActionMs[m.btn] = now;
+          m.onRise();
+        }
+      }
       prevButtonState[m.id] = pressed;
     }
   }
+  renderInputTests();
   requestAnimationFrame(processEncoderButtons);
 }
 
@@ -649,6 +709,14 @@ function bindUI(){
   $("touchSaveDefaults").onclick = () => send({ type: "SAVE_USER_DEFAULTS" });
   $("touchResetDefaults").onclick = () => send({ type: "RESET_USER_DEFAULTS" });
   $("touchCalibrateInputs").onclick = () => send({ type: "CALIBRATE_INPUTS", duration_s: 2.5 });
+  $("inputDebounceDec").onclick = () => { inputDebounceMs = Math.max(0, inputDebounceMs - 5); renderInputTests(); };
+  $("inputDebounceInc").onclick = () => { inputDebounceMs = Math.min(300, inputDebounceMs + 5); renderInputTests(); };
+  $("inputResetCounters").onclick = () => {
+    inputRiseCount = Array(15).fill(0);
+    inputLastRiseMs = Array(15).fill(0);
+    inputLastActionMs = Array(15).fill(0);
+    renderInputTests();
+  };
   $("touchToggleMode").onclick = () => {
     if (activeColumn === null) return;
     if (mode === "position") mode = "value";
@@ -715,6 +783,7 @@ function init(){
   buildTouchGyroSelect();
   buildDock();
   renderPopup();
+  renderInputTests();
   processEncoderButtons();
 }
 
