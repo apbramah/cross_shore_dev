@@ -43,6 +43,10 @@ SLOW_TELEM_LISTEN_PORT = mvp_protocol.SLOW_TELEM_PORT
 SCHEMA_VERSION = mvp_protocol.PKT_SCHEMA_VERSION
 ETH_IFACE = "eth0"
 WLAN_IFACE = "wlan0"
+UI_INPUT_TEST_DEFAULTS = {
+    "debounce_ms": 100,
+    "group_lockout_ms": 175,
+}
 
 
 def _safe_load_json(path: str, default: Any) -> Any:
@@ -517,6 +521,9 @@ def _state_payload() -> dict[str, Any]:
         "network_config": copy.deepcopy(network_user),
         "wifi_status": copy.deepcopy(wifi_status),
         "calibration": copy.deepcopy(calibration_status),
+        "ui_config": {
+            "input_tests": dict(UI_INPUT_TEST_DEFAULTS),
+        },
     }
 
 

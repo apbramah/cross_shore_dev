@@ -219,6 +219,7 @@ let state = {
   network_config: { pi_lan: {}, heads: [] },
   wifi_status: {},
   calibration: {},
+  ui_config: {},
 };
 let activeColumn = null;
 let mode = "position";
@@ -229,7 +230,7 @@ let keyboardShift = false;
 let keyboardCaps = false;
 let networkDraft = null;
 let networkDirty = { pi_lan: false, heads: {} };
-let inputDebounceMs = 60;
+let inputDebounceMs = 100;
 let inputRawRiseCount = Array(15).fill(0);
 let inputAcceptedRiseCount = Array(15).fill(0);
 let inputSuppressedDebounceCount = Array(15).fill(0);
@@ -237,10 +238,11 @@ let inputSuppressedGroupCount = Array(15).fill(0);
 let inputPressed = Array(15).fill(0);
 let inputLastRiseMs = Array(15).fill(0);
 let inputLastActionMs = Array(15).fill(0);
-let inputGroupLockoutMs = 40;
+let inputGroupLockoutMs = 175;
 let inputGroupLastActionMs = Array(5).fill(0);
 let inputGroupLastBtn = Array(5).fill(-1);
 let encoderTestValue = Array(5).fill(0);
+let inputFilterDefaultsLoaded = false;
 
 function $(id){ return document.getElementById(id); }
 function send(obj){ if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj)); }
@@ -511,6 +513,14 @@ function renderState(){
   state.shaping = state.shaping || {};
   state.shaping.invert = state.shaping.invert || { yaw:false, pitch:false, roll:false };
   state.shaping.deadband = state.shaping.deadband || { yaw:0, pitch:0, roll:0, zoom:0 };
+  if (!inputFilterDefaultsLoaded){
+    const cfg = (((state.ui_config || {}).input_tests) || {});
+    const db = Number(cfg.debounce_ms);
+    const gl = Number(cfg.group_lockout_ms);
+    if (Number.isFinite(db)) inputDebounceMs = Math.max(0, Math.min(300, Math.round(db)));
+    if (Number.isFinite(gl)) inputGroupLockoutMs = Math.max(0, Math.min(300, Math.round(gl)));
+    inputFilterDefaultsLoaded = true;
+  }
   syncNetworkDraftFromState();
   $("slowState").textContent = `Slow state:\n${JSON.stringify(state.slow_controls, null, 2)}`;
   $("applyState").textContent = `Apply status:\n${JSON.stringify(state.slow_apply_status || {}, null, 2)}`;
