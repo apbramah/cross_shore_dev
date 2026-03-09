@@ -18,7 +18,7 @@ window.MVP_UI3_LAYOUT = {
     { id: "E1", column: 1, cwButton: 0, ccwButton: 1, swButton: 2 },
     { id: "E2", column: 2, cwButton: 3, ccwButton: 4, swButton: 5 },
     { id: "E3", column: 3, cwButton: 6, ccwButton: 7, swButton: 8 },
-    { id: "E4", column: 4, cwButton: 9, ccwButton: 10, swButton: 11 },
+    { id: "E4", column: 4, cwButton: 10, ccwButton: 9, swButton: 11 },
     { id: "E5", column: 5, cwButton: 12, ccwButton: 13, swButton: 14 },
   ],
   columns: [
