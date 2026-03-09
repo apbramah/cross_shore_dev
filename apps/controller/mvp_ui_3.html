@@ -243,6 +243,7 @@ let inputGroupLastActionMs = Array(5).fill(0);
 let inputGroupLastBtn = Array(5).fill(-1);
 let encoderTestValue = Array(5).fill(0);
 let inputFilterDefaultsLoaded = false;
+let activeValueFreeze = null;
 
 function $(id){ return document.getElementById(id); }
 function send(obj){ if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj)); }
@@ -322,6 +323,40 @@ function getFrozenActiveSlot(){
   const slot = getPosition(activeColumn, p);
   if (!slot || !slot.commandKey) return null;
   return { key: slot.commandKey, value: getSlotValue(slot) };
+}
+
+function clearActiveValueFreeze(){ activeValueFreeze = null; }
+
+function updateActiveValueFreeze(slot, value){
+  if (!slot || !slot.commandKey || mode !== "value") return;
+  activeValueFreeze = { key: slot.commandKey, value };
+}
+
+function restoreActiveValueFreeze(){
+  if (!activeValueFreeze || mode !== "value") return;
+  if (!setCommandValue(activeValueFreeze.key, activeValueFreeze.value)) clearActiveValueFreeze();
+}
+
+function valueIndexForSlot(slot){
+  const vals = slot.values || [];
+  if (!vals.length) return -1;
+  const raw = getSlotValue(slot);
+  let idx = vals.findIndex(v => String(v.value) === String(raw));
+  if (idx >= 0) return idx;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return 0;
+  let bestIdx = 0;
+  let bestDist = Number.POSITIVE_INFINITY;
+  for (let i = 0; i < vals.length; i++){
+    const vNum = Number(vals[i].value);
+    if (!Number.isFinite(vNum)) continue;
+    const d = Math.abs(vNum - n);
+    if (d < bestDist){
+      bestDist = d;
+      bestIdx = i;
+    }
+  }
+  return bestIdx;
 }
 
 function getSlotValue(pos){
@@ -411,17 +446,20 @@ function renderPopup(){
 function openPopup(colIdx){
   activeColumn = colIdx;
   mode = "position";
+  clearActiveValueFreeze();
   renderPopup();
 }
 
 function closePopup(){
   activeColumn = null;
   mode = "position";
+  clearActiveValueFreeze();
   renderPopup();
 }
 
 function cyclePosition(dir){
   if (activeColumn === null) return;
+  clearActiveValueFreeze();
   let n = (activePosIndexByColumn[activeColumn] || 0) + dir;
   if (n < 0) n = 0;
   if (n >= POS_PER_COL) n = POS_PER_COL - 1;
@@ -435,7 +473,7 @@ function cycleValue(dir){
   const slot = getPosition(activeColumn, p);
   if (!slot.commandKey || !slot.values?.length) return;
   const vals = slot.values;
-  let idx = vals.findIndex(v => String(v.value) === String(getSlotValue(slot)));
+  let idx = valueIndexForSlot(slot);
   if (idx < 0) idx = 0;
   idx += dir;
   if (idx < 0) idx = 0;
@@ -443,8 +481,11 @@ function cycleValue(dir){
   if (slot.commandKey.startsWith("shape_")) {
     const v = vals[idx].value;
     setCommandValue(slot.commandKey, v);
+    updateActiveValueFreeze(slot, v);
   } else {
-    setCommandValue(slot.commandKey, vals[idx].value);
+    const v = vals[idx].value;
+    setCommandValue(slot.commandKey, v);
+    updateActiveValueFreeze(slot, v);
   }
   renderPopup();
 }
@@ -471,10 +512,11 @@ function commitActiveValue(){
 }
 
 function onEncoderSwitch(colIdx){
-  if (activeColumn === null || activeColumn !== colIdx){ activeColumn = colIdx; mode = "position"; renderPopup(); return; }
-  if (mode === "position"){ mode = "value"; renderPopup(); return; }
+  if (activeColumn === null || activeColumn !== colIdx){ activeColumn = colIdx; mode = "position"; clearActiveValueFreeze(); renderPopup(); return; }
+  if (mode === "position"){ mode = "value"; const frozen = getFrozenActiveSlot(); activeValueFreeze = frozen ? { key: frozen.key, value: frozen.value } : null; renderPopup(); return; }
   commitActiveValue();
   mode = "position";
+  clearActiveValueFreeze();
   renderPopup();
 }
 function onEncoderTurn(colIdx, dir){ if (activeColumn === colIdx) (mode === "position" ? cyclePosition(dir) : cycleValue(dir)); }
@@ -761,6 +803,7 @@ function connectWs(){
         const frozen = getFrozenActiveSlot();
         state = Object.assign(state, msg);
         if (frozen) setCommandValue(frozen.key, frozen.value);
+        restoreActiveValueFreeze();
         buildHeads();
         renderState();
       } else if (msg.type === "WIFI_SCAN_RESULT"){
