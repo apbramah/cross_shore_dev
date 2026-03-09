@@ -434,10 +434,11 @@ def _refresh_connection_status() -> None:
     connection_status["head"]["last_telem_age_s"] = age_s
     connection_status["bridge"]["ws_clients"] = len(clients)
     lan = _parse_iface_ipv4(ETH_IFACE)
-    pi_lan = network_user.setdefault("pi_lan", {})
-    if lan.get("address"):
-        pi_lan["address"] = lan["address"]
-        pi_lan["prefix"] = lan["prefix"]
+    # Keep desired Pi LAN config persistent; expose live interface status separately.
+    connection_status["pi_lan_live"] = {
+        "address": lan.get("address", ""),
+        "prefix": int(lan.get("prefix", 24)),
+    }
 
 
 def _refresh_wifi_status() -> None:
