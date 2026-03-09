@@ -3,14 +3,17 @@ from fuji_protocol import (
     FUJI_BITS,
     FUJI_PARITY,
     FUJI_STOP,
+    FUNC_ZOOM_POSITION,
     FUNC_FOCUS_CONTROL,
     FUNC_IRIS_CONTROL,
     FUNC_ZOOM_CONTROL,
     FUNC_ZOOM_SPEED_CONTROL,
+    build_position_request_zoom,
     build_focus_control,
     build_iris_control,
     build_zoom_control,
     build_zoom_speed_control,
+    decode_position_response,
 )
 
 from fuji_control_calibration_copy import (
@@ -37,6 +40,8 @@ ZOOM_EXPO_PCT = BASELINE_ZOOM_EXPO_PCT
 AXIS_HOLD_THRESHOLD = 0
 ZOOM_INPUT_MAX = 64
 CONTROL_TX_PERIOD_MS = 10
+# Conservative zoom readback polling to avoid perturbing runtime control traffic.
+ZOOM_POSITION_POLL_PERIOD_MS = 1000
 ZOOM_MODE_POSITION = "position"
 ZOOM_MODE_SPEED = "speed"
 DEFAULT_ZOOM_MODE = ZOOM_MODE_SPEED
@@ -58,9 +63,11 @@ class FujiLens(FujiCalibration):
         self.zoom_mode = DEFAULT_ZOOM_MODE
         self.axis_sources = {axis: SOURCE_PC for axis in AXES}
         self._next_control_tx_ms = 0
+        self._next_zoom_position_poll_ms = 0
         self._faulted = False
         self._fault_reason = ""
         self._last_zoom_input = 0
+        self._last_zoom_feedback = None
 
     def on_activate(self):
         self._failed = False
@@ -74,6 +81,7 @@ class FujiLens(FujiCalibration):
         self._next_sw4_poll_ms = now_ms + SW4_POLL_MS
         self._next_connect_keepalive_ms = now_ms + CONNECT_KEEPALIVE_MS
         self._next_control_tx_ms = now_ms + CONTROL_TX_PERIOD_MS
+        self._next_zoom_position_poll_ms = now_ms + ZOOM_POSITION_POLL_PERIOD_MS
         self._last_control_tx_ms = 0
 
     def get_axis_sources(self):
@@ -156,6 +164,10 @@ class FujiLens(FujiCalibration):
         if now_ms >= self._next_control_tx_ms:
             self._send_runtime_controls()
             self._next_control_tx_ms = now_ms + CONTROL_TX_PERIOD_MS
+        if now_ms >= self._next_zoom_position_poll_ms:
+            # Side-channel request: single low-rate zoom position probe.
+            self.transport.write(build_position_request_zoom())
+            self._next_zoom_position_poll_ms = now_ms + ZOOM_POSITION_POLL_PERIOD_MS
 
     def startup_diagnostics(self):
         # Telemetry-only path; runtime loop is intentionally ungated.
@@ -204,6 +216,17 @@ class FujiLens(FujiCalibration):
         self._fault_reason = str(reason)
         print("[LENS][Fuji][FAULT]", self._fault_reason)
         self._print_ack_stats(prefix="[LENS][Fuji][ACK]")
+
+    def _handle_frame(self, frame):
+        # Keep baseline SW4/watchdog behavior, plus optional zoom readback capture.
+        super()._handle_frame(frame)
+        if len(frame) < 3:
+            return
+        if frame[1] != FUNC_ZOOM_POSITION:
+            return
+        value = decode_position_response(frame[2:-1])
+        if value is not None:
+            self._last_zoom_feedback = int(value)
 
 
 def _ticks_ms():
