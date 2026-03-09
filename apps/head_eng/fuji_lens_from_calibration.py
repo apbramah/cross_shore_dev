@@ -41,7 +41,7 @@ AXIS_HOLD_THRESHOLD = 0
 ZOOM_INPUT_MAX = 64
 CONTROL_TX_PERIOD_MS = 10
 # Conservative zoom readback polling to avoid perturbing runtime control traffic.
-ZOOM_POSITION_POLL_PERIOD_MS = 1000
+ZOOM_POSITION_POLL_PERIOD_MS = 333
 ZOOM_MODE_POSITION = "position"
 ZOOM_MODE_SPEED = "speed"
 DEFAULT_ZOOM_MODE = ZOOM_MODE_SPEED
