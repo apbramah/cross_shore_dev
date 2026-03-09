@@ -36,6 +36,8 @@ HEADS_FILE = os.path.join(BASE_DIR, "heads.json")
 USER_DEFAULTS_FILE = os.path.join(BASE_DIR, "mvp_user_defaults.json")
 NETWORK_USER_FILE = os.path.join(BASE_DIR, "mvp_network_user_config.json")
 NETWORK_FACTORY_FILE = os.path.join(BASE_DIR, "mvp_network_factory_config.json")
+ADC_CAL_REQUEST_FILE = "adc_input_calibration_request.json"
+ADC_CAL_RESULT_FILE = "adc_input_calibration_result.json"
 
 SLOW_TELEM_LISTEN_PORT = mvp_protocol.SLOW_TELEM_PORT
 SCHEMA_VERSION = mvp_protocol.PKT_SCHEMA_VERSION
@@ -192,6 +194,14 @@ connection_status: dict[str, Any] = {
     "bridge": {"ws_clients": 0},
 }
 wifi_status: dict[str, Any] = {"state": "unknown", "ssid": "", "ip": "", "last_error": ""}
+calibration_status: dict[str, Any] = {
+    "state": "idle",
+    "request_id": "",
+    "ok": None,
+    "message": "",
+    "updated_at": 0.0,
+}
+_calibration_result_mtime = 0.0
 
 clients: set[Any] = set()
 telem_sock: socket.socket | None = None
@@ -289,6 +299,10 @@ def _build_adc_profile_file_path() -> str:
     return candidates[0]
 
 
+def _build_controller_runtime_file_path(filename: str) -> str:
+    return os.path.join(os.path.dirname(_build_adc_profile_file_path()), filename)
+
+
 def _load_adc_profile() -> dict[str, Any]:
     path = _build_adc_profile_file_path()
     data = _safe_load_json(path, {})
@@ -313,6 +327,61 @@ def _apply_shaping_to_adc_profile() -> tuple[bool, str]:
         return True, "adc_profile_updated"
     except Exception as e:
         return False, str(e)
+
+
+def _start_input_calibration(duration_s: float = 2.5) -> tuple[bool, str, str]:
+    global calibration_status
+    req_id = str(int(time.time() * 1000))
+    d = float(duration_s or 2.5)
+    if d < 0.5:
+        d = 0.5
+    if d > 10.0:
+        d = 10.0
+    payload = {
+        "request_id": req_id,
+        "duration_s": d,
+        "axes": ["X", "Y", "Z", "Zrotate"],
+        "requested_at": time.time(),
+    }
+    req_path = _build_controller_runtime_file_path(ADC_CAL_REQUEST_FILE)
+    try:
+        with open(req_path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2)
+        calibration_status = {
+            "state": "requested",
+            "request_id": req_id,
+            "ok": None,
+            "message": "calibration_requested",
+            "updated_at": time.time(),
+        }
+        return True, "calibration_requested", req_id
+    except Exception as e:
+        return False, str(e), req_id
+
+
+def _refresh_calibration_status() -> None:
+    global _calibration_result_mtime
+    result_path = _build_controller_runtime_file_path(ADC_CAL_RESULT_FILE)
+    try:
+        if not os.path.isfile(result_path):
+            return
+        mtime = os.path.getmtime(result_path)
+        if mtime <= _calibration_result_mtime:
+            return
+        data = _safe_load_json(result_path, {})
+        _calibration_result_mtime = mtime
+        calibration_status.update(
+            {
+                "state": str(data.get("state", "done")),
+                "request_id": str(data.get("request_id", "")),
+                "ok": bool(data.get("ok")) if data.get("ok") is not None else None,
+                "message": str(data.get("message", "")),
+                "updated_at": time.time(),
+                "result": data,
+            }
+        )
+    except Exception:
+        return
 
 
 def _send_one_slow_key_now(key: str) -> bool:
@@ -383,6 +452,7 @@ def _state_payload() -> dict[str, Any]:
         "connection_status": copy.deepcopy(connection_status),
         "network_config": copy.deepcopy(network_user),
         "wifi_status": copy.deepcopy(wifi_status),
+        "calibration": copy.deepcopy(calibration_status),
     }
 
 
@@ -494,6 +564,7 @@ async def status_publish_task() -> None:
     while True:
         _refresh_connection_status()
         _refresh_wifi_status()
+        _refresh_calibration_status()
         await _publish_state()
         await asyncio.sleep(STATUS_PUBLISH_INTERVAL_S)
 
@@ -700,6 +771,18 @@ async def handler(websocket: Any) -> None:
             elif msg_type == "WIFI_STATUS":
                 _refresh_wifi_status()
                 await websocket.send(json.dumps({"type": "WIFI_STATUS_RESULT", "ok": True, "status": wifi_status}))
+            elif msg_type == "CALIBRATE_INPUTS":
+                ok, msg, req_id = _start_input_calibration(float(data.get("duration_s", 2.5) or 2.5))
+                await websocket.send(
+                    json.dumps(
+                        {
+                            "type": "CALIBRATE_INPUTS_ACCEPTED",
+                            "ok": ok,
+                            "message": msg,
+                            "request_id": req_id,
+                        }
+                    )
+                )
             await _publish_state()
     except websockets.ConnectionClosed:
         print("Slow UI client disconnected")

@@ -30,6 +30,11 @@ except ImportError:
     mvp_protocol = None
     MVP_PROTOCOL_AVAILABLE = False
 
+CALIBRATION_REQUEST_FILENAME = "adc_input_calibration_request.json"
+CALIBRATION_RESULT_FILENAME = "adc_input_calibration_result.json"
+CALIBRATION_AXES_DEFAULT = ("X", "Y", "Z", "Zrotate")
+ADC_CENTER = 2047.5
+
 
 def _heads_file_override() -> str | None:
     p = os.environ.get("MVP_HEADS_FILE", "").strip()
@@ -87,6 +92,156 @@ def _load_selected_head_index(default_index: int = 0) -> int:
         except Exception:
             continue
     return default_index
+
+
+def _median(values: list[int]) -> float:
+    if not values:
+        return ADC_CENTER
+    ordered = sorted(int(v) for v in values)
+    n = len(ordered)
+    mid = n // 2
+    if n % 2 == 1:
+        return float(ordered[mid])
+    return (float(ordered[mid - 1]) + float(ordered[mid])) / 2.0
+
+
+def _normalize_raw_to_unit(raw: float) -> float:
+    return (float(raw) - ADC_CENTER) / ADC_CENTER
+
+
+class InputCalibrator:
+    def __init__(self, state: ADCBridgeState, runtime_dir: str):
+        self._state = state
+        self._request_path = os.path.join(runtime_dir, CALIBRATION_REQUEST_FILENAME)
+        self._result_path = os.path.join(runtime_dir, CALIBRATION_RESULT_FILENAME)
+        self._active = False
+        self._request_id = ""
+        self._started_at = 0.0
+        self._end_at = 0.0
+        self._axes: tuple[str, ...] = tuple()
+        self._samples: dict[str, list[int]] = {}
+        self._last_request_id = ""
+
+    def poll(self, now: float) -> None:
+        if self._active:
+            if now >= self._end_at:
+                self._finalize(now)
+            return
+        req = self._read_json(self._request_path)
+        if not isinstance(req, dict):
+            return
+        rid = str(req.get("request_id", "")).strip()
+        if not rid or rid == self._last_request_id:
+            return
+        axes = req.get("axes", CALIBRATION_AXES_DEFAULT)
+        if not isinstance(axes, list):
+            axes = list(CALIBRATION_AXES_DEFAULT)
+        norm_axes = []
+        for axis in axes:
+            a = str(axis).strip()
+            if a:
+                norm_axes.append(a)
+        if not norm_axes:
+            norm_axes = list(CALIBRATION_AXES_DEFAULT)
+        duration_s = float(req.get("duration_s", 2.5) or 2.5)
+        if duration_s < 0.5:
+            duration_s = 0.5
+        if duration_s > 10.0:
+            duration_s = 10.0
+        self._request_id = rid
+        self._last_request_id = rid
+        self._axes = tuple(norm_axes)
+        self._samples = {axis: [] for axis in self._axes}
+        self._started_at = now
+        self._end_at = now + duration_s
+        self._active = True
+        self._safe_remove(self._request_path)
+        self._write_result(
+            {
+                "ok": True,
+                "state": "running",
+                "request_id": self._request_id,
+                "started_at": self._started_at,
+                "duration_s": duration_s,
+                "axes": list(self._axes),
+                "message": "calibration_started",
+            }
+        )
+
+    def observe(self, raw: dict[str, Any], now: float) -> None:
+        if not self._active:
+            return
+        for axis in self._axes:
+            try:
+                v = int(raw.get(axis, int(ADC_CENTER)))
+            except Exception:
+                v = int(ADC_CENTER)
+            if v < 0:
+                v = 0
+            if v > 4095:
+                v = 4095
+            self._samples[axis].append(v)
+        if now >= self._end_at:
+            self._finalize(now)
+
+    def _finalize(self, now: float) -> None:
+        self._active = False
+        profile = self._state.get_profile()
+        axes_cfg = profile.setdefault("axes", {})
+        applied: dict[str, Any] = {}
+        for axis in self._axes:
+            arr = self._samples.get(axis, [])
+            med = _median(arr)
+            new_offset = _normalize_raw_to_unit(med)
+            if new_offset < -1.0:
+                new_offset = -1.0
+            if new_offset > 1.0:
+                new_offset = 1.0
+            tune = axes_cfg.setdefault(axis, {})
+            old_offset = float(tune.get("center_offset", 0.0) or 0.0)
+            tune["center_offset"] = float(round(new_offset, 6))
+            applied[axis] = {
+                "samples": len(arr),
+                "median_raw": float(round(med, 3)),
+                "old_center_offset": old_offset,
+                "new_center_offset": tune["center_offset"],
+            }
+        ok, msg = self._state.apply_profile_update(profile)
+        self._write_result(
+            {
+                "ok": bool(ok),
+                "state": "done",
+                "request_id": self._request_id,
+                "started_at": self._started_at,
+                "finished_at": now,
+                "axes": list(self._axes),
+                "applied": applied,
+                "message": "calibration_applied" if ok else msg,
+            }
+        )
+
+    def _write_result(self, payload: dict[str, Any]) -> None:
+        try:
+            with open(self._result_path, "w", encoding="utf-8") as f:
+                json.dump(payload, f, indent=2)
+        except Exception:
+            pass
+
+    @staticmethod
+    def _read_json(path: str) -> Any:
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return None
+
+    @staticmethod
+    def _safe_remove(path: str) -> None:
+        try:
+            if os.path.exists(path):
+                os.remove(path)
+        except Exception:
+            pass
 
 
 def _run_ingest_loop(
@@ -223,10 +378,14 @@ def run_bridge(
 
     filter_state: dict[str, float] = {}
     last_shape_time = 0.0
+    runtime_dir = profile_dir or os.path.dirname(os.path.abspath(__file__))
+    calibrator = InputCalibrator(state, runtime_dir)
 
     def shape_worker() -> None:
         nonlocal last_shape_time
         while not stop.is_set():
+            now = time.monotonic()
+            calibrator.poll(now)
             try:
                 raw = sample_queue.get(timeout=0.02)
             except queue.Empty:
@@ -238,6 +397,7 @@ def run_bridge(
                     except queue.Full:
                         pass
                 continue
+            calibrator.observe(raw, time.monotonic())
             shaped, last_shape_time = shape_sample(raw, state, filter_state, last_shape_time)
             try:
                 shaped_queue.put_nowait(shaped)

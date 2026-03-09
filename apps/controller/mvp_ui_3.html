@@ -82,10 +82,12 @@
           <div class="row">
             <button id="touchSaveDefaults">Save User Defaults</button>
             <button id="touchResetDefaults">Reset User Defaults</button>
+            <button id="touchCalibrateInputs">Calibrate Inputs</button>
           </div>
           <div id="eventLog" class="info">Event: idle</div>
           <div id="slowState" class="info">Slow state: -</div>
           <div id="applyState" class="info">Apply status: -</div>
+          <div id="calibrationState" class="info">Calibration: -</div>
         </div>
         <div class="card">
           <h3>Runtime Status</h3>
@@ -190,6 +192,7 @@ let state = {
   connection_status: {},
   network_config: { pi_lan: {}, heads: [] },
   wifi_status: {},
+  calibration: {},
 };
 let activeColumn = null;
 let mode = "position";
@@ -398,6 +401,7 @@ function renderState(){
   $("applyState").textContent = `Apply status:\n${JSON.stringify(state.slow_apply_status || {}, null, 2)}`;
   $("shapingState").textContent = `Shaping:\n${JSON.stringify(state.shaping || {}, null, 2)}`;
   $("connectionState").textContent = `Connection:\n${JSON.stringify(state.connection_status || {}, null, 2)}`;
+  $("calibrationState").textContent = `Calibration:\n${JSON.stringify(state.calibration || {}, null, 2)}`;
   const lens = (state.head_feedback || {}).lens || {};
   const pos = lens.positions || {};
   const lensId = lens.lens_id || "-";
@@ -614,6 +618,8 @@ function connectWs(){
         setEvent(msg.ok ? "wifi scan complete" : `wifi scan failed: ${msg.message}`);
       } else if (msg.type && msg.type.endsWith("_RESULT")) {
         setEvent(`${msg.type}: ${msg.ok ? "ok" : "fail"} ${msg.message || ""}`);
+      } else if (msg.type === "CALIBRATE_INPUTS_ACCEPTED"){
+        setEvent(msg.ok ? `calibration started (${msg.request_id || "-"})` : `calibration start failed: ${msg.message || ""}`);
       } else if (msg.type === "SHAPING_APPLIED"){
         setEvent(msg.ok ? "shaping applied" : `shaping failed: ${msg.message}`);
       }
@@ -631,6 +637,7 @@ function bindUI(){
   $("touchGyroSend").onclick = () => send({ type: "SET_SLOW_CONTROL", key: "gyro_heading_correction", value: parseInt($("touchGyroValue").value, 10) || 0 });
   $("touchSaveDefaults").onclick = () => send({ type: "SAVE_USER_DEFAULTS" });
   $("touchResetDefaults").onclick = () => send({ type: "RESET_USER_DEFAULTS" });
+  $("touchCalibrateInputs").onclick = () => send({ type: "CALIBRATE_INPUTS", duration_s: 2.5 });
   $("touchToggleMode").onclick = () => {
     if (activeColumn === null) return;
     if (mode === "position") mode = "value";
