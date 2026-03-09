@@ -77,6 +77,12 @@ Rotation:
 
 - `HYDRAVISION_ROTATION_OUTPUT` and `HYDRAVISION_ROTATION_TRANSFORM` control display rotation.
 - Installer auto-migrates historical typo key `HYDRAVISION_ROTATION_TRANSFOR` to `HYDRAVISION_ROTATION_TRANSFORM`.
+- Touch rotation is intentionally manual via helper:
+  - `sudo hydravision-touch-rotate 90`
+  - `sudo hydravision-touch-rotate 270`
+  - `sudo hydravision-touch-rotate 180`
+  - `sudo hydravision-touch-rotate 0`
+  - `sudo hydravision-touch-rotate off`
 
 ## Install and enable
 

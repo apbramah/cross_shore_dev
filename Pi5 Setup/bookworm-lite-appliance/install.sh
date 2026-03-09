@@ -11,6 +11,7 @@ CTRL_BIN="/usr/local/bin/controller_daemon"
 WS_BIN="/usr/local/bin/wsbridge_daemon"
 KIOSK_BROWSER_BIN="/usr/local/bin/kiosk-browser"
 KIOSK_SELECT_BIN="/usr/local/bin/hydravision-kiosk-browser-select"
+TOUCH_ROTATE_BIN="/usr/local/bin/hydravision-touch-rotate"
 APPLIANCE_ENV="/etc/default/hydravision-appliance"
 SYSTEMD_DIR="/etc/systemd/system"
 
@@ -302,6 +303,61 @@ echo "Restarting kiosk.service..."
 systemctl restart kiosk.service
 EOF
 chmod 755 "$KIOSK_SELECT_BIN"
+
+cat >"$TOUCH_ROTATE_BIN" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+RULE_FILE="/etc/udev/rules.d/99-hydravision-touch-rotation.rules"
+
+usage() {
+  cat <<'USAGE'
+Usage: hydravision-touch-rotate <0|90|180|270|off>
+
+  90  : clockwise touch rotation matrix
+  270 : counter-clockwise touch rotation matrix
+  180 : upside-down
+  0   : identity
+  off : remove custom touch calibration rule
+USAGE
+}
+
+if [ $# -ne 1 ]; then
+  usage
+  exit 1
+fi
+
+transform="$1"
+case "$transform" in
+  90) matrix="0 -1 1 1 0 0" ;;
+  270) matrix="0 1 0 -1 0 1" ;;
+  180) matrix="-1 0 1 0 -1 1" ;;
+  0|normal) matrix="1 0 0 0 1 0" ;;
+  off)
+    rm -f "$RULE_FILE"
+    udevadm control --reload-rules || true
+    udevadm trigger || true
+    echo "Removed touchscreen rotation rule: $RULE_FILE"
+    exit 0
+    ;;
+  *)
+    usage
+    exit 1
+    ;;
+esac
+
+cat >"$RULE_FILE" <<RULE
+# HydraVision touchscreen rotation rule (manual helper)
+SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="*TouchScreen*", ENV{LIBINPUT_CALIBRATION_MATRIX}="${matrix}"
+RULE
+
+chmod 644 "$RULE_FILE"
+udevadm control --reload-rules || true
+udevadm trigger || true
+echo "Applied touch rotation transform=$transform matrix=$matrix"
+echo "Reboot recommended to verify persistence."
+EOF
+chmod 755 "$TOUCH_ROTATE_BIN"
 
 chown -R "$KIOSK_USER:$KIOSK_USER" "$WS_DIR"
 
