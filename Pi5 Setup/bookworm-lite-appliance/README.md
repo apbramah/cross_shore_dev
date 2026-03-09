@@ -14,6 +14,7 @@ It is intentionally independent from Plymouth.
   - `Pi5 Setup/bookworm-lite-appliance/systemd/wsbridge.service`
   - `Pi5 Setup/bookworm-lite-appliance/systemd/kiosk.service`
   - `Pi5 Setup/bookworm-lite-appliance/systemd/boot-splash-lock.service`
+  - `Pi5 Setup/bookworm-lite-appliance/systemd/hydravision-boot-selfheal.service`
 
 ## Required package list
 
@@ -37,6 +38,8 @@ It is intentionally independent from Plymouth.
 - `/usr/local/bin/wsbridge_daemon`
 - `/usr/local/bin/kiosk-browser`
 - `/usr/local/bin/hydravision-kiosk-browser-select`
+- `/usr/local/bin/hydravision-boot-guard`
+- `/usr/local/bin/hydravision-boot-selfheal`
 - `/etc/default/hydravision-appliance`
 
 ## Browser launch command (example)
@@ -53,6 +56,13 @@ Installer enforces Chromium as default on each install run. To switch browser an
 sudo /usr/local/bin/hydravision-kiosk-browser-select chromium
 sudo /usr/local/bin/hydravision-kiosk-browser-select firefox
 ```
+
+## Boot resilience hardening
+
+- Installer writes `/boot/firmware/cmdline.txt` atomically and normalizes permissions to `0644`.
+- Last-known-good cmdline is stored at `/boot/firmware/hydravision_lkg/cmdline.txt`.
+- `hydravision-boot-selfheal.service` runs at boot and restores cmdline from LKG if current cmdline is invalid, then reboots to apply.
+- `hydravision-boot-guard` is also run during install as a fail-fast verifier.
 
 ## Ethernet automation
 

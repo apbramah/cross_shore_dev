@@ -1,0 +1,13 @@
+[Unit]
+Description=HydraVision Boot Cmdline Self-Heal
+After=local-fs.target
+Before=kiosk.service
+ConditionPathExists=/usr/local/bin/hydravision-boot-selfheal
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/hydravision-boot-selfheal
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

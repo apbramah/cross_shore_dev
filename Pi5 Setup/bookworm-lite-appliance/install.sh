@@ -12,6 +12,8 @@ WS_BIN="/usr/local/bin/wsbridge_daemon"
 KIOSK_BROWSER_BIN="/usr/local/bin/kiosk-browser"
 KIOSK_SELECT_BIN="/usr/local/bin/hydravision-kiosk-browser-select"
 TOUCH_ROTATE_BIN="/usr/local/bin/hydravision-touch-rotate"
+BOOT_GUARD_BIN="/usr/local/bin/hydravision-boot-guard"
+BOOT_SELFHEAL_BIN="/usr/local/bin/hydravision-boot-selfheal"
 APPLIANCE_ENV="/etc/default/hydravision-appliance"
 SYSTEMD_DIR="/etc/systemd/system"
 
@@ -64,9 +66,47 @@ done
 echo "[3/8] Configuring boot cmdline..."
 python3 - <<'PY'
 from pathlib import Path
+import os
 
-cmdline = Path("/boot/firmware/cmdline.txt")
-line = cmdline.read_text().strip().splitlines()[0]
+CMDLINE_PATH = Path("/boot/firmware/cmdline.txt")
+LKG_PATH = Path("/boot/firmware/hydravision_lkg/cmdline.txt")
+
+
+def _first_non_empty_line(text: str) -> str:
+    for raw in text.splitlines():
+        line = raw.strip()
+        if line:
+            return line
+    return ""
+
+
+def _atomic_write(path: Path, content: str, mode: int = 0o644) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    fd = os.open(str(tmp_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(content)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, path)
+        os.chmod(path, mode)
+    finally:
+        if tmp_path.exists():
+            try:
+                tmp_path.unlink()
+            except Exception:
+                pass
+
+
+line = ""
+if CMDLINE_PATH.exists():
+    line = _first_non_empty_line(CMDLINE_PATH.read_text(encoding="utf-8", errors="ignore"))
+if not line:
+    line = _first_non_empty_line(Path("/proc/cmdline").read_text(encoding="utf-8", errors="ignore"))
+if not line:
+    raise RuntimeError("Unable to recover a valid kernel cmdline source.")
+
 parts = [p for p in line.split(" ") if p]
 
 drop_exact = {
@@ -102,7 +142,10 @@ parts += [
 ]
 if not any(p.startswith("console=tty3") for p in parts):
     parts.append("console=tty3")
-cmdline.write_text(" ".join(parts) + "\n")
+
+new_line = " ".join(parts) + "\n"
+_atomic_write(CMDLINE_PATH, new_line, mode=0o644)
+_atomic_write(LKG_PATH, new_line, mode=0o644)
 PY
 
 echo "[4/8] Preparing appliance directories..."
@@ -359,6 +402,84 @@ echo "Reboot recommended to verify persistence."
 EOF
 chmod 755 "$TOUCH_ROTATE_BIN"
 
+cat >"$BOOT_GUARD_BIN" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+CMDLINE_FILE="/boot/firmware/cmdline.txt"
+CMDLINE_LKG_FILE="/boot/firmware/hydravision_lkg/cmdline.txt"
+REPAIR="${1:-}"
+
+required_tokens=(
+  "quiet"
+  "splash"
+  "loglevel=0"
+  "vt.global_cursor_default=0"
+  "logo.nologo"
+  "systemd.show_status=false"
+  "rd.systemd.show_status=false"
+  "systemd.log_level=emerg"
+  "udev.log_priority=3"
+  "console=tty3"
+)
+
+is_valid_cmdline() {
+  local p="$1"
+  [ -s "$p" ] || return 1
+  local line
+  line="$(tr -d '\r' < "$p" | tr '\n' ' ')"
+  [ -n "$line" ] || return 1
+  for token in "${required_tokens[@]}"; do
+    if ! grep -qF "$token" <<<"$line"; then
+      return 1
+    fi
+  done
+  return 0
+}
+
+if is_valid_cmdline "$CMDLINE_FILE"; then
+  exit 0
+fi
+
+if [ "$REPAIR" = "--repair" ] && is_valid_cmdline "$CMDLINE_LKG_FILE"; then
+  install -m 644 "$CMDLINE_LKG_FILE" "$CMDLINE_FILE"
+  sync
+  exit 0
+fi
+
+echo "Boot guard failed: invalid cmdline (and no valid repair source)." >&2
+exit 1
+EOF
+chmod 755 "$BOOT_GUARD_BIN"
+
+cat >"$BOOT_SELFHEAL_BIN" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+GUARD_BIN="/usr/local/bin/hydravision-boot-guard"
+FLAG_FILE="/run/hydravision-boot-selfheal.rebooting"
+
+if "$GUARD_BIN" >/dev/null 2>&1; then
+  exit 0
+fi
+
+if [ -e "$FLAG_FILE" ]; then
+  echo "Boot self-heal already requested reboot this boot cycle." >&2
+  exit 0
+fi
+
+if "$GUARD_BIN" --repair; then
+  touch "$FLAG_FILE"
+  logger -t hydravision "Restored cmdline from LKG; rebooting to apply."
+  systemctl --no-block reboot || true
+  exit 0
+fi
+
+logger -t hydravision "Boot self-heal failed: no valid cmdline or LKG source."
+exit 0
+EOF
+chmod 755 "$BOOT_SELFHEAL_BIN"
+
 # Bake touch rotation into standard appliance installs using the configured
 # display transform. Keep helper available for explicit overrides.
 # shellcheck disable=SC1090
@@ -385,17 +506,26 @@ cat >/etc/firefox/policies/policies.json <<'EOF'
 }
 EOF
 
+install -d /etc/systemd/journald.conf.d
+cat >/etc/systemd/journald.conf.d/90-hydravision-persistent.conf <<'EOF'
+[Journal]
+Storage=persistent
+SystemMaxUse=50M
+EOF
+
 echo "[6/8] Installing systemd unit files..."
 cleanup_stale_unit_override controller.service
 cleanup_stale_unit_override wsbridge.service
 cleanup_stale_unit_override kiosk.service
+cleanup_stale_unit_override hydravision-boot-selfheal.service
 install -m 644 "$SCRIPT_DIR/systemd/controller.service" "$SYSTEMD_DIR/controller.service"
 install -m 644 "$SCRIPT_DIR/systemd/wsbridge.service" "$SYSTEMD_DIR/wsbridge.service"
 install -m 644 "$SCRIPT_DIR/systemd/kiosk.service" "$SYSTEMD_DIR/kiosk.service"
 install -m 644 "$SCRIPT_DIR/systemd/boot-splash-lock.service" "$SYSTEMD_DIR/boot-splash-lock.service"
+install -m 644 "$SCRIPT_DIR/systemd/hydravision-boot-selfheal.service" "$SYSTEMD_DIR/hydravision-boot-selfheal.service"
 
 systemctl daemon-reload
-for unit in controller.service wsbridge.service kiosk.service boot-splash-lock.service; do
+for unit in controller.service wsbridge.service kiosk.service boot-splash-lock.service hydravision-boot-selfheal.service; do
   fragment_path="$(systemctl show -p FragmentPath --value "$unit" 2>/dev/null || true)"
   if [ -z "$fragment_path" ] || [ ! -f "$fragment_path" ]; then
     echo "ERROR: Unit ${unit} is not loadable after install (FragmentPath='${fragment_path}')."
@@ -414,15 +544,17 @@ systemctl disable --now NetworkManager-wait-online.service 2>/dev/null || true
 
 systemctl disable --now getty@tty1.service 2>/dev/null || true
 systemctl mask getty@tty1.service autovt@tty1.service || true
-systemctl unmask controller.service wsbridge.service kiosk.service || true
+systemctl unmask controller.service wsbridge.service kiosk.service hydravision-boot-selfheal.service || true
 
 echo "[8/8] Enabling required services..."
 systemctl enable --now NetworkManager.service
 systemctl enable --now ssh.service
+systemctl enable --now hydravision-boot-selfheal.service
 systemctl enable --now boot-splash-lock.service
 systemctl enable --now controller.service
 systemctl enable --now wsbridge.service
 systemctl enable --now kiosk.service
+systemctl restart systemd-journald.service || true
 
 echo "[extra] Applying static ethernet profile (non-blocking)..."
 bash -c '
@@ -487,5 +619,10 @@ nmcli connection modify "$CONN_NAME" \
   connection.autoconnect yes
 nmcli connection up "$CONN_NAME" || true
 ' || echo "Static ethernet setup failed; continuing."
+
+echo "[verify] Running boot safety guards..."
+"$BOOT_GUARD_BIN"
+cmp -s "$UI_DIR/mvp_ui_3_layout.js" "$UI_SRC_LAYOUT" || { echo "ERROR: /opt/ui/mvp_ui_3_layout.js does not match source."; exit 1; }
+cmp -s "$UI_DIR/mvp_ui_3.html" "$UI_SRC_HTML" || { echo "ERROR: /opt/ui/mvp_ui_3.html does not match source."; exit 1; }
 
 echo "Install complete. Reboot recommended."
