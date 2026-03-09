@@ -359,6 +359,17 @@ echo "Reboot recommended to verify persistence."
 EOF
 chmod 755 "$TOUCH_ROTATE_BIN"
 
+# Bake touch rotation into standard appliance installs using the configured
+# display transform. Keep helper available for explicit overrides.
+# shellcheck disable=SC1090
+if [ -r "$APPLIANCE_ENV" ]; then
+  . "$APPLIANCE_ENV" || true
+fi
+TOUCH_ROTATION_DEFAULT="${HYDRAVISION_ROTATION_TRANSFORM:-90}"
+if ! "$TOUCH_ROTATE_BIN" "$TOUCH_ROTATION_DEFAULT"; then
+  echo "WARNING: Touch rotation auto-apply failed for transform=${TOUCH_ROTATION_DEFAULT}; continuing."
+fi
+
 chown -R "$KIOSK_USER:$KIOSK_USER" "$WS_DIR"
 
 install -d /etc/firefox/policies
