@@ -300,6 +300,23 @@ def _build_adc_profile_file_path() -> str:
 
 
 def _build_controller_runtime_file_path(filename: str) -> str:
+    candidates = []
+    env_dir = os.environ.get("MVP_CONTROLLER_RUNTIME_DIR", "").strip()
+    if env_dir:
+        candidates.append(env_dir)
+    candidates.extend(
+        [
+            os.path.dirname(_build_adc_profile_file_path()),
+            "/home/admin/Dev/cross_shore_dev/apps/controller",
+            "/home/admin/cross_shore_dev/apps/controller",
+        ]
+    )
+    for d in candidates:
+        try:
+            if os.path.isdir(d) and os.path.isfile(os.path.join(d, "mvp_bridge_adc.py")):
+                return os.path.join(d, filename)
+        except Exception:
+            continue
     return os.path.join(os.path.dirname(_build_adc_profile_file_path()), filename)
 
 
