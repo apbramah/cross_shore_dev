@@ -443,9 +443,8 @@ def _apply_shaping_to_adc_profile() -> tuple[bool, str]:
     axes = profile.setdefault("axes", {})
     expo_ui_ptr = _clamp(float(shaping_state.get("expo", 5.0)), 1.0, 10.0)
     expo_ui_zoom = _clamp(float(shaping_state.get("expo_zoom", expo_ui_ptr)), 1.0, 10.0)
-    # Inverted expo UI direction: higher UI value maps toward lower engineering expo.
-    expo_ptr = _map_0_10_to_range(10.0 - expo_ui_ptr, -1.0, 1.0)
-    expo_zoom = _map_0_10_to_range(10.0 - expo_ui_zoom, -1.0, 1.0)
+    expo_ptr = _map_0_10_to_range(expo_ui_ptr, -1.0, 1.0)
+    expo_zoom = _map_0_10_to_range(expo_ui_zoom, -1.0, 1.0)
     top_speed = shaping_state.get("top_speed", {})
     invert = shaping_state.get("invert", {})
     deadband = shaping_state.get("deadband", {})
