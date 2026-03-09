@@ -38,6 +38,7 @@ NETWORK_USER_FILE = os.path.join(BASE_DIR, "mvp_network_user_config.json")
 NETWORK_FACTORY_FILE = os.path.join(BASE_DIR, "mvp_network_factory_config.json")
 ADC_CAL_REQUEST_FILE = "adc_input_calibration_request.json"
 ADC_CAL_RESULT_FILE = "adc_input_calibration_result.json"
+ZOOM_FEEDBACK_RUNTIME_FILENAME = "zoom_feedback_runtime.json"
 
 SLOW_TELEM_LISTEN_PORT = mvp_protocol.SLOW_TELEM_PORT
 SCHEMA_VERSION = mvp_protocol.PKT_SCHEMA_VERSION
@@ -111,6 +112,7 @@ def _default_shaping_profile() -> dict[str, Any]:
         "top_speed": {"yaw": 5.0, "pitch": 5.0, "roll": 5.0, "zoom": 5.0},
         "invert": {"yaw": False, "pitch": False, "roll": False},
         "deadband": {"yaw": 0.0, "pitch": 0.0, "roll": 0.0, "zoom": 0.0},
+        "zoom_feedback": 1.0,
     }
 
 
@@ -213,6 +215,13 @@ def _normalized_shaping_profile(raw: Any) -> dict[str, Any]:
                         base["deadband"][k] = _map_range_to_0_10(v, 0.0, 0.25)
                 except Exception:
                     pass
+    if "zoom_feedback" in raw:
+        try:
+            base["zoom_feedback"] = _clamp(float(raw["zoom_feedback"]), 1.0, 10.0)
+        except Exception:
+            base["zoom_feedback"] = 1.0
+    else:
+        base["zoom_feedback"] = 1.0
     base["ui_scale"] = True
     return base
 
@@ -298,6 +307,9 @@ network_factory = _default_network_model(len(heads), heads)
 network_user = _default_network_model(len(heads), heads)
 
 head_feedback: dict[str, Any] = {"slow": {}, "lens": {}, "bgc": {}, "updated_at": 0.0}
+# Zoom normalization: track observed lens zoom range, expose zoom_norm in [0, 1].
+_zoom_raw_min: float = 0.0
+_zoom_raw_max: float = 1.0
 connection_status: dict[str, Any] = {
     "physical_link": {"eth0_up": False},
     "head": {"state": "disconnected", "last_telem_age_s": None, "last_send_ok": False},
@@ -430,6 +442,17 @@ def _build_controller_runtime_file_path(filename: str) -> str:
     return os.path.join(os.path.dirname(_build_adc_profile_file_path()), filename)
 
 
+def _zoom_feedback_runtime_path() -> str:
+    """Path for zoom feedback runtime JSON consumed by ADC bridge. Prefer /opt/wsbridge."""
+    opt_ws = "/opt/wsbridge"
+    try:
+        if os.path.isdir(opt_ws):
+            return os.path.join(opt_ws, ZOOM_FEEDBACK_RUNTIME_FILENAME)
+    except Exception:
+        pass
+    return _build_controller_runtime_file_path(ZOOM_FEEDBACK_RUNTIME_FILENAME)
+
+
 def _load_adc_profile() -> dict[str, Any]:
     path = _build_adc_profile_file_path()
     data = _safe_load_json(path, {})
@@ -525,6 +548,23 @@ def _refresh_calibration_status() -> None:
         return
 
 
+def _write_zoom_feedback_runtime() -> None:
+    """Write zoom_feedback and zoom_norm to runtime JSON for ADC bridge (PTR damping)."""
+    try:
+        zoom_feedback = _clamp(float(shaping_state.get("zoom_feedback", 1.0)), 1.0, 10.0)
+        lens = head_feedback.get("lens", {}) or {}
+        zoom_norm = _clamp(float(lens.get("zoom_norm", 0.0)), 0.0, 1.0)
+        payload = {
+            "zoom_feedback": zoom_feedback,
+            "zoom_norm": zoom_norm,
+            "timestamp": time.time(),
+        }
+        path = _zoom_feedback_runtime_path()
+        _safe_save_json(path, payload)
+    except Exception:
+        pass
+
+
 def _send_one_slow_key_now(key: str) -> bool:
     global slow_seq, slow_apply_id
     if not heads or not (0 <= selected_index < len(heads)):
@@ -561,16 +601,31 @@ def _selected_head_ip() -> str:
 
 
 def _normalize_lens_feedback(lens_payload: dict[str, Any]) -> dict[str, Any]:
+    global _zoom_raw_min, _zoom_raw_max
     lens_payload = dict(lens_payload or {})
     pos = lens_payload.get("positions", {}) or {}
     zoom = pos.get("zoom", lens_payload.get("zoom_position", 0))
     focus = pos.get("focus", lens_payload.get("focus_position", 0))
     iris = pos.get("iris", lens_payload.get("iris_position", 0))
+    zoom_val = int(zoom) if zoom is not None else 0
+    focus_val = int(focus) if focus is not None else 0
+    iris_val = int(iris) if iris is not None else 0
     lens_payload["positions"] = {
-        "zoom": int(zoom) if zoom is not None else 0,
-        "focus": int(focus) if focus is not None else 0,
-        "iris": int(iris) if iris is not None else 0,
+        "zoom": zoom_val,
+        "focus": focus_val,
+        "iris": iris_val,
     }
+    # Track zoom range and compute normalized zoom [0, 1] for PTR feedback damping.
+    if zoom_val < _zoom_raw_min:
+        _zoom_raw_min = float(zoom_val)
+    if zoom_val > _zoom_raw_max:
+        _zoom_raw_max = float(zoom_val)
+    span = _zoom_raw_max - _zoom_raw_min
+    if span <= 0:
+        zoom_norm = 0.0
+    else:
+        zoom_norm = _clamp((float(zoom_val) - _zoom_raw_min) / span, 0.0, 1.0)
+    lens_payload["zoom_norm"] = zoom_norm
     if "lens_full_name" not in lens_payload:
         lens_payload["lens_full_name"] = ""
     lens_payload["zoom_control_mode"] = str(lens_payload.get("zoom_control_mode", "position"))
@@ -709,6 +764,7 @@ async def status_publish_task() -> None:
         _refresh_connection_status()
         _refresh_wifi_status()
         _refresh_calibration_status()
+        _write_zoom_feedback_runtime()
         await _publish_state()
         await asyncio.sleep(STATUS_PUBLISH_INTERVAL_S)
 
@@ -904,6 +960,11 @@ async def handler(websocket: Any) -> None:
                             except Exception:
                                 continue
                             shaping_state["deadband"][k] = _clamp(v, 0.0, 10.0)
+                if "zoom_feedback" in payload:
+                    try:
+                        shaping_state["zoom_feedback"] = _clamp(float(payload["zoom_feedback"]), 1.0, 10.0)
+                    except Exception:
+                        pass
                 shaping_state["ui_scale"] = True
                 ok, msg = _apply_shaping_to_adc_profile()
                 await websocket.send(json.dumps({"type": "SHAPING_APPLIED", "ok": ok, "message": msg, "value": shaping_state}))

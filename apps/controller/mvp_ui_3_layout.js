@@ -94,7 +94,7 @@ window.MVP_UI3_LAYOUT = {
         { id: "C5P2", label: "Factory Net Reset", commandKey: "net_factory_reset", control_class: "system", defaultValue: 1, values: [{ label: "RESET", value: 1 }] },
         { id: "C5P3", label: "WiFi Scan", commandKey: "wifi_scan", control_class: "system", defaultValue: 1, values: [{ label: "SCAN", value: 1 }] },
         { id: "C5P4", label: "WiFi Disconnect", commandKey: "wifi_disconnect", control_class: "system", defaultValue: 1, values: [{ label: "DISCONNECT", value: 1 }] },
-        { id: "C5P5", label: "Spare", commandKey: null, values: [] },
+        { id: "C5P5", label: "Zoom Feedback (1..10)", commandKey: "shape_zoom_feedback", control_class: "local", defaultValue: 1, values: [{ label: "1", value: 1 }, { label: "2", value: 2 }, { label: "3", value: 3 }, { label: "4", value: 4 }, { label: "5", value: 5 }, { label: "6", value: 6 }, { label: "7", value: 7 }, { label: "8", value: 8 }, { label: "9", value: 9 }, { label: "10", value: 10 }] },
         { id: "C5P6", label: "Spare", commandKey: null, values: [] },
         { id: "C5P7", label: "Spare", commandKey: null, values: [] },
         { id: "C5P8", label: "Spare", commandKey: null, values: [] },

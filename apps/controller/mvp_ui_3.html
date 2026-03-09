@@ -218,6 +218,7 @@ let state = {
     top_speed: { yaw: 5, pitch: 5, roll: 5, zoom: 5 },
     invert: { yaw:false, pitch:false, roll:false },
     deadband: { yaw:0, pitch:0, roll:0, zoom:0 },
+    zoom_feedback: 1,
   },
   defaults: {},
   head_feedback: {},
@@ -311,13 +312,14 @@ function controlClassForSlot(slot){
 
 function setCommandValue(commandKey, value){
   if (!commandKey) return false;
-  if (commandKey.startsWith("shape_")) {
+    if (commandKey.startsWith("shape_")) {
     state.shaping = state.shaping || {};
     state.shaping.top_speed = state.shaping.top_speed || { yaw:5, pitch:5, roll:5, zoom:5 };
     state.shaping.invert = state.shaping.invert || { yaw:false, pitch:false, roll:false };
     state.shaping.deadband = state.shaping.deadband || { yaw:0, pitch:0, roll:0, zoom:0 };
     if (commandKey === "shape_expo") state.shaping.expo = value;
     else if (commandKey === "shape_expo_zoom") state.shaping.expo_zoom = value;
+    else if (commandKey === "shape_zoom_feedback") state.shaping.zoom_feedback = Math.max(1, Math.min(10, Number(value) || 1));
     else if (commandKey === "shape_top_speed") state.shaping.top_speed = value;
     else if (commandKey === "shape_top_speed_yaw") state.shaping.top_speed.yaw = Number(value) || 0;
     else if (commandKey === "shape_top_speed_pitch") state.shaping.top_speed.pitch = Number(value) || 0;
@@ -395,6 +397,7 @@ function getSlotValue(pos){
   if (pos.commandKey.startsWith("shape_")) {
     if (pos.commandKey === "shape_expo") return state.shaping.expo;
     if (pos.commandKey === "shape_expo_zoom") return state.shaping.expo_zoom;
+    if (pos.commandKey === "shape_zoom_feedback") return state.shaping.zoom_feedback != null ? state.shaping.zoom_feedback : 1;
     if (pos.commandKey === "shape_top_speed") return state.shaping.top_speed;
     if (pos.commandKey === "shape_top_speed_yaw") return state.shaping.top_speed?.yaw ?? 5;
     if (pos.commandKey === "shape_top_speed_pitch") return state.shaping.top_speed?.pitch ?? 5;
@@ -633,6 +636,7 @@ function renderState(){
   }
   state.shaping.invert = state.shaping.invert || { yaw:false, pitch:false, roll:false };
   state.shaping.deadband = state.shaping.deadband || { yaw:0, pitch:0, roll:0, zoom:0 };
+  if (state.shaping.zoom_feedback === undefined || state.shaping.zoom_feedback === null) state.shaping.zoom_feedback = 1;
   if (!inputFilterDefaultsLoaded){
     const cfg = (((state.ui_config || {}).input_tests) || {});
     const db = Number(cfg.debounce_ms);

@@ -23,6 +23,8 @@ from mvp_bridge_adc_state import ADCBridgeState
 from mvp_bridge_adc_shape import shape_sample, neutral_axes
 from mvp_bridge_adc_output import send_fast, send_slow, DEFAULT_FAST_PORT, DEFAULT_SLOW_PORT, DEFAULT_HEAD_ADDR
 
+ZOOM_FEEDBACK_RUNTIME_FILENAME = "zoom_feedback_runtime.json"
+
 try:
     import mvp_protocol
     MVP_PROTOCOL_AVAILABLE = True
@@ -92,6 +94,34 @@ def _load_selected_head_index(default_index: int = 0) -> int:
         except Exception:
             continue
     return default_index
+
+
+def _zoom_feedback_runtime_path(runtime_dir: str) -> str:
+    """Path for zoom feedback runtime JSON written by slow bridge. Prefer /opt/wsbridge."""
+    opt_ws = "/opt/wsbridge"
+    try:
+        if os.path.isdir(opt_ws):
+            return os.path.join(opt_ws, ZOOM_FEEDBACK_RUNTIME_FILENAME)
+    except Exception:
+        pass
+    return os.path.join(runtime_dir, ZOOM_FEEDBACK_RUNTIME_FILENAME)
+
+
+def _load_zoom_feedback_runtime_mtime_gated(
+    path: str, last_mtime: float, last_data: dict[str, Any] | None
+) -> tuple[float, dict[str, Any] | None]:
+    """If path exists and mtime changed, load and return (new_mtime, data); else (last_mtime, last_data)."""
+    try:
+        if not os.path.isfile(path):
+            return last_mtime, last_data
+        mtime = os.path.getmtime(path)
+        if mtime <= last_mtime:
+            return last_mtime, last_data
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return mtime, data if isinstance(data, dict) else last_data
+    except Exception:
+        return last_mtime, last_data
 
 
 def _median(values: list[int]) -> float:
@@ -380,12 +410,18 @@ def run_bridge(
     last_shape_time = 0.0
     runtime_dir = profile_dir or os.path.dirname(os.path.abspath(__file__))
     calibrator = InputCalibrator(state, runtime_dir)
+    zoom_feedback_path = _zoom_feedback_runtime_path(runtime_dir)
+    zoom_feedback_mtime = 0.0
+    zoom_feedback_data: dict[str, Any] | None = None
 
     def shape_worker() -> None:
-        nonlocal last_shape_time
+        nonlocal last_shape_time, zoom_feedback_mtime, zoom_feedback_data
         while not stop.is_set():
             now = time.monotonic()
             calibrator.poll(now)
+            zoom_feedback_mtime, zoom_feedback_data = _load_zoom_feedback_runtime_mtime_gated(
+                zoom_feedback_path, zoom_feedback_mtime, zoom_feedback_data
+            )
             try:
                 raw = sample_queue.get(timeout=0.02)
             except queue.Empty:
@@ -398,7 +434,9 @@ def run_bridge(
                         pass
                 continue
             calibrator.observe(raw, time.monotonic())
-            shaped, last_shape_time = shape_sample(raw, state, filter_state, last_shape_time)
+            shaped, last_shape_time = shape_sample(
+                raw, state, filter_state, last_shape_time, zoom_feedback_runtime=zoom_feedback_data
+            )
             try:
                 shaped_queue.put_nowait(shaped)
             except queue.Full:
