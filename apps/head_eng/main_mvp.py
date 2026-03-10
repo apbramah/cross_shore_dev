@@ -10,6 +10,9 @@ import socket
 from bgc import BGC
 from lens_controller import LensController, LENS_FUJI
 
+# Set False for BGC-only hardware variants with no lens connected.
+ENABLE_LENS = False
+
 # ---------- LED ----------
 led = machine.Pin("LED", machine.Pin.OUT)
 pulse_until = 0
@@ -59,9 +62,13 @@ print("Ethernet ready:", nic.ifconfig())
 
 # ---------- Hardware ----------
 bgc = BGC()
-lens = LensController(default_lens_type=LENS_FUJI)
+if ENABLE_LENS:
+    lens = LensController(default_lens_type=LENS_FUJI)
+    print("BGC + ENG lens ready")
+else:
+    lens = None
+    print("BGC-only mode (lens disabled)")
 
-print("BGC + ENG lens ready")
 
 # ---------- UDP ----------
 UDP_PORT = 8888
@@ -104,7 +111,8 @@ while True:
     bgc.send_joystick_control(yaw_s, pitch_s, roll_s)
 
     # Send zoom/focus/iris to the active ENG lens protocol
-    lens.move_zoom(fields["zoom"])
-    lens.set_focus_input(fields["focus"])
-    lens.set_iris_input(fields["iris"])
-    lens.periodic()
+    if lens is not None:
+        lens.move_zoom(fields["zoom"])
+        lens.set_focus_input(fields["focus"])
+        lens.set_iris_input(fields["iris"])
+        lens.periodic()

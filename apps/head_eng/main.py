@@ -14,6 +14,9 @@ from lens_controller import LensController, LENS_FUJI
 import fuji_lens_from_calibration
 import fuji_control_calibration
 
+# Set False for BGC-only hardware variants with no lens connected.
+ENABLE_LENS = False
+
 # Explicit startup Fuji ownership mode (applied once).
 # - "pc_all": zoom/focus/iris on host
 # - "pc_zf_camera_i": zoom/focus host, iris camera
@@ -26,6 +29,7 @@ CTRL_DEBUG_INTERVAL_MS = 250
 ENABLE_STARTUP_BIT = False
 MVP_FAST_DEBUG = False
 MVP_FAST_DEBUG_INTERVAL_MS = 5000
+SLOW_DEBUG = True
 # Set True to log Fuji focus input/target and UART connection (SW4 poll, FOCUS TX).
 FUJI_DEBUG = False
 
@@ -78,7 +82,10 @@ print("Ethernet ready:", nic.ifconfig())
 
 # ---------- Hardware ----------
 bgc = BGC()
-lens = LensController(default_lens_type=LENS_FUJI)
+if ENABLE_LENS:
+    lens = LensController(default_lens_type=LENS_FUJI)
+else:
+    lens = None
 last_applied_lens_type = None
 last_applied_sources = {"zoom": "pc", "focus": "pc", "iris": "pc"}
 _last_slow_apply_id = None
@@ -93,21 +100,27 @@ _last_slow_sender_ip = None
 _last_telem_ms = 0
 _lens_name_last_try_ms = 0
 
-print("BGC + ENG lens ready")
-if FUJI_DEBUG:
+if lens is not None:
+    print("BGC + ENG lens ready")
+else:
+    print("BGC-only mode (lens disabled)")
+
+if FUJI_DEBUG and lens is not None:
     fuji_lens_from_calibration.FUJI_FOCUS_DEBUG = True
     fuji_control_calibration.FUJI_CONN_DEBUG = True
     print("Fuji focus/connection debug ON")
-# Lens startup is timing-sensitive on real hardware; give it a short settle window.
-for remaining in range(8, 0, -1):
-    print("Waiting for lens settle...", remaining, "s")
-    time.sleep(1)
-if ENABLE_STARTUP_BIT:
+
+if lens is not None:
+    # Lens startup is timing-sensitive on real hardware; give it a short settle window.
+    for remaining in range(8, 0, -1):
+        print("Waiting for lens settle...", remaining, "s")
+        time.sleep(1)
+if ENABLE_STARTUP_BIT and lens is not None:
     bit_ok = lens.startup_diagnostics()
     print("LENS startup diagnostics:", "PASS" if bit_ok else "FAIL")
 else:
     bit_ok = True
-    print("LENS startup diagnostics: SKIPPED (ENABLE_STARTUP_BIT=False)")
+    print("LENS startup diagnostics: SKIPPED")
 
 def _fuji_sw4_bits_from_sources(sources):
     bits = 0xF8
@@ -121,6 +134,9 @@ def _fuji_sw4_bits_from_sources(sources):
 
 
 def apply_fuji_ownership_mode_once():
+    if lens is None:
+        print("Fuji ownership mode skipped (lens disabled)")
+        return
     mode = str(FUJI_OWNERSHIP_MODE).lower().strip()
     if lens.get_lens_type() != LENS_FUJI:
         print("Fuji ownership mode skipped (active lens is not Fuji)")
@@ -146,8 +162,9 @@ def apply_fuji_ownership_mode_once():
     )
 
 apply_fuji_ownership_mode_once()
-last_applied_lens_type = lens.get_lens_type()
-last_applied_sources = lens.get_axis_sources()
+if lens is not None:
+    last_applied_lens_type = lens.get_lens_type()
+    last_applied_sources = lens.get_axis_sources()
 
 # ---------- UDP ----------
 FAST_UDP_PORT = 8888
@@ -171,6 +188,19 @@ SLOW_KEY_FILTER_ENABLE_IRIS = 8
 SLOW_KEY_FILTER_NUM = 9
 SLOW_KEY_FILTER_DEN = 10
 SLOW_KEY_GYRO_HEADING_CORRECTION = 11
+SLOW_KEY_NAMES = {
+    SLOW_KEY_MOTORS_ON: "motors_on",
+    SLOW_KEY_CONTROL_MODE: "control_mode",
+    SLOW_KEY_LENS_SELECT: "lens_select",
+    SLOW_KEY_SOURCE_ZOOM: "source_zoom",
+    SLOW_KEY_SOURCE_FOCUS: "source_focus",
+    SLOW_KEY_SOURCE_IRIS: "source_iris",
+    SLOW_KEY_FILTER_ENABLE_FOCUS: "filter_enable_focus",
+    SLOW_KEY_FILTER_ENABLE_IRIS: "filter_enable_iris",
+    SLOW_KEY_FILTER_NUM: "filter_num",
+    SLOW_KEY_FILTER_DEN: "filter_den",
+    SLOW_KEY_GYRO_HEADING_CORRECTION: "gyro_heading_correction",
+}
 
 sock_fast = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 sock_fast.bind(("0.0.0.0", FAST_UDP_PORT))
@@ -228,6 +258,10 @@ def decode_slow_cmd_packet(packet):
     }
 
 
+def _slow_key_name(key_id):
+    return SLOW_KEY_NAMES.get(int(key_id), "unknown")
+
+
 def poll_slow_command_once():
     """Read one slow command packet if available."""
     if not ENABLE_SLOW_CHANNEL or sock_slow is None:
@@ -238,7 +272,19 @@ def poll_slow_command_once():
         return None, None
     if not data:
         return None, None
-    return decode_slow_cmd_packet(data), addr
+    cmd = decode_slow_cmd_packet(data)
+    if SLOW_DEBUG and cmd:
+        print(
+            "[SLOW][RX] from={} seq={} apply_id={} key={}({}) value={}".format(
+                addr[0],
+                cmd.get("seq"),
+                cmd.get("apply_id"),
+                cmd.get("key_id"),
+                _slow_key_name(cmd.get("key_id")),
+                cmd.get("value"),
+            )
+        )
+    return cmd, addr
 
 
 def _send_slow_ack(target_ip, seq, apply_id, key_id, status=1):
@@ -256,6 +302,17 @@ def _send_slow_ack(target_ip, seq, apply_id, key_id, status=1):
             int(status) & 0xFF,
         )
         sock_telem.sendto(pkt, (target_ip, SLOW_TELEM_PORT))
+        if SLOW_DEBUG:
+            print(
+                "[SLOW][ACK] to={} seq={} apply_id={} key={}({}) status={}".format(
+                    target_ip,
+                    int(seq) & 0xFFFF,
+                    int(apply_id) & 0xFFFF,
+                    int(key_id) & 0xFF,
+                    _slow_key_name(key_id),
+                    int(status) & 0xFF,
+                )
+            )
     except Exception:
         pass
 
@@ -269,20 +326,31 @@ def _send_slow_telem():
         return
     _last_telem_ms = now
     try:
-        lens_name = lens.get_lens_full_name()
-        if not lens_name and time.ticks_diff(now, _lens_name_last_try_ms) >= 5000:
-            _lens_name_last_try_ms = now
+        if lens is not None:
             lens_name = lens.get_lens_full_name()
-        active_lens = getattr(lens, "active_lens", None)
-        zoom_mode = str(getattr(active_lens, "zoom_mode", "position"))
-        zoom_velocity_cmd = int((_last_fast_fields or {}).get("zoom", 0))
-        zoom_speed_raw = int(getattr(active_lens, "zoom_speed", 0))
-        zoom_feedback = getattr(active_lens, "_last_zoom_feedback", None)
-        focus_feedback = getattr(active_lens, "_last_focus_feedback", None)
-        iris_feedback = getattr(active_lens, "_last_iris_feedback", None)
-        zoom_pos = int(zoom_feedback) if zoom_feedback is not None else int(getattr(active_lens, "zoom", 0))
-        focus_pos = int(focus_feedback) if focus_feedback is not None else int(getattr(active_lens, "focus", 0))
-        iris_pos = int(iris_feedback) if iris_feedback is not None else int(getattr(active_lens, "iris", 0))
+            if not lens_name and time.ticks_diff(now, _lens_name_last_try_ms) >= 5000:
+                _lens_name_last_try_ms = now
+                lens_name = lens.get_lens_full_name()
+            active_lens = getattr(lens, "active_lens", None)
+            zoom_mode = str(getattr(active_lens, "zoom_mode", "position"))
+            zoom_velocity_cmd = int((_last_fast_fields or {}).get("zoom", 0))
+            zoom_speed_raw = int(getattr(active_lens, "zoom_speed", 0))
+            zoom_feedback = getattr(active_lens, "_last_zoom_feedback", None)
+            focus_feedback = getattr(active_lens, "_last_focus_feedback", None)
+            iris_feedback = getattr(active_lens, "_last_iris_feedback", None)
+            zoom_pos = int(zoom_feedback) if zoom_feedback is not None else int(getattr(active_lens, "zoom", 0))
+            focus_pos = int(focus_feedback) if focus_feedback is not None else int(getattr(active_lens, "focus", 0))
+            iris_pos = int(iris_feedback) if iris_feedback is not None else int(getattr(active_lens, "iris", 0))
+            lens_id = lens.get_lens_type()
+        else:
+            lens_name = ""
+            zoom_mode = "disabled"
+            zoom_velocity_cmd = int((_last_fast_fields or {}).get("zoom", 0))
+            zoom_speed_raw = 0
+            zoom_pos = 0
+            focus_pos = 0
+            iris_pos = 0
+            lens_id = "disabled"
 
         payload = {
             "slow": {
@@ -291,7 +359,7 @@ def _send_slow_telem():
                 "sources": dict(last_applied_sources),
             },
             "lens": {
-                "lens_id": lens.get_lens_type(),
+                "lens_id": lens_id,
                 "lens_full_name": lens_name or "",
                 "zoom_control_mode": zoom_mode,
                 "zoom_velocity_cmd": zoom_velocity_cmd,
@@ -354,13 +422,31 @@ def apply_slow_command(cmd):
     apply_id = cmd.get("apply_id")
     seq = cmd.get("seq")
     if apply_id == _last_slow_apply_id and seq == _last_slow_seq:
+        if SLOW_DEBUG:
+            print(
+                "[SLOW][DROP] duplicate seq={} apply_id={} key={}({}) value={}".format(
+                    seq,
+                    apply_id,
+                    cmd.get("key_id"),
+                    _slow_key_name(cmd.get("key_id")),
+                    cmd.get("value"),
+                )
+            )
         return
     _last_slow_apply_id = apply_id
     _last_slow_seq = seq
     key = cmd.get("key_id")
     value = cmd.get("value")
+    if SLOW_DEBUG:
+        print(
+            "[SLOW][APPLY] seq={} apply_id={} key={}({}) value={}".format(
+                seq, apply_id, key, _slow_key_name(key), value
+            )
+        )
     _send_slow_ack(_last_slow_sender_ip, seq, apply_id, key, 1)
     if key == SLOW_KEY_LENS_SELECT:
+        if lens is None:
+            return
         requested_type = _decode_lens_select(value)
         if requested_type != lens.get_lens_type():
             changed = lens.set_lens_type(requested_type)
@@ -371,6 +457,8 @@ def apply_slow_command(cmd):
         return
 
     if key == SLOW_KEY_SOURCE_ZOOM:
+        if lens is None:
+            return
         src = _decode_source(value)
         if src != last_applied_sources.get("zoom"):
             if lens.set_axis_source("zoom", src):
@@ -379,6 +467,8 @@ def apply_slow_command(cmd):
         return
 
     if key == SLOW_KEY_SOURCE_FOCUS:
+        if lens is None:
+            return
         src = _decode_source(value)
         if src != last_applied_sources.get("focus"):
             if lens.set_axis_source("focus", src):
@@ -387,6 +477,8 @@ def apply_slow_command(cmd):
         return
 
     if key == SLOW_KEY_SOURCE_IRIS:
+        if lens is None:
+            return
         src = _decode_source(value)
         if src != last_applied_sources.get("iris"):
             if lens.set_axis_source("iris", src):
@@ -395,23 +487,31 @@ def apply_slow_command(cmd):
         return
 
     if key == SLOW_KEY_FILTER_ENABLE_FOCUS:
+        if lens is None:
+            return
         enabled = int(value) != 0
         if lens.set_input_filter_enabled("focus", enabled):
             print("Slow apply focus_filter_enabled ->", enabled)
         return
 
     if key == SLOW_KEY_FILTER_ENABLE_IRIS:
+        if lens is None:
+            return
         enabled = int(value) != 0
         if lens.set_input_filter_enabled("iris", enabled):
             print("Slow apply iris_filter_enabled ->", enabled)
         return
 
     if key == SLOW_KEY_FILTER_NUM:
+        if lens is None:
+            return
         if lens.set_input_filter_num(int(value)):
             print("Slow apply input_filter_num ->", int(value))
         return
 
     if key == SLOW_KEY_FILTER_DEN:
+        if lens is None:
+            return
         if lens.set_input_filter_den(int(value)):
             print("Slow apply input_filter_den ->", int(value))
         return
@@ -456,19 +556,22 @@ while True:
 
     if not data:
         # Keep lens ownership/keepalive alive even without incoming UDP packets.
-        lens.periodic()
+        if lens is not None:
+            lens.periodic()
         time.sleep(0.001)
         continue
 
     if ENABLE_DUAL_CHANNEL:
         fields = decode_fast_packet_v2(data)
         if not fields:
-            lens.periodic()
+            if lens is not None:
+                lens.periodic()
             continue
     else:
         fields = BGC.decode_udp_packet(data)
     if not fields:
-        lens.periodic()
+        if lens is not None:
+            lens.periodic()
         continue
 
     _fast_recv_count += 1
@@ -520,7 +623,7 @@ while True:
 
     # Runtime lens commands are not gated by startup BIT.
     lens_control = fields.get("lens_control")
-    if lens_control:
+    if lens is not None and lens_control:
         requested_type = lens_control.get("lens_type")
         if requested_type and requested_type != lens.get_lens_type():
             changed = lens.set_lens_type(requested_type)
@@ -538,7 +641,8 @@ while True:
                     last_applied_sources[axis] = req_src
                     print("Applied source from packet:", axis, "->", req_src)
 
-    lens.move_zoom(fields["zoom"])
-    lens.set_focus_input(fields["focus"])
-    lens.set_iris_input(fields["iris"])
-    lens.periodic()
+    if lens is not None:
+        lens.move_zoom(fields["zoom"])
+        lens.set_focus_input(fields["focus"])
+        lens.set_iris_input(fields["iris"])
+        lens.periodic()
