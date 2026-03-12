@@ -88,12 +88,32 @@ Rotation:
 - `HYDRAVISION_ROTATION_OUTPUT` and `HYDRAVISION_ROTATION_TRANSFORM` control display rotation.
 - Installer auto-migrates historical typo key `HYDRAVISION_ROTATION_TRANSFOR` to `HYDRAVISION_ROTATION_TRANSFORM`.
 - Touch rotation is now applied automatically during install using the same transform value (`HYDRAVISION_ROTATION_TRANSFORM`).
+- Touch udev matching uses `ID_INPUT_TOUCHSCREEN=1` (capability-based), not panel-name matching. This avoids misses on devices that do not expose `TouchScreen` in `ATTRS{name}`.
 - Manual helper remains available for override/testing:
   - `sudo hydravision-touch-rotate 90`
   - `sudo hydravision-touch-rotate 270`
   - `sudo hydravision-touch-rotate 180`
   - `sudo hydravision-touch-rotate 0`
   - `sudo hydravision-touch-rotate off`
+
+If touch appears mirrored or unrotated while display rotation is correct, verify that the active rule is capability-based and includes your expected matrix:
+
+```bash
+cat /etc/udev/rules.d/99-hydravision-touch-rotation.rules
+for d in /dev/input/event*; do
+  echo "=== $d ==="
+  udevadm info --query=property --name="$d" | sed -n '/^NAME=/p;/^ID_INPUT_TOUCHSCREEN=/p;/^LIBINPUT_CALIBRATION_MATRIX=/p'
+done
+```
+
+If needed, reapply touch transform and restart kiosk:
+
+```bash
+sudo hydravision-touch-rotate 180   # example
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+sudo systemctl restart kiosk.service
+```
 
 ## Install and enable
 

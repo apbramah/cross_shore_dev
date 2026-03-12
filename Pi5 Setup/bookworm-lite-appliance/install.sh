@@ -391,7 +391,7 @@ esac
 
 cat >"$RULE_FILE" <<RULE
 # HydraVision touchscreen rotation rule (manual helper)
-SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="*TouchScreen*", ENV{LIBINPUT_CALIBRATION_MATRIX}="${matrix}"
+SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_TOUCHSCREEN}=="1", ENV{LIBINPUT_CALIBRATION_MATRIX}="${matrix}"
 RULE
 
 chmod 644 "$RULE_FILE"
