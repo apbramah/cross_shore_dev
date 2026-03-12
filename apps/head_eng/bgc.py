@@ -154,6 +154,18 @@ class BGC:
         else:
             self.motors_off(0)
 
+    def set_wash_wipe_mode(self, mode_raw: int):
+        """
+        Requested mode:
+          0 => parked
+          1 => wiping
+
+        NOTE: Servo PWM1 command mapping is platform-specific and must be
+        finalized against the active BGC profile/adj-var IDs.
+        """
+        mode_i = 1 if int(mode_raw) != 0 else 0
+        print("BGC wash_wipe mode requested:", mode_i, "(TODO: map to Servo PWM1 command path)")
+
 
 def _decode_lens_control(ctrl0: int, ctrl1: int):
     if ctrl1 != 0xA5:

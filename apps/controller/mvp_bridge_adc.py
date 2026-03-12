@@ -119,6 +119,10 @@ def _load_zoom_feedback_runtime_mtime_gated(
             return last_mtime, last_data
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
+        if isinstance(data, dict) and last_data is None:
+            zf = data.get("zoom_feedback", 1)
+            zn = data.get("zoom_norm", 0)
+            print(f"[ADC] Zoom feedback runtime loaded: {path} zoom_feedback={zf} zoom_norm={zn}", flush=True)
         return mtime, data if isinstance(data, dict) else last_data
     except Exception:
         return last_mtime, last_data
@@ -413,6 +417,7 @@ def run_bridge(
     zoom_feedback_path = _zoom_feedback_runtime_path(runtime_dir)
     zoom_feedback_mtime = 0.0
     zoom_feedback_data: dict[str, Any] | None = None
+    print(f"[ADC] Zoom feedback runtime path: {zoom_feedback_path}", flush=True)
 
     def shape_worker() -> None:
         nonlocal last_shape_time, zoom_feedback_mtime, zoom_feedback_data

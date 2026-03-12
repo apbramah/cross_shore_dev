@@ -188,6 +188,7 @@ SLOW_KEY_FILTER_ENABLE_IRIS = 8
 SLOW_KEY_FILTER_NUM = 9
 SLOW_KEY_FILTER_DEN = 10
 SLOW_KEY_GYRO_HEADING_CORRECTION = 11
+SLOW_KEY_WASH_WIPE = 12
 SLOW_KEY_NAMES = {
     SLOW_KEY_MOTORS_ON: "motors_on",
     SLOW_KEY_CONTROL_MODE: "control_mode",
@@ -200,6 +201,7 @@ SLOW_KEY_NAMES = {
     SLOW_KEY_FILTER_NUM: "filter_num",
     SLOW_KEY_FILTER_DEN: "filter_den",
     SLOW_KEY_GYRO_HEADING_CORRECTION: "gyro_heading_correction",
+    SLOW_KEY_WASH_WIPE: "wash_wipe",
 }
 
 sock_fast = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -540,6 +542,12 @@ def apply_slow_command(cmd):
         print("Slow recv gyro_heading_correction key/value:", key, v)
         bgc.set_gyro_heading_correction(v)
         print("Slow apply gyro_heading_correction ->", v, "(BGC CMD sent)")
+        return
+
+    if key == SLOW_KEY_WASH_WIPE:
+        v = 1 if int(value) != 0 else 0
+        bgc.set_wash_wipe_mode(v)
+        print("Slow apply wash_wipe ->", "wiping" if v else "parked")
         return
 
 # ---------- Main Loop ----------

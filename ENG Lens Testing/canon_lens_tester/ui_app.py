@@ -51,6 +51,28 @@ from .fuji_protocol import (
     hexdump as fuji_hexdump,
     parse_l10_frame,
 )
+from .sony_bit_runner import SonyBitCallbacks, SonyBitRunner
+from .sony_frame_parser import SonyViscaFrameParser
+from .sony_protocol import (
+    SONY_BAUD,
+    SONY_BITS,
+    SONY_PARITY,
+    SONY_STOP,
+    build_cam_b_gain_direct,
+    build_cam_b_gain_inquiry,
+    build_cam_iris_direct,
+    build_cam_iris_inquiry,
+    build_cam_nd_filter,
+    build_cam_r_gain_direct,
+    build_cam_r_gain_inquiry,
+    build_cam_saturation,
+    build_cam_saturation_inquiry,
+    build_cam_zoom_direct,
+    build_interface_clear,
+    decode_u8_from_inquiry_payload,
+    hexdump as sony_hexdump,
+    parse_visca_response,
+)
 from .gamepad import GamepadConfig, GamepadRunner, PYGAME_OK
 from .serial_worker import SerialConfig, SerialWorker
 from .utils import HEX_RE, extract_port_name, list_com_ports
@@ -102,6 +124,17 @@ class App(ctk.CTk):
         self.fuji_sw4_bits: Optional[int] = None
         self.fuji_sw4_desired_bits = SW4_HOST_ALL
         self._modem_ui_syncing = False
+        self.sony_worker = SerialWorker()
+        self.sony_parser = SonyViscaFrameParser()
+        self.sony_rx_q: "queue.Queue[dict]" = queue.Queue()
+        self.sony_iris_pos: Optional[int] = None
+        self.sony_saturation: Optional[int] = None
+        self.sony_red_gain: Optional[int] = None
+        self.sony_blue_gain: Optional[int] = None
+        self.sony_mode_var = ctk.StringVar(value="A: Bidirectional")
+        self.sony_last_ack_socket: Optional[int] = None
+        self.sony_last_completion_socket: Optional[int] = None
+        self.sony_last_error_code: Optional[int] = None
 
         self.rx_frame_q: "queue.Queue[bytes]" = queue.Queue()
 
@@ -157,9 +190,22 @@ class App(ctk.CTk):
                 on_failed=self._fuji_bit_failed,
             )
         )
+        self.sony_bit_runner = SonyBitRunner(
+            callbacks=SonyBitCallbacks(
+                log=self._sony_bit_log,
+                set_status=self._sony_ui_set_bit_status,
+                get_mode=self._sony_mode_key,
+                get_targets=self._sony_get_targets,
+                send_with_optional_wait=self._sony_send_with_optional_wait,
+                inquire_value=self._sony_inquire_value,
+                on_passed=self._sony_bit_passed,
+                on_failed=self._sony_bit_failed,
+            )
+        )
 
         self.after(30, self._poll_rx)
         self.after(30, self._poll_rx_fuji)
+        self.after(30, self._poll_rx_sony)
         self.after(200, self._poll_fuji_modem_status)
         self.after(200, self._poll_gamepad_state)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -172,6 +218,7 @@ class App(ctk.CTk):
         self.tabview.grid(row=0, column=0, sticky="nsew", padx=12, pady=12)
         self.tabview.add("Canon")
         self.tabview.add("Fuji")
+        self.tabview.add("Sony VISCA")
 
         canon_tab = self.tabview.tab("Canon")
         canon_tab.grid_columnconfigure(0, weight=0)
@@ -291,6 +338,7 @@ class App(ctk.CTk):
         ctk.CTkButton(btns, text="Clear Log", command=self._clear_log, fg_color="#555555").grid(row=0, column=0, padx=(0, 8))
 
         self._build_fuji_tab()
+        self._build_sony_tab()
 
     def _build_axis_panel(self, col: int, name: str, switch_scmd: int, motion_cmd: int):
         frame = ctk.CTkFrame(self.axis_frame)
@@ -555,6 +603,478 @@ class App(ctk.CTk):
         setattr(self, f"_fuji_{name.lower()}_follow_label", follow_lbl)
         setattr(self, f"_fuji_{name.lower()}_src_var", src_var)
 
+    def _build_sony_tab(self):
+        sony_tab = self.tabview.tab("Sony VISCA")
+        sony_tab.grid_columnconfigure(0, weight=0)
+        sony_tab.grid_columnconfigure(1, weight=1)
+        sony_tab.grid_rowconfigure(0, weight=1)
+
+        left = ctk.CTkFrame(sony_tab, corner_radius=12)
+        left.grid(row=0, column=0, sticky="nsw", padx=12, pady=12)
+        right = ctk.CTkFrame(sony_tab, corner_radius=12)
+        right.grid(row=0, column=1, sticky="nsew", padx=(0, 12), pady=12)
+        right.grid_rowconfigure(4, weight=1)
+        right.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(left, text="Sony VISCA Connection", font=ctk.CTkFont(size=18, weight="bold")).grid(
+            row=0, column=0, sticky="w", padx=12, pady=(12, 6)
+        )
+        self.sony_port_combo = ctk.CTkComboBox(left, values=["(refresh)"], width=340)
+        self.sony_port_combo.grid(row=1, column=0, padx=12, pady=6, sticky="w")
+
+        sony_btn_row = ctk.CTkFrame(left, fg_color="transparent")
+        sony_btn_row.grid(row=2, column=0, padx=12, pady=6, sticky="w")
+        ctk.CTkButton(sony_btn_row, text="Refresh", command=self._refresh_sony_ports, width=160).grid(
+            row=0, column=0, padx=(0, 8)
+        )
+        self.sony_connect_btn = ctk.CTkButton(sony_btn_row, text="Connect", command=self._sony_connect, width=160)
+        self.sony_connect_btn.grid(row=0, column=1)
+
+        self.sony_status_lbl = ctk.CTkLabel(left, text="Status: Disconnected")
+        self.sony_status_lbl.grid(row=3, column=0, sticky="w", padx=12, pady=(2, 6))
+
+        sony_toggles = ctk.CTkFrame(left)
+        sony_toggles.grid(row=4, column=0, padx=12, pady=6, sticky="ew")
+        self.sony_dtr_var = ctk.BooleanVar(value=True)
+        self.sony_dsr_var = ctk.BooleanVar(value=True)
+        self.sony_rts_var = ctk.BooleanVar(value=False)
+        ctk.CTkCheckBox(sony_toggles, text="DTR", variable=self.sony_dtr_var, command=self._on_sony_dtr_toggle).grid(
+            row=0, column=0, padx=10, pady=(10, 2), sticky="w"
+        )
+        ctk.CTkCheckBox(
+            sony_toggles, text="DSR (alias DTR)", variable=self.sony_dsr_var, command=self._on_sony_dsr_toggle
+        ).grid(row=1, column=0, padx=10, pady=(2, 2), sticky="w")
+        ctk.CTkCheckBox(sony_toggles, text="RTS", variable=self.sony_rts_var, command=self._sony_apply_modem_lines).grid(
+            row=2, column=0, padx=10, pady=(2, 10), sticky="w"
+        )
+
+        ctk.CTkLabel(left, text="Comms Test Mode", font=ctk.CTkFont(size=16, weight="bold")).grid(
+            row=5, column=0, sticky="w", padx=12, pady=(12, 4)
+        )
+        ctk.CTkOptionMenu(left, values=["A: Bidirectional", "B: No-wait stream"], variable=self.sony_mode_var).grid(
+            row=6, column=0, padx=12, pady=(0, 8), sticky="ew"
+        )
+        ctk.CTkButton(left, text="Run Sony Comms Test", command=self._sony_start_bit).grid(
+            row=7, column=0, padx=12, pady=(0, 8), sticky="ew"
+        )
+
+        ctk.CTkLabel(left, text="Manual Send (Hex)", font=ctk.CTkFont(size=16, weight="bold")).grid(
+            row=8, column=0, sticky="w", padx=12, pady=(8, 6)
+        )
+        self.sony_hex_entry = ctk.CTkEntry(left, placeholder_text="e.g. 81 01 04 4B 00 00 08 00 FF")
+        self.sony_hex_entry.grid(row=9, column=0, padx=12, pady=6, sticky="ew")
+        ctk.CTkButton(left, text="Send Hex", command=self._sony_send_hex_entry).grid(row=10, column=0, padx=12, pady=6, sticky="ew")
+        ctk.CTkButton(left, text="VISCA IF Clear", command=self._sony_send_interface_clear).grid(
+            row=11, column=0, padx=12, pady=(0, 6), sticky="ew"
+        )
+        ctk.CTkButton(left, text="Inquire All", command=self._sony_inquire_all).grid(
+            row=12, column=0, padx=12, pady=(0, 6), sticky="ew"
+        )
+        ctk.CTkLabel(left, text="ND Filter", font=ctk.CTkFont(size=16, weight="bold")).grid(
+            row=13, column=0, sticky="w", padx=12, pady=(8, 4)
+        )
+        self.sony_nd_var = ctk.StringVar(value="OFF")
+        ctk.CTkOptionMenu(left, values=["OFF", "ND1", "ND2", "ND3"], variable=self.sony_nd_var).grid(
+            row=14, column=0, padx=12, pady=(0, 6), sticky="ew"
+        )
+        ctk.CTkButton(left, text="Send ND Filter", command=self._sony_send_nd_filter).grid(
+            row=15, column=0, padx=12, pady=(0, 6), sticky="ew"
+        )
+
+        self.sony_debug_lbl = ctk.CTkLabel(
+            left, text="VISCA: ack=-- completion=-- error=--", font=ctk.CTkFont(size=12)
+        )
+        self.sony_debug_lbl.grid(row=16, column=0, sticky="w", padx=12, pady=(4, 10))
+
+        self.sony_bit_status_frame = ctk.CTkFrame(right, corner_radius=12, fg_color="#3a3a3a")
+        self.sony_bit_status_frame.grid(row=0, column=0, sticky="ew", padx=12, pady=(12, 8))
+        self.sony_bit_status_frame.grid_columnconfigure(0, weight=1)
+        self.sony_bit_status_title = ctk.CTkLabel(
+            self.sony_bit_status_frame,
+            text="Connection & Control: NOT RUN (Sony)",
+            font=ctk.CTkFont(size=18, weight="bold"),
+        )
+        self.sony_bit_status_title.grid(row=0, column=0, sticky="w", padx=12, pady=(10, 2))
+        self.sony_bit_status_detail = ctk.CTkLabel(
+            self.sony_bit_status_frame,
+            text="Connect and run Sony comms test (Mode A or Mode B).",
+            font=ctk.CTkFont(size=13),
+        )
+        self.sony_bit_status_detail.grid(row=1, column=0, sticky="w", padx=12, pady=(0, 10))
+
+        ctk.CTkLabel(right, text="Sony VISCA Controls", font=ctk.CTkFont(size=18, weight="bold")).grid(
+            row=1, column=0, sticky="w", padx=12, pady=(6, 6)
+        )
+        self.sony_axis_frame = ctk.CTkFrame(right)
+        self.sony_axis_frame.grid(row=2, column=0, sticky="ew", padx=12, pady=(0, 12))
+        self.sony_axis_frame.grid_columnconfigure(0, weight=1)
+        self.sony_axis_frame.grid_columnconfigure(1, weight=1)
+        self.sony_axis_frame.grid_columnconfigure(2, weight=1)
+        self.sony_axis_frame.grid_columnconfigure(3, weight=1)
+        self.sony_axis_frame.grid_columnconfigure(4, weight=1)
+        self._build_sony_control_panel(col=0, name="Iris", default_value=0x08)
+        self._build_sony_control_panel(col=1, name="Saturation", default_value=0x08)
+        self._build_sony_control_panel(col=2, name="Red", default_value=0x80)
+        self._build_sony_control_panel(col=3, name="Blue", default_value=0x80)
+        self._build_sony_control_panel(col=4, name="Zoom", default_value=0x1000)
+
+        ctk.CTkLabel(right, text="Sony TX/RX Log", font=ctk.CTkFont(size=18, weight="bold")).grid(
+            row=3, column=0, sticky="w", padx=12, pady=(0, 6)
+        )
+        self.sony_log_box = ctk.CTkTextbox(right, wrap="none", height=320)
+        self.sony_log_box.grid(row=4, column=0, sticky="nsew", padx=12, pady=(0, 12))
+        self.sony_log_box.configure(state="disabled")
+        sony_btns = ctk.CTkFrame(right, fg_color="transparent")
+        sony_btns.grid(row=5, column=0, sticky="w", padx=12, pady=(0, 12))
+        ctk.CTkButton(sony_btns, text="Clear Log", command=self._sony_clear_log, fg_color="#555555").grid(
+            row=0, column=0, padx=(0, 8)
+        )
+        self._refresh_sony_ports()
+
+    def _build_sony_control_panel(self, col: int, name: str, default_value: int):
+        frame = ctk.CTkFrame(self.sony_axis_frame)
+        frame.grid(row=0, column=col, padx=8, pady=10, sticky="ew")
+        frame.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(frame, text=name, font=ctk.CTkFont(size=16, weight="bold")).grid(
+            row=0, column=0, sticky="w", padx=10, pady=(10, 6)
+        )
+
+        if name == "Iris":
+            min_value = 0x01
+            max_value = 0x11
+        elif name == "Saturation":
+            min_value = 0
+            max_value = 14
+        elif name == "Zoom":
+            min_value = 0
+            max_value = 0x4000
+        else:
+            min_value = 0
+            max_value = 255
+        slider = ctk.CTkSlider(frame, from_=min_value, to=max_value, number_of_steps=max_value - min_value)
+        slider.set(default_value)
+        slider.grid(row=1, column=0, padx=10, pady=(6, 2), sticky="ew")
+        val_lbl = ctk.CTkLabel(frame, text=f"Target: {default_value}")
+        val_lbl.grid(row=2, column=0, padx=10, pady=(0, 6), sticky="w")
+        follow_lbl = ctk.CTkLabel(frame, text="Sent: (n/a)")
+        follow_lbl.grid(row=3, column=0, padx=10, pady=(0, 10), sticky="w")
+
+        def on_slide(v):
+            val_lbl.configure(text=f"Target: {int(float(v))}")
+
+        slider.configure(command=on_slide)
+
+        def send_now():
+            v = int(slider.get())
+            if name == "Iris":
+                pkt = build_cam_iris_direct(v)
+            elif name == "Saturation":
+                pkt = build_cam_saturation(v)
+            elif name == "Red":
+                pkt = build_cam_r_gain_direct(v)
+            elif name == "Zoom":
+                pkt = build_cam_zoom_direct(v)
+            else:
+                pkt = build_cam_b_gain_direct(v)
+            mode_a = self._sony_mode_key().upper().startswith("A")
+            if self._sony_send_with_optional_wait(pkt, f"{name.upper()}({v})", 1.5, wait_for_response=mode_a):
+                follow_lbl.configure(text=f"Sent: {v}")
+
+        ctk.CTkButton(frame, text="Send", command=send_now).grid(row=4, column=0, padx=10, pady=(0, 10), sticky="ew")
+
+        setattr(self, f"_sony_{name.lower()}_slider", slider)
+        setattr(self, f"_sony_{name.lower()}_sent_label", follow_lbl)
+
+    # ---------- Sony VISCA ----------
+    def _sony_mode_key(self) -> str:
+        m = str(self.sony_mode_var.get()).strip()
+        if m.startswith("B"):
+            return "B"
+        return "A"
+
+    def _sony_get_targets(self) -> dict[str, int]:
+        return {
+            "iris": int(getattr(self, "_sony_iris_slider").get()) if hasattr(self, "_sony_iris_slider") else 0x08,
+            "saturation": int(getattr(self, "_sony_saturation_slider").get()) if hasattr(self, "_sony_saturation_slider") else 0x08,
+            "red": int(getattr(self, "_sony_red_slider").get()) if hasattr(self, "_sony_red_slider") else 0x80,
+            "blue": int(getattr(self, "_sony_blue_slider").get()) if hasattr(self, "_sony_blue_slider") else 0x80,
+        }
+
+    def _refresh_sony_ports(self):
+        ports = list_com_ports()
+        if not ports:
+            ports = ["(no COM ports found)"]
+        self.sony_port_combo.configure(values=ports)
+        self.sony_port_combo.set(ports[0])
+
+    def _sony_connect(self):
+        if self.sony_worker.is_open():
+            self._sony_disconnect()
+            return
+        selected = self.sony_port_combo.get().strip()
+        if selected.startswith("(no COM"):
+            self._sony_log("ERR", "No COM port available.")
+            return
+        port = extract_port_name(selected)
+        cfg = SerialConfig(
+            port=port,
+            baud=SONY_BAUD,
+            dtr=self.sony_dtr_var.get(),
+            rts=self.sony_rts_var.get(),
+            bytesize=SONY_BITS,
+            parity=SONY_PARITY,
+            stopbits=SONY_STOP,
+        )
+        try:
+            self.sony_worker.open(cfg)
+            self.sony_status_lbl.configure(text=f"Status: Connected to {port} @ {SONY_BAUD} 8N1")
+            self.sony_connect_btn.configure(text="Disconnect")
+            self._sony_log("INFO", f"Opened {port} @ {SONY_BAUD} 8N1")
+            self._sony_apply_modem_lines()
+            self._set_sony_bit_status("idle", "Connected. Ready for Mode A (bidirectional) or Mode B (no-wait stream).")
+        except Exception as e:
+            self._sony_log("ERR", f"Open failed: {e}")
+            self.sony_status_lbl.configure(text="Status: Disconnected")
+            self._set_sony_bit_status("fail", f"Open failed: {e}")
+
+    def _sony_disconnect(self):
+        self._sony_stop_bit()
+        try:
+            self.sony_worker.close()
+        except Exception:
+            pass
+        self.sony_status_lbl.configure(text="Status: Disconnected")
+        self.sony_connect_btn.configure(text="Connect")
+        self._set_sony_bit_status("idle", "Connect and run Sony comms test (Mode A or Mode B).")
+        self._sony_log("INFO", "Port closed.")
+
+    def _sony_apply_modem_lines(self):
+        if not self.sony_worker.is_open():
+            return
+        try:
+            self.sony_worker.set_dtr(self.sony_dtr_var.get())
+            self.sony_worker.set_rts(self.sony_rts_var.get())
+            self._sony_log(
+                "INFO",
+                f"Lines: DTR/DSR_ALIAS={'ON' if self.sony_dtr_var.get() else 'OFF'}, RTS={'ON' if self.sony_rts_var.get() else 'OFF'}",
+            )
+        except Exception as e:
+            self._sony_log("ERR", f"Set lines failed: {e}")
+
+    def _on_sony_dtr_toggle(self):
+        if self._modem_ui_syncing:
+            return
+        self._modem_ui_syncing = True
+        self.sony_dsr_var.set(self.sony_dtr_var.get())
+        self._modem_ui_syncing = False
+        self._sony_apply_modem_lines()
+
+    def _on_sony_dsr_toggle(self):
+        if self._modem_ui_syncing:
+            return
+        self._modem_ui_syncing = True
+        self.sony_dtr_var.set(self.sony_dsr_var.get())
+        self._modem_ui_syncing = False
+        self._sony_apply_modem_lines()
+
+    def _sony_send_hex_entry(self):
+        s = self.sony_hex_entry.get().strip()
+        if not s:
+            return
+        if not HEX_RE.match(s):
+            self._sony_log("ERR", "Hex input contains invalid characters.")
+            return
+        parts = s.split()
+        try:
+            b = bytes(int(p, 16) for p in parts)
+        except ValueError:
+            self._sony_log("ERR", "Could not parse hex bytes.")
+            return
+        mode_a = self._sony_mode_key().upper().startswith("A")
+        self._sony_send_with_optional_wait(b, "MANUAL", 1.5, wait_for_response=mode_a)
+
+    def _sony_send_interface_clear(self):
+        self._sony_send_with_optional_wait(build_interface_clear(), "IF_CLEAR", 1.2, wait_for_response=False)
+
+    def _sony_send_nd_filter(self):
+        sel = str(self.sony_nd_var.get()).strip().upper()
+        mode = {"OFF": 0, "ND1": 1, "ND2": 2, "ND3": 3}.get(sel, 0)
+        mode_a = self._sony_mode_key().upper().startswith("A")
+        self._sony_send_with_optional_wait(
+            build_cam_nd_filter(mode),
+            f"ND_FILTER({sel})",
+            1.5,
+            wait_for_response=mode_a,
+        )
+
+    def _sony_wait_for_completion_frame(self, timeout_s: float) -> Optional[dict]:
+        end = time.time() + timeout_s
+        while time.time() < end:
+            try:
+                d = self.sony_rx_q.get(timeout=0.05)
+            except queue.Empty:
+                continue
+            kind = str(d.get("kind"))
+            if kind == "error":
+                code = d.get("code")
+                self._sony_log("ERR", f"VISCA error response code=0x{int(code) & 0xFF:02X}")
+                return None
+            if kind == "completion":
+                return d
+        return None
+
+    def _sony_inquire_value(self, key: str, timeout_s: float = 1.5) -> Optional[int]:
+        if not self.sony_worker.is_open():
+            self._sony_log("ERR", "Not connected.")
+            return None
+        if key == "iris":
+            pkt = build_cam_iris_inquiry()
+            label = "INQ_IRIS"
+        elif key == "saturation":
+            pkt = build_cam_saturation_inquiry()
+            label = "INQ_SATURATION"
+        elif key == "red":
+            pkt = build_cam_r_gain_inquiry()
+            label = "INQ_RED"
+        elif key == "blue":
+            pkt = build_cam_b_gain_inquiry()
+            label = "INQ_BLUE"
+        else:
+            self._sony_log("ERR", f"Unknown inquiry key: {key}")
+            return None
+
+        try:
+            self._sony_drain_response_q()
+            self.sony_worker.send(pkt)
+            self._sony_log("TX", f"{label}: {sony_hexdump(pkt)}")
+        except Exception as e:
+            self._sony_log("ERR", f"{label} send failed: {e}")
+            return None
+
+        d = self._sony_wait_for_completion_frame(timeout_s)
+        if not d:
+            self._sony_log("ERR", f"{label}: no completion")
+            return None
+        payload = bytes(d.get("payload", b""))
+        v = decode_u8_from_inquiry_payload(payload)
+        if v is None:
+            self._sony_log("ERR", f"{label}: bad payload {sony_hexdump(payload)}")
+            return None
+        self._sony_log("INFO", f"{label}={v}")
+        if key == "iris":
+            self.sony_iris_pos = v
+        elif key == "saturation":
+            self.sony_saturation = v
+        elif key == "red":
+            self.sony_red_gain = v
+        elif key == "blue":
+            self.sony_blue_gain = v
+        return v
+
+    def _sony_inquire_all(self):
+        for key in ("iris", "saturation", "red", "blue"):
+            self._sony_inquire_value(key, timeout_s=1.5)
+
+    def _sony_drain_response_q(self):
+        try:
+            while True:
+                self.sony_rx_q.get_nowait()
+        except queue.Empty:
+            return
+
+    def _sony_send_with_optional_wait(self, frame: bytes, name: str, timeout_s: float, wait_for_response: bool) -> bool:
+        if not self.sony_worker.is_open():
+            self._sony_log("ERR", "Not connected.")
+            return False
+        try:
+            if wait_for_response:
+                self._sony_drain_response_q()
+            self.sony_worker.send(frame)
+            self._sony_log("TX", f"{name}: {sony_hexdump(frame)}")
+        except Exception as e:
+            self._sony_log("ERR", f"Send failed: {e}")
+            return False
+        if not wait_for_response:
+            return True
+        return self._sony_wait_for_ack_completion(timeout_s=timeout_s)
+
+    def _sony_wait_for_ack_completion(self, timeout_s: float) -> bool:
+        end = time.time() + timeout_s
+        while time.time() < end:
+            try:
+                d = self.sony_rx_q.get(timeout=0.05)
+            except queue.Empty:
+                continue
+            kind = str(d.get("kind"))
+            if kind == "error":
+                code = d.get("code")
+                self._sony_log("ERR", f"VISCA error response code=0x{int(code) & 0xFF:02X}")
+                return False
+            if kind == "completion":
+                return True
+        return False
+
+    def _set_sony_bit_status(self, state: str, detail: str):
+        if state == "idle":
+            color = "#3a3a3a"
+            title = "Connection & Control: NOT RUN (Sony)"
+        elif state == "running":
+            color = "#5c4b00"
+            title = "Connection & Control: RUNNING TEST... (Sony)"
+        elif state == "pass":
+            color = "#0f5a20"
+            title = "Connection & Control: COMPLETE (Sony)"
+        else:
+            color = "#6a1b1b"
+            title = "Connection & Control: FAILED (Sony)"
+        self.sony_bit_status_frame.configure(fg_color=color)
+        self.sony_bit_status_title.configure(text=title)
+        self.sony_bit_status_detail.configure(text=detail)
+
+    def _sony_ui_set_bit_status(self, state: str, detail: str):
+        self.after(0, lambda: self._set_sony_bit_status(state, detail))
+
+    def _sony_start_bit(self):
+        if self.sony_bit_runner.is_running():
+            return
+        if not self.sony_worker.is_open():
+            self._sony_log("ERR", "Sony test: Not connected.")
+            return
+        self.sony_bit_runner.start()
+
+    def _sony_stop_bit(self):
+        self.sony_bit_runner.stop()
+
+    def _sony_bit_log(self, tag: str, msg: str):
+        self.after(0, lambda: self._sony_log(tag, msg))
+
+    def _sony_bit_passed(self):
+        mode = "Mode A" if self._sony_mode_key() == "A" else "Mode B"
+        self._sony_ui_set_bit_status("pass", f"Sony VISCA comms/control complete ({mode}).")
+
+    def _sony_bit_failed(self, reason: str):
+        self._sony_ui_set_bit_status("fail", reason)
+
+    def _sony_log(self, tag: str, msg: str):
+        ts = time.strftime("%H:%M:%S")
+        line = f"[{ts}] {tag}: {msg}\n"
+        self.sony_log_box.configure(state="normal")
+        self.sony_log_box.insert("end", line)
+        self.sony_log_box.see("end")
+        self.sony_log_box.configure(state="disabled")
+
+    def _sony_clear_log(self):
+        self.sony_log_box.configure(state="normal")
+        self.sony_log_box.delete("1.0", "end")
+        self.sony_log_box.configure(state="disabled")
+
+    def _sony_update_debug_status(self):
+        ack = "--" if self.sony_last_ack_socket is None else str(self.sony_last_ack_socket)
+        cpl = "--" if self.sony_last_completion_socket is None else str(self.sony_last_completion_socket)
+        err = "--" if self.sony_last_error_code is None else f"0x{int(self.sony_last_error_code) & 0xFF:02X}"
+        self.sony_debug_lbl.configure(text=f"VISCA: ack={ack} completion={cpl} error={err}")
+
     # ---------- Status panel helpers ----------
     def _set_bit_status(self, state: str, detail: str):
         if state == "idle":
@@ -796,12 +1316,16 @@ class App(ctk.CTk):
         tab = self._gamepad_active_tab_name()
         if tab == "Fuji":
             return self.fuji_worker.is_open()
+        if tab == "Sony VISCA":
+            return False
         return self.worker.is_open() and self.bit_passed
 
     def _gamepad_get_follow_active_tab(self):
         tab = self._gamepad_active_tab_name()
         if tab == "Fuji":
             return (self.fuji_zoom_pos, self.fuji_focus_pos, self.fuji_iris_pos)
+        if tab == "Sony VISCA":
+            return (None, None, None)
         return (self.zoom_follow, self.focus_follow, self.iris_follow)
 
     def _ui_set_gamepad_targets_active_tab(self, z: int, f: int, i: int):
@@ -816,6 +1340,8 @@ class App(ctk.CTk):
                 getattr(self, "_fuji_focus_slider").set(int(f))
             if hasattr(self, "_fuji_iris_slider"):
                 getattr(self, "_fuji_iris_slider").set(int(i))
+            return
+        if tab == "Sony VISCA":
             return
         self._set_targets(int(z), int(f), int(i))
 
@@ -834,6 +1360,8 @@ class App(ctk.CTk):
                 pkt = build_iris_control(v)
             self.fuji_worker.send(pkt)
             self._fuji_bit_log("TX", f"GAMEPAD_{axis.upper()}({v}): {fuji_hexdump(pkt)}")
+            return
+        if tab == "Sony VISCA":
             return
 
         if not self.worker.is_open() or not self.bit_passed:
@@ -1356,6 +1884,17 @@ class App(ctk.CTk):
             pass
         self.after(30, self._poll_rx_fuji)
 
+    def _poll_rx_sony(self):
+        try:
+            while True:
+                chunk = self.sony_worker.rx_queue.get_nowait()
+                frames = self.sony_parser.feed(chunk)
+                for f in frames:
+                    self._handle_sony_frame(f)
+        except queue.Empty:
+            pass
+        self.after(30, self._poll_rx_sony)
+
     def _handle_fuji_frame(self, frame: bytes):
         self._fuji_log("RX", fuji_hexdump(frame))
         parsed = parse_l10_frame(frame)
@@ -1411,6 +1950,23 @@ class App(ctk.CTk):
                 if hasattr(self, "fuji_sw4_lbl"):
                     self.fuji_sw4_lbl.configure(text=sw4_txt)
                 self._fuji_log("INFO", sw4_txt)
+
+    def _handle_sony_frame(self, frame: bytes):
+        self._sony_log("RX", sony_hexdump(frame))
+        parsed = parse_visca_response(frame)
+        if not parsed:
+            return
+        self.sony_rx_q.put(parsed)
+        kind = str(parsed.get("kind", "other"))
+        if kind == "ack":
+            self.sony_last_ack_socket = parsed.get("socket")
+            self._sony_update_debug_status()
+        elif kind == "completion":
+            self.sony_last_completion_socket = parsed.get("socket")
+            self._sony_update_debug_status()
+        elif kind == "error":
+            self.sony_last_error_code = parsed.get("code")
+            self._sony_update_debug_status()
 
     def _handle_frame(self, frame: bytes):
         self.rx_frame_q.put(frame)
@@ -1468,12 +2024,17 @@ class App(ctk.CTk):
         self._fuji_stop_name_poll()
         self._fuji_stop_host_keepalive()
         self._fuji_stop_bit()
+        self._sony_stop_bit()
         try:
             self.worker.close()
         except Exception:
             pass
         try:
             self.fuji_worker.close()
+        except Exception:
+            pass
+        try:
+            self.sony_worker.close()
         except Exception:
             pass
         self.destroy()

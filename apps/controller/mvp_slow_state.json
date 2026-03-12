@@ -12,7 +12,8 @@
     "filter_enable_iris": 0,
     "filter_num": 1,
     "filter_den": 1,
-    "gyro_heading_correction": 5376
+    "gyro_heading_correction": 5376,
+    "wash_wipe": "parked"
   },
   "shaping": {
     "expo": 0.0,

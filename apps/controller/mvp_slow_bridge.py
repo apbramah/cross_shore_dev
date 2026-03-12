@@ -80,6 +80,9 @@ def _normalize_slow_value(key: str, value: Any) -> Any:
         if s not in ("pc", "camera", "off"):
             return "pc"
         return s
+    if key == "wash_wipe":
+        s = str(value).strip().lower()
+        return "wiping" if s in ("1", "wipe", "wiping", "on", "true") else "parked"
     if key in ("filter_enable_focus", "filter_enable_iris"):
         return 1 if bool(value) else 0
     try:
@@ -101,6 +104,7 @@ def _default_slow_state() -> dict[str, Any]:
         "filter_num": 1,
         "filter_den": 1,
         "gyro_heading_correction": 0x00001500,
+        "wash_wipe": "parked",
     }
 
 
