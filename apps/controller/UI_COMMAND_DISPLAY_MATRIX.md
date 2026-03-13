@@ -40,6 +40,12 @@ Purpose:
 | `filter_den` | `FILTER DEN` |
 | `gyro_heading_correction` | `PAN TRIM` |
 | `wash_wipe` | `WASH/WIPE` |
+| `pan_accel` | `PAN ACCEL` |
+| `tilt_accel` | `TILT ACCEL` |
+| `roll_accel` | `ROLL ACCEL` |
+| `pan_gain` | `PAN GAIN` |
+| `tilt_gain` | `TILT GAIN` |
+| `roll_gain` | `ROLL GAIN` |
 
 ## Review workflow
 

@@ -30,6 +30,12 @@ SLOW_KEY_FILTER_NUM = 9
 SLOW_KEY_FILTER_DEN = 10
 SLOW_KEY_GYRO_HEADING_CORRECTION = 11
 SLOW_KEY_WASH_WIPE = 12
+SLOW_KEY_PAN_ACCEL = 13
+SLOW_KEY_TILT_ACCEL = 14
+SLOW_KEY_ROLL_ACCEL = 15
+SLOW_KEY_PAN_GAIN = 16
+SLOW_KEY_TILT_GAIN = 17
+SLOW_KEY_ROLL_GAIN = 18
 
 SLOW_KEY_IDS = {
     "motors_on": SLOW_KEY_MOTORS_ON,
@@ -44,6 +50,12 @@ SLOW_KEY_IDS = {
     "filter_den": SLOW_KEY_FILTER_DEN,
     "gyro_heading_correction": SLOW_KEY_GYRO_HEADING_CORRECTION,
     "wash_wipe": SLOW_KEY_WASH_WIPE,
+    "pan_accel": SLOW_KEY_PAN_ACCEL,
+    "tilt_accel": SLOW_KEY_TILT_ACCEL,
+    "roll_accel": SLOW_KEY_ROLL_ACCEL,
+    "pan_gain": SLOW_KEY_PAN_GAIN,
+    "tilt_gain": SLOW_KEY_TILT_GAIN,
+    "roll_gain": SLOW_KEY_ROLL_GAIN,
 }
 
 # Resolve heads.json relative to this file so it works from any CWD
@@ -448,6 +460,16 @@ def encode_slow_value(key: str, value: Any) -> Optional[int]:
     if key == "wash_wipe":
         s = str(value).lower().strip()
         return 1 if s in ("1", "wipe", "wiping", "on", "true") else 0
+    if key in ("pan_accel", "tilt_accel", "roll_accel", "pan_gain", "tilt_gain", "roll_gain"):
+        try:
+            n = int(value)
+        except Exception:
+            return None
+        if n < 0:
+            return 0
+        if n > 255:
+            return 255
+        return n
     try:
         return int(value)
     except Exception:

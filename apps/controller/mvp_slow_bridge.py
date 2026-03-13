@@ -15,6 +15,7 @@ import asyncio
 import copy
 import json
 import os
+import re
 import socket
 import subprocess
 import time
@@ -28,12 +29,15 @@ WS_PORT = 8766
 SLOW_SEND_INTERVAL_S = 0.5
 STATUS_PUBLISH_INTERVAL_S = 1.0
 HEAD_CONNECTED_TIMEOUT_S = 2.5
+IFCONFIG_REFRESH_INTERVAL_S = 2.5
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATE_FILE = os.path.join(BASE_DIR, "mvp_slow_state.json")
 SELECTED_HEAD_FILE = os.path.join(BASE_DIR, "mvp_selected_head.json")
 HEADS_FILE = os.path.join(BASE_DIR, "heads.json")
 USER_DEFAULTS_FILE = os.path.join(BASE_DIR, "mvp_user_defaults.json")
+FACTORY_DEFAULTS_FILE = os.path.join(BASE_DIR, "mvp_factory_defaults.json")
+USER_PROFILES_DIR = os.path.join(BASE_DIR, "user_profiles")
 NETWORK_USER_FILE = os.path.join(BASE_DIR, "mvp_network_user_config.json")
 NETWORK_FACTORY_FILE = os.path.join(BASE_DIR, "mvp_network_factory_config.json")
 ADC_CAL_REQUEST_FILE = "adc_input_calibration_request.json"
@@ -44,6 +48,7 @@ SLOW_TELEM_LISTEN_PORT = mvp_protocol.SLOW_TELEM_PORT
 SCHEMA_VERSION = mvp_protocol.PKT_SCHEMA_VERSION
 ETH_IFACE = "eth0"
 WLAN_IFACE = "wlan0"
+DEFAULT_LAN_SUBNET_THIRD_OCTET = 111
 UI_INPUT_TEST_DEFAULTS = {
     "debounce_ms": 100,
     "group_lockout_ms": 175,
@@ -83,6 +88,16 @@ def _normalize_slow_value(key: str, value: Any) -> Any:
     if key == "wash_wipe":
         s = str(value).strip().lower()
         return "wiping" if s in ("1", "wipe", "wiping", "on", "true") else "parked"
+    if key in ("pan_accel", "tilt_accel", "roll_accel", "pan_gain", "tilt_gain", "roll_gain"):
+        try:
+            n = int(value)
+        except Exception:
+            return 0
+        if n < 0:
+            return 0
+        if n > 255:
+            return 255
+        return n
     if key in ("filter_enable_focus", "filter_enable_iris"):
         return 1 if bool(value) else 0
     try:
@@ -105,6 +120,12 @@ def _default_slow_state() -> dict[str, Any]:
         "filter_den": 1,
         "gyro_heading_correction": 0x00001500,
         "wash_wipe": "parked",
+        "pan_accel": 50,
+        "tilt_accel": 50,
+        "roll_accel": 50,
+        "pan_gain": 100,
+        "tilt_gain": 100,
+        "roll_gain": 100,
     }
 
 
@@ -231,24 +252,43 @@ def _normalized_shaping_profile(raw: Any) -> dict[str, Any]:
 
 
 def _default_network_model(head_count: int, source_heads: list[dict[str, Any]]) -> dict[str, Any]:
+    subnet_prefix, pi_default_ip, gateway_ip = _derived_default_lan_seed()
     heads_cfg = []
     for i in range(max(15, head_count)):
         base = source_heads[i] if i < len(source_heads) else {}
+        head_octet = max(1, min(254, i + 1))
         heads_cfg.append(
             {
                 "index": i,
                 "name": base.get("name", f"HEAD-{i+1:02d}"),
-                "ip": base.get("ip", f"192.168.60.{120 + i}"),
+                "ip": base.get("ip", f"{subnet_prefix}.{head_octet}"),
                 "prefix": int(base.get("prefix", 24)),
-                "gateway": base.get("gateway", "192.168.60.1"),
+                "gateway": base.get("gateway", gateway_ip),
                 "port_fast": int(base.get("port_fast", base.get("port", mvp_protocol.FAST_PORT))),
                 "port_slow_cmd": int(base.get("port_slow_cmd", mvp_protocol.SLOW_CMD_PORT)),
             }
         )
     return {
-        "pi_lan": {"address": "", "prefix": 24, "gateway": "192.168.60.1"},
+        "pi_lan": {"address": pi_default_ip, "prefix": 24, "gateway": gateway_ip},
         "heads": heads_cfg,
     }
+
+
+def _derived_default_lan_seed() -> tuple[str, str, str]:
+    """
+    Default addressing policy:
+      - Subnet: 192.168.111.x
+      - Pi LAN IP: 192.168.111.(100 + last-3-digits-of-hostname)
+      - Gateway: 192.168.111.1
+    """
+    subnet_prefix = f"192.168.{DEFAULT_LAN_SUBNET_THIRD_OCTET}"
+    gateway_ip = f"{subnet_prefix}.1"
+    host = str(socket.gethostname() or "")
+    m = re.search(r"(\d+)$", host)
+    suffix = int(m.group(1)[-3:]) if m else 3
+    pi_octet = max(2, min(254, 100 + suffix))
+    pi_default_ip = f"{subnet_prefix}.{pi_octet}"
+    return subnet_prefix, pi_default_ip, gateway_ip
 
 
 def _parse_iface_ipv4(iface: str) -> dict[str, Any]:
@@ -306,6 +346,7 @@ slow_apply_status: dict[str, dict[str, Any]] = {
 factory_defaults = {"slow": _default_slow_state(), "shaping": _default_shaping_profile()}
 user_defaults = {"shaping": _default_shaping_profile()}
 shaping_state = _default_shaping_profile()
+active_profile_name = ""
 
 network_factory = _default_network_model(len(heads), heads)
 network_user = _default_network_model(len(heads), heads)
@@ -320,6 +361,8 @@ connection_status: dict[str, Any] = {
     "bridge": {"ws_clients": 0},
 }
 wifi_status: dict[str, Any] = {"state": "unknown", "ssid": "", "ip": "", "last_error": ""}
+iface_cli_outputs: dict[str, Any] = {"lan": "", "wifi": "", "updated_at": 0.0}
+_last_ifconfig_refresh_ts = 0.0
 calibration_status: dict[str, Any] = {
     "state": "idle",
     "request_id": "",
@@ -357,6 +400,139 @@ def _save_state() -> None:
     _safe_save_json(STATE_FILE, data)
 
 
+def _sanitize_profile_name(name: str) -> str:
+    s = str(name or "").strip()
+    s = re.sub(r"[^A-Za-z0-9_.-]+", "_", s)
+    return s[:64].strip("._-")
+
+
+def _ensure_profiles_dir() -> None:
+    try:
+        os.makedirs(USER_PROFILES_DIR, exist_ok=True)
+    except Exception:
+        pass
+
+
+def _profile_file_path(name: str) -> str:
+    safe = _sanitize_profile_name(name)
+    return os.path.join(USER_PROFILES_DIR, f"{safe}.json")
+
+
+def _list_user_profiles() -> list[str]:
+    _ensure_profiles_dir()
+    out = []
+    try:
+        for fn in os.listdir(USER_PROFILES_DIR):
+            if not fn.lower().endswith(".json"):
+                continue
+            out.append(fn[:-5])
+    except Exception:
+        return []
+    out.sort(key=lambda x: x.lower())
+    return out
+
+
+def _normalize_profile_ui_preferences(raw: Any) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    if not isinstance(raw, dict):
+        return out
+    theme = str(raw.get("theme", "")).strip().lower()
+    if theme:
+        out["theme"] = theme
+    banks = raw.get("control_banks", {})
+    if isinstance(banks, dict):
+        norm_banks: dict[str, Any] = {}
+        for bank_name in ("control", "control2"):
+            src = banks.get(bank_name, {})
+            if not isinstance(src, dict):
+                continue
+            bank_out: dict[str, Any] = {}
+            sliders = src.get("sliders", [])
+            quick = src.get("quick", [])
+            if isinstance(sliders, list):
+                bank_out["sliders"] = [str(v) for v in sliders]
+            if isinstance(quick, list):
+                bank_out["quick"] = [str(v) for v in quick]
+            if bank_out:
+                norm_banks[bank_name] = bank_out
+        if norm_banks:
+            out["control_banks"] = norm_banks
+    return out
+
+
+def _save_user_profile(name: str, ui_preferences: Any | None = None) -> tuple[bool, str]:
+    global active_profile_name
+    safe = _sanitize_profile_name(name)
+    if not safe:
+        return False, "invalid_profile_name"
+    payload = {
+        "schema_version": SCHEMA_VERSION,
+        "name": safe,
+        "saved_at": time.time(),
+        "slow_controls": copy.deepcopy(dual_slow_state),
+        "shaping": copy.deepcopy(shaping_state),
+        "ui_preferences": _normalize_profile_ui_preferences(ui_preferences),
+    }
+    _ensure_profiles_dir()
+    _safe_save_json(_profile_file_path(safe), payload)
+    active_profile_name = safe
+    return True, "profile_saved"
+
+
+def _load_user_profile(name: str) -> tuple[bool, str, dict[str, Any]]:
+    global active_profile_name, shaping_state, dual_slow_state
+    safe = _sanitize_profile_name(name)
+    if not safe:
+        return False, "invalid_profile_name", {}
+    data = _safe_load_json(_profile_file_path(safe), None)
+    if not isinstance(data, dict):
+        return False, "profile_not_found", {}
+    shaping_state = _normalized_shaping_profile(data.get("shaping", {}))
+    src_slow = data.get("slow_controls", {})
+    if isinstance(src_slow, dict):
+        for k in dual_slow_state.keys():
+            if k in src_slow:
+                dual_slow_state[k] = _normalize_slow_value(k, src_slow[k])
+    _save_state()
+    _apply_shaping_to_adc_profile()
+    active_profile_name = safe
+    ui_preferences = _normalize_profile_ui_preferences(data.get("ui_preferences", {}))
+    return True, "profile_loaded", ui_preferences
+
+
+def _restore_factory_defaults() -> tuple[bool, str]:
+    global shaping_state, dual_slow_state, active_profile_name
+    shaping_state = _normalized_shaping_profile(copy.deepcopy(factory_defaults.get("shaping", {})))
+    src_slow = copy.deepcopy(factory_defaults.get("slow", {}))
+    if isinstance(src_slow, dict):
+        for k in dual_slow_state.keys():
+            if k in src_slow:
+                dual_slow_state[k] = _normalize_slow_value(k, src_slow[k])
+    _save_state()
+    _apply_shaping_to_adc_profile()
+    active_profile_name = ""
+    return True, "factory_defaults_restored"
+
+
+def _load_factory_defaults_file() -> None:
+    global factory_defaults
+    base = {"slow": _default_slow_state(), "shaping": _default_shaping_profile()}
+    data = _safe_load_json(FACTORY_DEFAULTS_FILE, base)
+    if not isinstance(data, dict):
+        data = base
+    slow = data.get("slow", {}) if isinstance(data.get("slow", {}), dict) else {}
+    shaping = data.get("shaping", {}) if isinstance(data.get("shaping", {}), dict) else {}
+    merged_slow = copy.deepcopy(base["slow"])
+    for k in merged_slow.keys():
+        if k in slow:
+            merged_slow[k] = _normalize_slow_value(k, slow[k])
+    factory_defaults = {
+        "slow": merged_slow,
+        "shaping": _normalized_shaping_profile(shaping if shaping else base["shaping"]),
+    }
+    _safe_save_json(FACTORY_DEFAULTS_FILE, factory_defaults)
+
+
 def _save_selected_head_index() -> None:
     _safe_save_json(SELECTED_HEAD_FILE, {"selected_index": int(selected_index)})
 
@@ -376,13 +552,13 @@ def _load_network_models() -> None:
         merged_heads.append(h)
     network_user["heads"] = merged_heads
     network_factory["heads"] = (network_factory.get("heads") or base["heads"])[:15]
-    pi_detect = _parse_iface_ipv4(ETH_IFACE)
-    if not network_factory.get("pi_lan", {}).get("address") and pi_detect.get("address"):
-        network_factory["pi_lan"] = {
-            "address": pi_detect["address"],
-            "prefix": int(pi_detect.get("prefix", 24)),
-            "gateway": "192.168.60.1",
-        }
+    _, pi_default_ip, gateway_ip = _derived_default_lan_seed()
+    factory_pi = network_factory.setdefault("pi_lan", {})
+    if not str(factory_pi.get("address", "")).strip():
+        factory_pi["address"] = pi_default_ip
+    factory_pi["prefix"] = int(factory_pi.get("prefix", 24) or 24)
+    if not str(factory_pi.get("gateway", "")).strip():
+        factory_pi["gateway"] = gateway_ip
     if not network_user.get("pi_lan", {}).get("address"):
         network_user["pi_lan"] = copy.deepcopy(network_factory.get("pi_lan", {}))
     _safe_save_json(NETWORK_FACTORY_FILE, network_factory)
@@ -392,17 +568,19 @@ def _load_network_models() -> None:
 
 def _apply_network_user_to_heads() -> None:
     global heads
+    subnet_prefix, _, gateway_ip = _derived_default_lan_seed()
     src = network_user.get("heads", [])
     updated = []
     for i, h in enumerate(src):
         if i >= 15:
             break
+        head_octet = max(1, min(254, i + 1))
         updated.append(
             {
                 "name": h.get("name", f"HEAD-{i+1:02d}"),
-                "ip": h.get("ip", f"192.168.60.{120+i}"),
+                "ip": h.get("ip", f"{subnet_prefix}.{head_octet}"),
                 "prefix": int(h.get("prefix", 24)),
-                "gateway": h.get("gateway", "192.168.60.1"),
+                "gateway": h.get("gateway", gateway_ip),
                 "port": int(h.get("port_fast", mvp_protocol.FAST_PORT)),
                 "port_fast": int(h.get("port_fast", mvp_protocol.FAST_PORT)),
                 "port_slow_cmd": int(h.get("port_slow_cmd", mvp_protocol.SLOW_CMD_PORT)),
@@ -639,6 +817,7 @@ def _normalize_lens_feedback(lens_payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def _state_payload() -> dict[str, Any]:
+    subnet_prefix, pi_default_ip, gateway_ip = _derived_default_lan_seed()
     return {
         "type": "STATE",
         "schema_version": SCHEMA_VERSION,
@@ -652,9 +831,21 @@ def _state_payload() -> dict[str, Any]:
         "connection_status": copy.deepcopy(connection_status),
         "network_config": copy.deepcopy(network_user),
         "wifi_status": copy.deepcopy(wifi_status),
+        "ifconfig": copy.deepcopy(iface_cli_outputs),
         "calibration": copy.deepcopy(calibration_status),
         "ui_config": {
             "input_tests": dict(UI_INPUT_TEST_DEFAULTS),
+            "network_defaults": {
+                "hostname": str(socket.gethostname() or ""),
+                "subnet_prefix": subnet_prefix,
+                "pi_lan_default_ip": pi_default_ip,
+                "gateway_default": gateway_ip,
+                "head_ip_base": f"{subnet_prefix}.1",
+            },
+            "profiles": {
+                "active": active_profile_name,
+                "names": _list_user_profiles(),
+            },
         },
     }
 
@@ -763,14 +954,72 @@ def _refresh_wifi_status() -> None:
     wifi_status["ip"] = ip.get("address", "")
 
 
+def _read_iface_cli_text(iface: str) -> str:
+    ok, out = _run_nmcli(["-t", "-f", "DEVICE,STATE,CONNECTION", "device", "show", iface])
+    if ok and out:
+        return out
+    try:
+        p = subprocess.run(["ifconfig", iface], capture_output=True, text=True, check=False, timeout=4)
+        txt = (p.stdout or p.stderr or "").strip()
+        if txt:
+            return txt
+    except Exception:
+        pass
+    try:
+        p = subprocess.run(["ip", "-4", "addr", "show", iface], capture_output=True, text=True, check=False, timeout=4)
+        txt = (p.stdout or p.stderr or "").strip()
+        if txt:
+            return txt
+    except Exception:
+        pass
+    return "(unavailable)"
+
+
+def _refresh_iface_cli_outputs(force: bool = False) -> None:
+    global _last_ifconfig_refresh_ts
+    now = time.time()
+    if not force and (now - _last_ifconfig_refresh_ts) < IFCONFIG_REFRESH_INTERVAL_S:
+        return
+    _last_ifconfig_refresh_ts = now
+    iface_cli_outputs["lan"] = _read_iface_cli_text(ETH_IFACE)
+    iface_cli_outputs["wifi"] = _read_iface_cli_text(WLAN_IFACE)
+    iface_cli_outputs["updated_at"] = now
+
+
 async def status_publish_task() -> None:
     while True:
         _refresh_connection_status()
         _refresh_wifi_status()
+        _refresh_iface_cli_outputs()
         _refresh_calibration_status()
         _write_zoom_feedback_runtime()
         await _publish_state()
         await asyncio.sleep(STATUS_PUBLISH_INTERVAL_S)
+
+
+def _ping_head(index: int) -> tuple[bool, str, str]:
+    if index < 0 or index >= len(heads):
+        return False, "", "index_out_of_range"
+    ip = str(heads[index].get("ip", "")).strip()
+    if not ip:
+        return False, "", "missing_ip"
+    try:
+        p = subprocess.run(
+            ["ping", "-c", "1", "-W", "1", ip],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=3,
+        )
+        ok = p.returncode == 0
+        out = (p.stdout or "").strip()
+        err = (p.stderr or "").strip()
+        msg = out if out else err
+        if not msg:
+            msg = "ping_ok" if ok else "ping_failed"
+        return ok, ip, msg
+    except Exception as e:
+        return False, ip, str(e)
 
 
 def _set_head_config(index: int, config: dict[str, Any]) -> tuple[bool, str]:
@@ -982,6 +1231,17 @@ async def handler(websocket: Any) -> None:
                 _safe_save_json(USER_DEFAULTS_FILE, user_defaults)
                 ok, msg = _apply_shaping_to_adc_profile()
                 await websocket.send(json.dumps({"type": "USER_DEFAULTS_RESET", "ok": ok, "message": msg}))
+            elif msg_type == "SAVE_USER_PROFILE":
+                ok, msg = _save_user_profile(data.get("name", ""), data.get("ui_preferences", {}))
+                await websocket.send(json.dumps({"type": "SAVE_USER_PROFILE_RESULT", "ok": ok, "message": msg, "name": _sanitize_profile_name(data.get("name", ""))}))
+            elif msg_type == "LOAD_USER_PROFILE":
+                ok, msg, ui_preferences = _load_user_profile(data.get("name", ""))
+                await websocket.send(json.dumps({"type": "LOAD_USER_PROFILE_RESULT", "ok": ok, "message": msg, "name": _sanitize_profile_name(data.get("name", "")), "ui_preferences": ui_preferences}))
+            elif msg_type == "RESTORE_FACTORY_DEFAULTS":
+                ok, msg = _restore_factory_defaults()
+                await websocket.send(json.dumps({"type": "RESTORE_FACTORY_DEFAULTS_RESULT", "ok": ok, "message": msg}))
+            elif msg_type == "LIST_USER_PROFILES":
+                await websocket.send(json.dumps({"type": "LIST_USER_PROFILES_RESULT", "ok": True, "profiles": _list_user_profiles(), "active": active_profile_name}))
             elif msg_type == "SET_PI_LAN_CONFIG":
                 ok, msg = _set_pi_lan_config(data.get("value", {}) or {})
                 await websocket.send(json.dumps({"type": "PI_LAN_SAVED", "ok": ok, "message": msg}))
@@ -1009,6 +1269,10 @@ async def handler(websocket: Any) -> None:
             elif msg_type == "WIFI_STATUS":
                 _refresh_wifi_status()
                 await websocket.send(json.dumps({"type": "WIFI_STATUS_RESULT", "ok": True, "status": wifi_status}))
+            elif msg_type == "PING_HEAD":
+                idx = int(data.get("index", -1))
+                ok, ip, msg = await asyncio.to_thread(_ping_head, idx)
+                await websocket.send(json.dumps({"type": "PING_HEAD_RESULT", "index": idx, "ip": ip, "ok": ok, "message": msg}))
             elif msg_type == "CALIBRATE_INPUTS":
                 ok, msg, req_id = _start_input_calibration(float(data.get("duration_s", 2.5) or 2.5))
                 await websocket.send(
@@ -1029,6 +1293,8 @@ async def handler(websocket: Any) -> None:
 
 
 async def main() -> None:
+    _ensure_profiles_dir()
+    _load_factory_defaults_file()
     _load_state()
     _load_network_models()
     _save_selected_head_index()

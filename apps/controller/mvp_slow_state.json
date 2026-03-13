@@ -13,7 +13,13 @@
     "filter_num": 1,
     "filter_den": 1,
     "gyro_heading_correction": 5376,
-    "wash_wipe": "parked"
+    "wash_wipe": "parked",
+    "pan_accel": 50,
+    "tilt_accel": 50,
+    "roll_accel": 50,
+    "pan_gain": 100,
+    "tilt_gain": 100,
+    "roll_gain": 100
   },
   "shaping": {
     "expo": 0.0,

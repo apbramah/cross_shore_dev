@@ -6,7 +6,7 @@
   <title>Hydravision MVP UI 3</title>
   <script src="./mvp_ui_3_layout.js"></script>
   <style>
-    :root { --bg:#10141b; --card:#1a2130; --card2:#1f2738; --border:#36425a; --text:#e5ecf8; --muted:#9fb0cb; --accent:#57a7ff; --warn:#f59e0b; --ok:#22c55e; --danger:#ef4444; }
+    :root { --bg:#10141b; --card:#1a2130; --card2:#1f2738; --border:#36425a; --text:#e5ecf8; --muted:#9fb0cb; --accent:#57a7ff; --warn:#f59e0b; --ok:#22c55e; --danger:#ef4444; --nav-link-x:10%; --nav-link-color:#57a7ff; }
     *{ box-sizing:border-box; }
     html, body { width:100vw; height:100vh; margin:0; overflow:hidden; background:#0d1118; color:var(--text); font-family:Inter, "Segoe UI", system-ui, -apple-system, sans-serif; }
     .app { width:100vw; height:100vh; padding:12px; display:grid; grid-template-rows:124px 1fr 76px; gap:10px; background:radial-gradient(circle at 15% -10%, #202a3e 0%, #0d1118 48%); }
@@ -39,17 +39,84 @@
     .btn-neutral { background:linear-gradient(180deg,#5f6f8f 0%,#4d5c78 100%); border-color:#6f80a2; }
     .disconnect-btn.connected { background:linear-gradient(180deg,#b43f4b 0%,#913440 100%); border-color:#a84552; }
     .disconnect-btn.disconnected { background:linear-gradient(180deg,#5f6f8f 0%,#4d5c78 100%); border-color:#6f80a2; }
-    .surface { position:relative; overflow:hidden; padding:10px; }
-    .page { width:100%; height:100%; display:none; overflow:auto; gap:10px; }
+    .surface { position:relative; overflow:hidden; padding:10px; isolation:isolate; }
+    .surface::before {
+      content:"";
+      position:absolute;
+      inset:0;
+      pointer-events:none;
+      background:radial-gradient(circle at var(--nav-link-x) 100%, var(--nav-link-color) 0%, rgba(0,0,0,0) 55%);
+      opacity:.12;
+      z-index:0;
+    }
+    .surface::after {
+      content:"";
+      position:absolute;
+      left:var(--nav-link-x);
+      transform:translateX(-50%);
+      bottom:0;
+      width:18%;
+      max-width:180px;
+      height:4px;
+      border-radius:4px 4px 0 0;
+      background:linear-gradient(90deg, rgba(0,0,0,0) 0%, var(--nav-link-color) 50%, rgba(0,0,0,0) 100%);
+      box-shadow:0 0 10px var(--nav-link-color);
+      pointer-events:none;
+      z-index:5;
+    }
+    .page { width:100%; height:100%; display:none; overflow:auto; gap:10px; position:relative; z-index:1; }
     .page.active { display:grid; grid-template-columns:1fr 1fr; }
     #page-control.page.active { grid-template-columns:1fr; }
+    #page-slow.page.active, #page-fast.page.active, #page-inputtests.page.active { grid-template-columns:1fr; }
+    .stack-list { align-content:start; gap:8px; }
+    .stack-row-card { grid-column:1 / -1; width:100%; }
     .card { border:1px solid var(--border); border-radius:10px; background:linear-gradient(180deg,#1b2434 0%,#161e2c 100%); padding:10px; display:grid; gap:8px; align-content:start; }
     .card h3 { margin:0; font-size:16px; color:#dbe8ff; }
     .info { font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:12px; color:var(--muted); border:1px solid #34435d; border-radius:8px; padding:8px; background:rgba(16,24,36,.65); overflow:auto; max-height:170px; white-space:pre-wrap; }
     .dock { position:relative; padding:8px; overflow:visible; }
+    .dock::before {
+      content:"";
+      position:absolute;
+      left:var(--nav-link-x);
+      transform:translateX(-50%);
+      top:-12px;
+      width:3px;
+      height:20px;
+      border-radius:0;
+      background:var(--nav-link-color);
+      box-shadow:none;
+      pointer-events:none;
+      z-index:4;
+    }
     .dock-grid { height:100%; display:grid; grid-template-columns:repeat(5,1fr); gap:8px; }
-    .dock-btn { height:100%; border-radius:10px; border:1px solid #44557a; background:#202b40; color:#d7e5ff; font-weight:700; font-size:16px; }
-    .dock-btn.active { border-color:var(--accent); box-shadow:0 0 0 2px rgba(87,167,255,.25) inset; background:#284362; }
+    .dock-btn { height:100%; border-radius:10px; border:1px solid #44557a; background:#202b40; color:#d7e5ff; font-weight:700; font-size:16px; position:relative; overflow:hidden; padding-top:14px; }
+    .dock-btn::before {
+      content:attr(data-encoder);
+      position:absolute;
+      top:2px;
+      left:8px;
+      font-size:10px;
+      line-height:1;
+      letter-spacing:.3px;
+      color:#9fb0cb;
+      opacity:.92;
+    }
+    .dock-btn.active {
+      border-color:var(--nav-link-color) !important;
+      box-shadow:0 0 0 2px rgba(87,167,255,.25) inset, 0 0 12px var(--nav-link-color) !important;
+      background:#284362 !important;
+    }
+    .dock-btn.active::after {
+      content:"";
+      position:absolute;
+      left:10px;
+      right:10px;
+      bottom:4px;
+      height:3px;
+      border-radius:999px;
+      background:var(--nav-link-color);
+      box-shadow:0 0 8px var(--nav-link-color);
+    }
     .popup { position:absolute; left:0; right:0; bottom:84px; height:410px; margin:0 8px; border:1px solid #4a5b7f; border-radius:12px; background:linear-gradient(180deg,#202a3e 0%,#192236 100%); display:none; grid-template-rows:56px 1fr; overflow:hidden; box-shadow:0 14px 30px rgba(0,0,0,.45); }
     .popup.open { display:grid; }
     .popup-head { display:grid; grid-template-columns:1fr auto auto auto; align-items:center; gap:8px; padding:8px; border-bottom:1px solid #3f4f70; }
@@ -66,6 +133,18 @@
     table { width:100%; border-collapse:collapse; font-size:13px; }
     th, td { border-bottom:1px solid #2f3e57; padding:6px; text-align:left; }
     .input-test-controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    #page-inputtests .input-test-controls { display:grid; gap:8px; }
+    #page-inputtests .slider-assign-grid { grid-template-columns:1fr; gap:8px; margin:0; }
+    #page-inputtests .slider-assign-row {
+      grid-template-columns:1fr auto;
+      border:1px solid #425171;
+      border-radius:10px;
+      background:#1f2b40;
+      padding:12px 14px;
+      min-height:58px;
+    }
+    #page-inputtests .slider-assign-row label { font-size:16px; font-weight:700; color:#d9e7ff; }
+    #page-inputtests .slider-assign-row select { min-width:250px; }
     .input-test-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:8px; }
     .input-test-btn { height:68px; border-radius:8px; border:1px solid #425171; background:#1f2b40; display:grid; align-content:center; gap:4px; }
     .input-test-btn.active { border-color:#22c55e; box-shadow:inset 0 0 0 1px rgba(34,197,94,.45); background:#214537; }
@@ -145,14 +224,20 @@
     .top-action-btn { min-width:0; width:100%; }
     #touchMotorsOff { min-width:0; width:100%; }
     .lockoff-btn.active { border-color:#f59e0b; box-shadow:0 0 0 2px rgba(245,158,11,.28) inset; background:linear-gradient(180deg,#8b6b23 0%,#6f541b 100%); color:#ffe8b0; }
+    .command-list-title { font-size:12px; color:#c9d8f4; font-weight:700; }
+    .command-row-list { display:grid; gap:8px; }
+    .command-row { display:grid; grid-template-columns:1fr auto; gap:12px; align-items:center; border:1px solid #425171; border-radius:10px; background:#1f2b40; padding:12px 14px; min-height:58px; }
+    .command-row.active { border-color:#57a7ff; box-shadow:0 0 0 1px rgba(87,167,255,.4) inset; }
+    .command-row-name { font-size:16px; color:#d9e7ff; font-weight:700; line-height:1.15; }
+    .command-row-value { font-size:28px; color:#c6dbff; min-width:64px; text-align:right; line-height:1; font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; }
     /* Control tab now displays sliders only (other controls hidden but retained for logic) */
     #page-control { overflow:hidden; }
     #page-control .control-sliders-card { grid-column:1 / -1; height:100%; padding:4px; gap:2px; }
     #page-control .control-sliders-card > :not(#controlSliderGrid):not(#controlQuickButtonRow) { display:none; }
     #page-control .control-slider-value { display:none; }
-    #page-control .control-slider-card { grid-template-rows:auto 1fr; }
+    #page-control .control-slider-card { grid-template-rows:auto minmax(0,0.88fr); }
     #page-control .control-slider-track-wrap { height:100%; min-height:0; }
-    #page-control .control-slider { height:100%; min-height:52px; }
+    #page-control .control-slider { height:100%; min-height:42px; }
     #page-control > .card:not(.control-sliders-card) { display:none; }
     .kbd { position:fixed; inset:0; background:rgba(0,0,0,.65); display:none; align-items:center; justify-content:center; z-index:20; }
     .kbd.open { display:flex; }
@@ -169,25 +254,45 @@
     .head-option { height:56px; border-radius:8px; border:1px solid #465b7f; background:#243349; color:#e8f2ff; font-weight:700; font-size:16px; text-align:left; padding:0 14px; }
     .head-option.active { border-color:var(--accent); box-shadow:0 0 0 2px rgba(87,167,255,.25) inset; background:#284362; }
     .head-picker-actions { display:flex; justify-content:flex-end; gap:8px; }
+    .head-config-editor { position:fixed; inset:0; background:rgba(0,0,0,.7); display:none; align-items:center; justify-content:center; z-index:18; }
+    .head-config-editor.open { display:flex; }
+    .head-config-card { width:min(1000px,98vw); height:min(94vh,760px); border:1px solid #4a5b7f; border-radius:12px; background:#1a2232; padding:10px; display:grid; grid-template-rows:auto 1fr auto; gap:8px; }
+    .head-config-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+    .head-config-title { margin:0; font-size:16px; color:#dbe8ff; }
+    .head-config-body { border:1px solid #34435d; border-radius:8px; padding:8px; overflow:auto; }
+    .head-config-actions { display:flex; justify-content:flex-end; gap:8px; }
+    .profile-editor { position:fixed; inset:0; background:rgba(0,0,0,.7); display:none; align-items:center; justify-content:center; z-index:19; }
+    .profile-editor.open { display:flex; }
+    .profile-card { width:min(760px,96vw); max-height:92vh; border:1px solid #4a5b7f; border-radius:12px; background:#1a2232; padding:10px; display:grid; grid-template-rows:auto auto 1fr auto; gap:8px; }
+    .profile-row { display:flex; gap:8px; align-items:center; }
+    .profile-list { border:1px solid #34435d; border-radius:8px; padding:8px; overflow:auto; display:grid; gap:6px; align-content:start; }
 
     /* Theme options selected from engineering tab */
     body.theme-blackwhite {
-      --bg:#0d0d0d; --card:#171717; --card2:#202020; --border:#8c8c8c; --text:#f2f2f2; --muted:#bdbdbd; --accent:#ffffff; --warn:#d9d9d9; --ok:#f2f2f2; --danger:#9e9e9e;
+      --bg:#0d0d0d; --card:#171717; --card2:#202020; --border:#8c8c8c; --text:#f2f2f2; --muted:#bdbdbd; --accent:#ffffff; --warn:#d9d9d9; --ok:#f2f2f2; --danger:#9e9e9e; --nav-link-color:#f2f2f2;
       background:#000;
     }
     body.theme-blackwhite .app { background:linear-gradient(180deg,#121212 0%,#060606 100%); }
     body.theme-blackwhite .topbar, body.theme-blackwhite .tabs, body.theme-blackwhite .surface, body.theme-blackwhite .dock { background:linear-gradient(180deg,#161616 0%,#0d0d0d 100%); }
     body.theme-blackwhite .tab, body.theme-blackwhite .dock-btn { background:#1f1f1f; border-color:#7d7d7d; color:#f2f2f2; }
-    body.theme-blackwhite .tab.active, body.theme-blackwhite .dock-btn.active { background:#243044; box-shadow:0 0 0 2px rgba(138,168,212,.24) inset; border-color:#8aa8d4; }
+    body.theme-blackwhite .tab.active, body.theme-blackwhite .dock-btn.active { background:#2a2a2a !important; box-shadow:0 0 0 2px rgba(242,242,242,.22) inset !important; border-color:#bfbfbf !important; }
     body.theme-blackwhite button { background:linear-gradient(180deg,#505050 0%,#3b3b3b 100%); border-color:#777; color:#fff; }
     body.theme-blackwhite .btn-danger { background:linear-gradient(180deg,#6c4b56 0%,#553944 100%); border-color:#8d6270; color:#ffe8ee; }
     body.theme-blackwhite .disconnect-btn.connected { background:linear-gradient(180deg,#6c4b56 0%,#553944 100%); border-color:#8d6270; color:#ffe8ee; }
-    body.theme-blackwhite .disconnect-btn.disconnected { background:linear-gradient(180deg,#4d5f7c 0%,#3f4e67 100%); border-color:#6a7f9f; color:#e8f0ff; }
-    body.theme-blackwhite .head-id-box.status-off { border-color:#5b6880; box-shadow:0 0 0 2px rgba(91,104,128,.2), 0 0 10px rgba(91,104,128,.16); }
+    body.theme-blackwhite .disconnect-btn.disconnected { background:linear-gradient(180deg,#5f5f5f 0%,#4a4a4a 100%); border-color:#808080; color:#f0f0f0; }
+    body.theme-blackwhite .head-id-box.status-off { border-color:#7a7a7a; box-shadow:0 0 0 2px rgba(122,122,122,.2), 0 0 10px rgba(122,122,122,.16); }
     body.theme-blackwhite .head-id-box.status-warn { border-color:#9a8d68; box-shadow:0 0 0 2px rgba(154,141,104,.2), 0 0 12px rgba(154,141,104,.18); }
     body.theme-blackwhite .head-id-box.status-on { border-color:#7ea697; box-shadow:0 0 0 2px rgba(126,166,151,.22), 0 0 14px rgba(126,166,151,.2); }
     body.theme-blackwhite .card { background:linear-gradient(180deg,#1a1a1a 0%,#121212 100%); }
     body.theme-blackwhite .info { background:rgba(20,20,20,.85); border-color:#5f5f5f; color:#d8d8d8; }
+    body.theme-blackwhite .control-slider { background:#202020; border-color:#737373; }
+    body.theme-blackwhite .control-slider::-webkit-slider-thumb { background:#d0d0d0; border-color:#efefef; }
+    body.theme-blackwhite .control-slider::-moz-range-thumb { background:#d0d0d0; border-color:#efefef; }
+    body.theme-blackwhite .control-slider-card { background:#1c1c1c; border-color:#6c6c6c; }
+    body.theme-blackwhite .control-slider-card.applied { border-color:#a5a5a5; box-shadow:0 0 0 1px rgba(220,220,220,.25) inset; }
+    body.theme-blackwhite .control-slider-card.pending { border-color:#8f8f8f; box-shadow:0 0 0 1px rgba(200,200,200,.2) inset; }
+    body.theme-blackwhite .command-row { background:#1c1c1c; border-color:#6c6c6c; }
+    body.theme-blackwhite .command-row.active { border-color:#bfbfbf; box-shadow:0 0 0 1px rgba(242,242,242,.3) inset; }
 
     body.theme-acidtrip {
       --bg:#081108; --card:#122013; --card2:#18291a; --border:#2cff7b; --text:#f5ff70; --muted:#a9ffcb; --accent:#ff36f3; --warn:#ffe05e; --ok:#21ff87; --danger:#ff5478;
@@ -311,6 +416,8 @@
       .head-picker-card { width:96vw; max-height:92vh; }
       .head-picker-title { font-size:14px; }
       .head-option { height:52px; font-size:14px; }
+      .head-config-card { width:98vw; height:94vh; }
+      .head-config-title { font-size:14px; }
     }
   </style>
 </head>
@@ -332,7 +439,7 @@
         <button id="touchMotorsOff" class="btn-danger">Motors OFF</button>
       </div>
     </div>
-    <div class="surface">
+    <div id="surfaceMain" class="surface">
       <div id="page-control" class="page active">
         <div class="card control-sliders-card">
           <div id="controlQuickButtonRow" class="control-quick-row"></div>
@@ -340,33 +447,22 @@
         </div>
       </div>
       <div id="page-slow" class="page">
-        <div class="card" style="grid-column:1 / -1;">
-          <div class="row">
-            <button id="touchGyroSend">Send Gyro</button>
-            <select id="touchGyroValue"></select>
-          </div>
-          <div class="row">
-            <button id="touchSaveDefaults">Save User Defaults</button>
-            <button id="touchResetDefaults">Reset User Defaults</button>
-            <button id="touchCalibrateInputs">Calibrate Inputs</button>
-          </div>
-          <div id="slowState" class="info">Slow state: -</div>
-          <div id="applyState" class="info">Apply status: -</div>
-          <div id="telemetryState" class="info">Telemetry: -</div>
-          <div id="eventLog" class="info">Event: idle</div>
+        <div class="card stack-row-card">
+          <div class="command-list-title">Slow Controls (1-10)</div>
+          <div id="slowControlRows" class="command-row-list"></div>
         </div>
       </div>
       <div id="page-fast" class="page">
-        <div class="card" style="grid-column:1 / -1;">
-          <div id="shapingState" class="info">Shaping: -</div>
-          <div id="focusState" class="info">Column popup: minimized</div>
-          <div id="encoderState" class="info">Encoder mode: position</div>
-          <div id="activeSlotState" class="info">Active slot: none</div>
-          <div id="activeValueState" class="info">Active value: -</div>
+        <div class="card stack-row-card">
+          <div class="command-list-title">Fast Controls (1-10)</div>
+          <div id="fastControlRows" class="command-row-list"></div>
         </div>
       </div>
       <div id="page-ipconfig" class="page">
         <div class="card">
+          <div class="row">
+            <button id="closeNetworkToEngineering" type="button">Back to Engineering</button>
+          </div>
           <div class="row"><label>Address</label><input id="piAddress" readonly /></div>
           <div class="row"><label>Prefix</label><input id="piPrefix" readonly /></div>
           <div class="row"><label>Gateway</label><input id="piGateway" readonly /></div>
@@ -376,6 +472,7 @@
             <button id="factoryResetNetwork">Factory Default</button>
           </div>
           <div id="networkInfo" class="info">Network: -</div>
+          <div id="networkDefaultHint" class="info">Derived defaults: -</div>
         </div>
         <div class="card">
           <div class="row"><label>SSID</label><input id="wifiSsid" readonly /></div>
@@ -388,12 +485,10 @@
           <div id="wifiStatus" class="info">WiFi: -</div>
         </div>
         <div class="card">
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th>#</th><th>Name</th><th>IP</th><th>Prefix</th><th>Gateway</th><th>Save</th></tr></thead>
-              <tbody id="headTableBody"></tbody>
-            </table>
+          <div class="row">
+            <button id="openHeadConfigEditor" type="button">Edit Head IDs (Full Screen)</button>
           </div>
+          <div class="info">Open full-screen editor for Head ID table data entry.</div>
         </div>
         <div class="card">
           <div class="table-wrap">
@@ -403,73 +498,56 @@
             </table>
           </div>
         </div>
+        <div class="card" style="grid-column:1 / -1;">
+          <div id="ifconfigDump" class="info">ifconfig: -</div>
+        </div>
       </div>
       <div id="page-inputtests" class="page">
-        <div class="card" style="grid-column:1 / -1;">
-          <div class="input-test-controls">
-            <label for="themeSelect">Theme</label>
-            <select id="themeSelect" style="max-width:220px;">
-              <option value="starship">Starship</option>
-              <option value="blackwhite">Black and White</option>
-              <option value="neon">Neon</option>
-              <option value="acidtrip">Dayglow</option>
-            </select>
-            <label for="inputDebounceMs">Debounce ms</label>
-            <input id="inputDebounceMs" readonly style="max-width:120px;" />
-            <button id="inputDebounceDec">-</button>
-            <button id="inputDebounceInc">+</button>
-            <label for="inputGroupLockoutMs">Group lockout ms</label>
-            <input id="inputGroupLockoutMs" readonly style="max-width:120px;" />
-            <button id="inputGroupLockoutDec">-</button>
-            <button id="inputGroupLockoutInc">+</button>
-            <button id="inputResetCounters">Reset Counters</button>
-          </div>
-          <div class="dead-ahead-panel">
-            <div class="dead-ahead-title">Dead Ahead Mode (BGC)</div>
-            <div class="dead-ahead-grid">
-              <div class="dead-ahead-row">
-                <label for="daYawRange">Yaw Range</label>
-                <select id="daYawRange"></select>
-              </div>
-              <div class="dead-ahead-row">
-                <label for="daPitchRange">Pitch Range</label>
-                <select id="daPitchRange"></select>
-              </div>
-              <div class="dead-ahead-row">
-                <label for="daRollRange">Roll Range</label>
-                <select id="daRollRange"></select>
-              </div>
-              <div class="dead-ahead-row">
-                <label for="daDeadband">Dead-band</label>
-                <select id="daDeadband"></select>
-              </div>
-              <div class="dead-ahead-row">
-                <label for="daSpeed">Speed</label>
-                <select id="daSpeed"></select>
-              </div>
+        <div class="card stack-row-card">
+          <div class="command-list-title">Engineering Actions</div>
+          <div class="input-test-controls command-row-list">
+            <div class="command-row">
+              <div class="command-row-name">Theme</div>
+              <select id="themeSelect" style="max-width:220px;">
+                <option value="starship">Starship</option>
+                <option value="blackwhite">Black and White</option>
+                <option value="neon">Neon</option>
+                <option value="acidtrip">Dayglow</option>
+              </select>
+            </div>
+            <div class="command-row">
+              <div class="command-row-name">Network / WiFi / Head Config</div>
+              <button id="openNetworkFromEngineering">Open</button>
+            </div>
+            <div class="command-row">
+              <div class="command-row-name">User Profiles</div>
+              <button id="openProfileEditor">Open</button>
+            </div>
+            <div class="command-row">
+              <div class="command-row-name">Calibrate Inputs</div>
+              <button id="touchCalibrateInputs">Run</button>
             </div>
           </div>
-          <div id="connectionState" class="info">Connection: -</div>
-          <div id="calibrationState" class="info">Calibration: -</div>
+        </div>
+        <div class="card stack-row-card"><div id="connectionState" class="info">Connection: -</div></div>
+        <div class="card stack-row-card"><div id="calibrationState" class="info">Calibration: -</div></div>
+        <div class="card stack-row-card">
+          <div class="command-row">
+            <div class="command-row-name">Edit Bank</div>
+            <select id="assignmentBankSelect" style="max-width:180px;">
+              <option value="control">Control 1</option>
+              <option value="control2">Control 2</option>
+            </select>
+          </div>
+        </div>
+        <div class="card stack-row-card">
           <div id="sliderAssignGrid" class="slider-assign-grid"></div>
           <div id="quickButtonAssignGrid" class="slider-assign-grid"></div>
           <div id="quickButtonAssignNote" class="info">Quick buttons: current assignable fast/slow command list is provisional and must be finalized.</div>
-          <div id="inputTestGrid" class="input-test-grid"></div>
-          <div id="encoderValueSummary" class="info">Encoder values: E1=0 E2=0 E3=0 E4=0 E5=0</div>
-          <div id="inputTestSummary" class="info">Input tests: waiting for gamepad...</div>
         </div>
       </div>
     </div>
-    <div class="dock">
-      <div id="popup" class="popup">
-        <div class="popup-head">
-          <div id="popupTitle" class="popup-title">Column</div>
-          <div id="popupMode" class="popup-mode position">POSITION SELECT</div>
-          <button id="touchToggleMode">Edit Value</button>
-          <button id="touchClosePopup">Minimize</button>
-        </div>
-        <div id="positions" class="positions"></div>
-      </div>
+    <div id="dockMain" class="dock">
       <div id="dockGrid" class="dock-grid"></div>
     </div>
   </div>
@@ -497,6 +575,49 @@
       <div id="headPickerList" class="head-picker-list"></div>
       <div class="head-picker-actions">
         <button id="headPickerCancel" type="button">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="headConfigEditor" class="head-config-editor">
+    <div class="head-config-card">
+      <div class="head-config-head">
+        <h3 class="head-config-title">Head ID Configuration</h3>
+        <button id="headConfigClose" type="button">Close</button>
+      </div>
+      <div class="head-config-body">
+        <div class="table-wrap" style="max-height:none;">
+          <table>
+            <thead><tr><th>#</th><th>Name</th><th>IP</th><th>Prefix</th><th>Gateway</th><th>Ping</th><th>Save</th></tr></thead>
+            <tbody id="headTableBodyEditor"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="head-config-actions">
+        <button id="headConfigDone" type="button">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="profileEditor" class="profile-editor">
+    <div class="profile-card">
+      <div class="head-config-head">
+        <h3 class="head-config-title">User Profiles</h3>
+        <button id="profileClose" type="button">Close</button>
+      </div>
+      <div class="profile-row">
+        <label for="profileNameInput">Username</label>
+        <input id="profileNameInput" style="max-width:260px;" />
+        <button id="profileNameEdit" type="button">Edit</button>
+        <button id="profileSave" type="button">Save Profile</button>
+      </div>
+      <div id="profileList" class="profile-list"></div>
+      <div class="profile-row" style="justify-content:space-between;">
+        <button id="profileFactoryRestore" type="button">Restore Factory Defaults</button>
+        <div class="profile-row">
+          <button id="profileRefresh" type="button">Refresh List</button>
+          <button id="profileDone" type="button">Done</button>
+        </div>
       </div>
     </div>
   </div>
@@ -538,19 +659,11 @@ let keyboardShift = false;
 let keyboardCaps = false;
 let networkDraft = null;
 let networkDirty = { pi_lan: false, heads: {} };
-let inputDebounceMs = 100;
-let inputRawRiseCount = Array(15).fill(0);
-let inputAcceptedRiseCount = Array(15).fill(0);
-let inputSuppressedDebounceCount = Array(15).fill(0);
-let inputSuppressedGroupCount = Array(15).fill(0);
-let inputPressed = Array(15).fill(0);
-let inputLastRiseMs = Array(15).fill(0);
+const INPUT_DEBOUNCE_MS = 100;
+const INPUT_GROUP_LOCKOUT_MS = 175;
 let inputLastActionMs = Array(15).fill(0);
-let inputGroupLockoutMs = 175;
 let inputGroupLastActionMs = Array(5).fill(0);
 let inputGroupLastBtn = Array(5).fill(-1);
-let encoderTestValue = Array(5).fill(0);
-let inputFilterDefaultsLoaded = false;
 let activeValueFreeze = null;
 const LOCAL_AUTO_APPLY_INTERVAL_MS = 60;
 let localAutoApplyTimer = null;
@@ -564,8 +677,12 @@ const THEME_STORAGE_KEY = "mvp_ui3_theme";
 const VALID_THEMES = ["starship", "blackwhite", "neon", "acidtrip"];
 const CONTROL_SLIDER_COUNT = 6;
 const CONTROL_QUICK_BUTTON_COUNT = 5;
-const SLIDER_ASSIGN_STORAGE_KEY = "mvp_ui3_slider_assignments_v1";
-const QUICK_BUTTON_ASSIGN_STORAGE_KEY = "mvp_ui3_quick_button_assignments_v1";
+const SLIDER_ASSIGN_STORAGE_KEY_CONTROL1 = "mvp_ui3_slider_assignments_control1_v2";
+const SLIDER_ASSIGN_STORAGE_KEY_CONTROL2 = "mvp_ui3_slider_assignments_control2_v2";
+const QUICK_BUTTON_ASSIGN_STORAGE_KEY_CONTROL1 = "mvp_ui3_quick_button_assignments_control1_v2";
+const QUICK_BUTTON_ASSIGN_STORAGE_KEY_CONTROL2 = "mvp_ui3_quick_button_assignments_control2_v2";
+const LEGACY_SLIDER_ASSIGN_STORAGE_KEY = "mvp_ui3_slider_assignments_v1";
+const LEGACY_QUICK_BUTTON_ASSIGN_STORAGE_KEY = "mvp_ui3_quick_button_assignments_v1";
 const DEAD_AHEAD_STORAGE_KEY = "mvp_ui3_dead_ahead_cfg_v1";
 const sliderUiState = Array.from({ length: CONTROL_SLIDER_COUNT }, () => ({ pending:null, appliedUntil:0 }));
 const FAST_SLIDER_COMMANDS = [
@@ -576,13 +693,17 @@ const FAST_SLIDER_COMMANDS = [
 const SLOW_SLIDER_COMMANDS = [
   "motors_on", "control_mode", "lens_select", "source_zoom", "source_focus", "source_iris",
   "filter_enable_focus", "filter_enable_iris", "filter_num", "filter_den", "gyro_heading_correction", "wash_wipe",
+  "pan_accel", "tilt_accel", "roll_accel", "pan_gain", "tilt_gain", "roll_gain",
+  "da_enabled", "da_yaw_range", "da_pitch_range", "da_roll_range", "da_deadband", "da_speed",
 ];
 const FAST_QUICK_COMMANDS = ["shape_invert_yaw", "shape_invert_pitch", "shape_invert_roll"];
 const SLOW_QUICK_COMMANDS = [
   "motors_on", "control_mode", "lens_select", "source_zoom", "source_focus", "source_iris",
   "filter_enable_focus", "filter_enable_iris", "wash_wipe",
 ];
-let sliderAssignments = [
+const SLOW_ROW_COMMANDS = SLOW_SLIDER_COMMANDS.slice();
+const FAST_ROW_COMMANDS = FAST_SLIDER_COMMANDS.slice();
+const DEFAULT_SLIDER_ASSIGNMENTS = [
   "fast:shape_top_speed_yaw",
   "fast:shape_top_speed_pitch",
   "fast:shape_top_speed_roll",
@@ -590,18 +711,35 @@ let sliderAssignments = [
   "slow:gyro_heading_correction",
   "slow:filter_num",
 ];
-let quickButtonAssignments = [
+const DEFAULT_QUICK_BUTTON_ASSIGNMENTS = [
   "none:none",
   "none:none",
   "none:none",
   "none:none",
   "none:none",
 ];
+let assignmentEditBank = "control";
+let slowRowActiveIndex = 0;
+let fastRowActiveIndex = 0;
+let controlBanks = {
+  control: {
+    sliders: DEFAULT_SLIDER_ASSIGNMENTS.slice(),
+    quick: DEFAULT_QUICK_BUTTON_ASSIGNMENTS.slice(),
+  },
+  control2: {
+    sliders: DEFAULT_SLIDER_ASSIGNMENTS.slice(),
+    quick: DEFAULT_QUICK_BUTTON_ASSIGNMENTS.slice(),
+  },
+};
 let deadAheadCfg = { yaw_range: 10, pitch_range: 10, roll_range: 10, deadband: 2, speed: 5, enabled: false };
 
 function $(id){ return document.getElementById(id); }
 function send(obj){ if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj)); }
-function setEvent(text){ $("eventLog").textContent = `Event: ${text}`; }
+function setEvent(text){
+  const el = $("eventLog");
+  if (el) el.textContent = `Event: ${text}`;
+}
+function hasDeadAheadKey(key){ return String(key || "").startsWith("da_"); }
 function cloneJson(v){ return JSON.parse(JSON.stringify(v)); }
 
 function updateDisconnectButtonState(){
@@ -637,6 +775,35 @@ function loadDeadAheadCfg(){
 
 function saveDeadAheadCfg(){
   try { localStorage.setItem(DEAD_AHEAD_STORAGE_KEY, JSON.stringify(deadAheadCfg)); } catch {}
+}
+
+function controlBankForPage(page){
+  return String(page || "") === "control2" ? "control2" : "control";
+}
+
+function getControlBank(bankName){
+  const b = String(bankName || "control");
+  return controlBanks[b] || controlBanks.control;
+}
+
+function activeControlBankName(){
+  return controlBankForPage(currentPage);
+}
+
+function activeSliderAssignments(){
+  return getControlBank(activeControlBankName()).sliders;
+}
+
+function activeQuickAssignments(){
+  return getControlBank(activeControlBankName()).quick;
+}
+
+function editingSliderAssignments(){
+  return getControlBank(assignmentEditBank).sliders;
+}
+
+function editingQuickAssignments(){
+  return getControlBank(assignmentEditBank).quick;
 }
 
 function setSelectValueIfExists(id, value){
@@ -709,30 +876,110 @@ function initDeadAheadControls(){
   updateLockoffButton();
 }
 
-function readSliderAssignments(){
+function _readAssignmentArray(storageKey, expectedLen, fallbackArr){
   try {
-    const raw = JSON.parse(localStorage.getItem(SLIDER_ASSIGN_STORAGE_KEY) || "null");
-    if (Array.isArray(raw) && raw.length === CONTROL_SLIDER_COUNT){
-      sliderAssignments = raw.map(v => String(v || "none:none"));
+    const raw = JSON.parse(localStorage.getItem(storageKey) || "null");
+    if (Array.isArray(raw) && raw.length === expectedLen){
+      return raw.map(v => String(v || "none:none"));
     }
   } catch {}
+  return fallbackArr.slice();
 }
 
-function saveSliderAssignments(){
-  try { localStorage.setItem(SLIDER_ASSIGN_STORAGE_KEY, JSON.stringify(sliderAssignments)); } catch {}
+function _saveAssignmentArray(storageKey, arr){
+  try { localStorage.setItem(storageKey, JSON.stringify(arr)); } catch {}
+}
+
+function readSliderAssignments(){
+  const legacy = _readAssignmentArray(LEGACY_SLIDER_ASSIGN_STORAGE_KEY, CONTROL_SLIDER_COUNT, DEFAULT_SLIDER_ASSIGNMENTS);
+  controlBanks.control.sliders = _readAssignmentArray(SLIDER_ASSIGN_STORAGE_KEY_CONTROL1, CONTROL_SLIDER_COUNT, legacy);
+  controlBanks.control2.sliders = _readAssignmentArray(SLIDER_ASSIGN_STORAGE_KEY_CONTROL2, CONTROL_SLIDER_COUNT, DEFAULT_SLIDER_ASSIGNMENTS);
+}
+
+function saveSliderAssignments(bankName){
+  const bank = String(bankName || assignmentEditBank || "control");
+  const key = bank === "control2" ? SLIDER_ASSIGN_STORAGE_KEY_CONTROL2 : SLIDER_ASSIGN_STORAGE_KEY_CONTROL1;
+  _saveAssignmentArray(key, getControlBank(bank).sliders);
 }
 
 function readQuickButtonAssignments(){
-  try {
-    const raw = JSON.parse(localStorage.getItem(QUICK_BUTTON_ASSIGN_STORAGE_KEY) || "null");
-    if (Array.isArray(raw) && raw.length === CONTROL_QUICK_BUTTON_COUNT){
-      quickButtonAssignments = raw.map(v => String(v || "none:none"));
-    }
-  } catch {}
+  const legacy = _readAssignmentArray(LEGACY_QUICK_BUTTON_ASSIGN_STORAGE_KEY, CONTROL_QUICK_BUTTON_COUNT, DEFAULT_QUICK_BUTTON_ASSIGNMENTS);
+  controlBanks.control.quick = _readAssignmentArray(QUICK_BUTTON_ASSIGN_STORAGE_KEY_CONTROL1, CONTROL_QUICK_BUTTON_COUNT, legacy);
+  controlBanks.control2.quick = _readAssignmentArray(QUICK_BUTTON_ASSIGN_STORAGE_KEY_CONTROL2, CONTROL_QUICK_BUTTON_COUNT, DEFAULT_QUICK_BUTTON_ASSIGNMENTS);
 }
 
-function saveQuickButtonAssignments(){
-  try { localStorage.setItem(QUICK_BUTTON_ASSIGN_STORAGE_KEY, JSON.stringify(quickButtonAssignments)); } catch {}
+function saveQuickButtonAssignments(bankName){
+  const bank = String(bankName || assignmentEditBank || "control");
+  const key = bank === "control2" ? QUICK_BUTTON_ASSIGN_STORAGE_KEY_CONTROL2 : QUICK_BUTTON_ASSIGN_STORAGE_KEY_CONTROL1;
+  _saveAssignmentArray(key, getControlBank(bank).quick);
+}
+
+function normalizeSliderBinding(raw){
+  const token = String(raw || "none:none");
+  const [mode, key] = token.split(":");
+  if (mode === "fast" && FAST_SLIDER_COMMANDS.includes(String(key || ""))) return `fast:${key}`;
+  if (mode === "slow" && SLOW_SLIDER_COMMANDS.includes(String(key || ""))) return `slow:${key}`;
+  return "none:none";
+}
+
+function normalizeQuickBinding(raw){
+  const token = String(raw || "none:none");
+  const [mode, key] = token.split(":");
+  if (mode === "fast" && FAST_QUICK_COMMANDS.includes(String(key || ""))) return `fast:${key}`;
+  if (mode === "slow" && SLOW_QUICK_COMMANDS.includes(String(key || ""))) return `slow:${key}`;
+  return "none:none";
+}
+
+function normalizeBindingArray(raw, expectedLen, fallback, normalizer){
+  if (!Array.isArray(raw)) return fallback.slice();
+  const out = [];
+  for (let i = 0; i < expectedLen; i++){
+    out.push(normalizer(raw[i]));
+  }
+  return out;
+}
+
+function currentThemeName(){
+  const sel = $("themeSelect");
+  if (sel && sel.value) return String(sel.value);
+  try { return String(localStorage.getItem(THEME_STORAGE_KEY) || "starship"); } catch {}
+  return "starship";
+}
+
+function getProfileUiPreferencesSnapshot(){
+  return {
+    theme: currentThemeName(),
+    control_banks: {
+      control: {
+        sliders: getControlBank("control").sliders.slice(),
+        quick: getControlBank("control").quick.slice(),
+      },
+      control2: {
+        sliders: getControlBank("control2").sliders.slice(),
+        quick: getControlBank("control2").quick.slice(),
+      },
+    },
+  };
+}
+
+function applyProfileUiPreferences(raw){
+  if (!raw || typeof raw !== "object") return;
+  const theme = String(raw.theme || "").toLowerCase();
+  if (VALID_THEMES.includes(theme)) applyTheme(theme);
+  const banks = raw.control_banks || {};
+  for (const bankName of ["control", "control2"]){
+    const src = banks[bankName];
+    if (!src || typeof src !== "object") continue;
+    const bank = getControlBank(bankName);
+    bank.sliders = normalizeBindingArray(src.sliders, CONTROL_SLIDER_COUNT, bank.sliders, normalizeSliderBinding);
+    bank.quick = normalizeBindingArray(src.quick, CONTROL_QUICK_BUTTON_COUNT, bank.quick, normalizeQuickBinding);
+    saveSliderAssignments(bankName);
+    saveQuickButtonAssignments(bankName);
+  }
+  buildSliderAssignControls();
+  buildQuickButtonAssignControls();
+  renderControlSliders(true);
+  renderControlQuickButtons();
 }
 
 function sliderCommandMeta(mode, key){
@@ -751,6 +998,12 @@ function sliderCommandMeta(mode, key){
     if (key === "filter_num" || key === "filter_den") return { type:"enum", values:[1,2,4,8,16], labels:["1","2","4","8","16"] };
     if (key === "gyro_heading_correction") return { min:-8192, max:8192, step:1024 };
     if (key === "wash_wipe") return { type:"enum", values:["parked","wiping"], labels:["WASH PARK","WASH WIPE"] };
+    if (key === "pan_accel" || key === "tilt_accel" || key === "roll_accel") return { min:0, max:255, step:1 };
+    if (key === "pan_gain" || key === "tilt_gain" || key === "roll_gain") return { min:0, max:255, step:1 };
+    if (key === "da_enabled") return { type:"enum", values:[0,1], labels:["OFF","ON"] };
+    if (key === "da_yaw_range" || key === "da_pitch_range" || key === "da_roll_range") return { type:"enum", values:[5,10,15,20,30,40,50,60], labels:["5","10","15","20","30","40","50","60"] };
+    if (key === "da_deadband") return { type:"enum", values:[0,1,2,3,4,5,6,8,10], labels:["0","1","2","3","4","5","6","8","10"] };
+    if (key === "da_speed") return { type:"enum", values:[1,2,3,4,5,6,7,8,9,10], labels:["1","2","3","4","5","6","7","8","9","10"] };
     return { min:0, max:10, step:1 };
   }
   return { min:0, max:10, step:1 };
@@ -832,6 +1085,18 @@ function sliderDisplayLabel(key){
     filter_den: "FILTER DEN",
     gyro_heading_correction: "PAN TRIM",
     wash_wipe: "WASH/WIPE",
+    pan_accel: "PAN ACCEL",
+    tilt_accel: "TILT ACCEL",
+    roll_accel: "ROLL ACCEL",
+    pan_gain: "PAN GAIN",
+    tilt_gain: "TILT GAIN",
+    roll_gain: "ROLL GAIN",
+    da_enabled: "DA MODE",
+    da_yaw_range: "DA YAW RANGE",
+    da_pitch_range: "DA PITCH RANGE",
+    da_roll_range: "DA ROLL RANGE",
+    da_deadband: "DA DEAD-BAND",
+    da_speed: "DA SPEED",
     shape_invert_yaw: "PAN INVERT",
     shape_invert_pitch: "TILT INVERT",
     shape_invert_roll: "ROLL INVERT",
@@ -844,6 +1109,12 @@ function getSliderReadbackValue(mode, key){
     return getSlotValue({ commandKey: key });
   }
   if (mode === "slow"){
+    if (key === "da_enabled") return deadAheadCfg.enabled ? 1 : 0;
+    if (key === "da_yaw_range") return Number(deadAheadCfg.yaw_range ?? 10);
+    if (key === "da_pitch_range") return Number(deadAheadCfg.pitch_range ?? 10);
+    if (key === "da_roll_range") return Number(deadAheadCfg.roll_range ?? 10);
+    if (key === "da_deadband") return Number(deadAheadCfg.deadband ?? 2);
+    if (key === "da_speed") return Number(deadAheadCfg.speed ?? 5);
     const hs = (((state.head_feedback || {}).slow) || {});
     if (hs[key] !== undefined) return hs[key];
     return (state.slow_controls || {})[key];
@@ -857,6 +1128,19 @@ function applyFastSliderValue(commandKey, value){
 }
 
 function applySlowSliderValue(commandKey, value){
+  if (hasDeadAheadKey(commandKey)){
+    if (commandKey === "da_enabled") deadAheadCfg.enabled = !!Number(value);
+    else if (commandKey === "da_yaw_range") deadAheadCfg.yaw_range = Number(value) || 10;
+    else if (commandKey === "da_pitch_range") deadAheadCfg.pitch_range = Number(value) || 10;
+    else if (commandKey === "da_roll_range") deadAheadCfg.roll_range = Number(value) || 10;
+    else if (commandKey === "da_deadband") deadAheadCfg.deadband = Number(value) || 0;
+    else if (commandKey === "da_speed") deadAheadCfg.speed = Number(value) || 5;
+    saveDeadAheadCfg();
+    if (commandKey === "da_enabled") sendDeadAheadMode();
+    else sendDeadAheadConfig();
+    updateLockoffButton();
+    return;
+  }
   send({ type: "SET_SLOW_CONTROL", key: commandKey, value });
 }
 
@@ -864,6 +1148,7 @@ function buildSliderAssignControls(){
   const host = $("sliderAssignGrid");
   if (!host) return;
   host.innerHTML = "";
+  const assignments = editingSliderAssignments();
   for (let i = 0; i < CONTROL_SLIDER_COUNT; i++){
     const row = document.createElement("div");
     row.className = "slider-assign-row";
@@ -889,11 +1174,11 @@ function buildSliderAssignControls(){
     sel.appendChild(noneOpt);
     addGroup("Fast", "fast", FAST_SLIDER_COMMANDS);
     addGroup("Slow", "slow", SLOW_SLIDER_COMMANDS);
-    sel.value = sliderAssignments[i] || "none:none";
+    sel.value = assignments[i] || "none:none";
     sel.onchange = () => {
-      sliderAssignments[i] = sel.value;
+      assignments[i] = sel.value;
       sliderUiState[i] = { pending:null, appliedUntil:0 };
-      saveSliderAssignments();
+      saveSliderAssignments(assignmentEditBank);
       renderControlSliders(true);
     };
     row.appendChild(label);
@@ -906,6 +1191,7 @@ function buildQuickButtonAssignControls(){
   const host = $("quickButtonAssignGrid");
   if (!host) return;
   host.innerHTML = "";
+  const assignments = editingQuickAssignments();
   for (let i = 0; i < CONTROL_QUICK_BUTTON_COUNT; i++){
     const row = document.createElement("div");
     row.className = "slider-assign-row";
@@ -932,10 +1218,10 @@ function buildQuickButtonAssignControls(){
     sel.appendChild(noneOpt);
     addGroup("Fast", "fast", FAST_QUICK_COMMANDS);
     addGroup("Slow", "slow", SLOW_QUICK_COMMANDS);
-    sel.value = quickButtonAssignments[i] || "none:none";
+    sel.value = assignments[i] || "none:none";
     sel.onchange = () => {
-      quickButtonAssignments[i] = sel.value;
-      saveQuickButtonAssignments();
+      assignments[i] = sel.value;
+      saveQuickButtonAssignments(assignmentEditBank);
       renderControlQuickButtons();
     };
     row.appendChild(label);
@@ -959,7 +1245,8 @@ function buildControlQuickButtons(){
 }
 
 function triggerQuickButton(i){
-  const binding = String(quickButtonAssignments[i] || "none:none");
+  const quick = activeQuickAssignments();
+  const binding = String(quick[i] || "none:none");
   const [mode, key] = binding.split(":");
   if (!mode || mode === "none" || !key || key === "none"){
     setEvent(`quick B${i + 1}: unassigned`);
@@ -983,10 +1270,11 @@ function triggerQuickButton(i){
 }
 
 function renderControlQuickButtons(){
+  const quick = activeQuickAssignments();
   for (let i = 0; i < CONTROL_QUICK_BUTTON_COUNT; i++){
     const b = $(`controlQuickBtn_${i}`);
     if (!b) continue;
-    const binding = String(quickButtonAssignments[i] || "none:none");
+    const binding = String(quick[i] || "none:none");
     const [mode, key] = binding.split(":");
     if (!mode || mode === "none" || !key || key === "none"){
       b.textContent = `B${i + 1}: Unassigned`;
@@ -1050,6 +1338,7 @@ const LIVE_SPEED_AXIS_KEYS = {
   shape_top_speed_yaw: "yaw",
   shape_top_speed_pitch: "pitch",
   shape_top_speed_roll: "roll",
+  shape_top_speed_zoom: "zoom",
 };
 
 function clamp(v, min, max){
@@ -1079,18 +1368,22 @@ function pickFirstNormalized(obj, keys){
 }
 
 function readLiveAxisSignal(axis){
+  const headConnected = String((((state.connection_status || {}).head || {}).state || "")).toLowerCase() === "connected";
   const bgc = ((state.head_feedback || {}).bgc) || {};
   const keyMap = {
     yaw: ["yaw_cmd_norm","yaw_norm","yaw_cmd","yaw","pan_cmd_norm","pan_cmd","pan"],
     pitch: ["pitch_cmd_norm","pitch_norm","pitch_cmd","pitch","tilt_cmd_norm","tilt_cmd","tilt"],
     roll: ["roll_cmd_norm","roll_norm","roll_cmd","roll"],
+    zoom: ["zoom_cmd_norm","zoom_norm","zoom_cmd","zoom"],
   };
-  const picked = pickFirstNormalized(bgc, keyMap[axis] || []);
-  if (picked != null) return picked;
+  if (headConnected){
+    const picked = pickFirstNormalized(bgc, keyMap[axis] || []);
+    if (picked != null) return picked;
+  }
   // Fallback: show local joystick movement if telemetry command echo is unavailable.
   const gp = (navigator.getGamepads && navigator.getGamepads()[0]) || null;
   if (!gp || !gp.axes) return 0;
-  const axisIndex = axis === "yaw" ? 0 : (axis === "pitch" ? 1 : 2);
+  const axisIndex = axis === "yaw" ? 0 : (axis === "pitch" ? 1 : (axis === "roll" ? 2 : 5));
   return clamp(Number(gp.axes[axisIndex]) || 0, -1, 1);
 }
 
@@ -1130,7 +1423,8 @@ function startLiveSliderLoop(){
     if (ts - lastMs >= 50){
       lastMs = ts;
       for (let i = 0; i < CONTROL_SLIDER_COUNT; i++){
-        const binding = String(sliderAssignments[i] || "none:none");
+        const sliders = activeSliderAssignments();
+        const binding = String(sliders[i] || "none:none");
         const [mode, key] = binding.split(":");
         if (mode && mode !== "none" && key && key !== "none"){
           safeRenderSliderLiveBar(i, key);
@@ -1145,7 +1439,8 @@ function startLiveSliderLoop(){
 }
 
 function commitControlSlider(i){
-  const binding = String(sliderAssignments[i] || "none:none");
+  const sliders = activeSliderAssignments();
+  const binding = String(sliders[i] || "none:none");
   const [mode, key] = binding.split(":");
   if (!mode || mode === "none" || !key || key === "none") return;
   const slider = $(`controlSlider_${i}`);
@@ -1170,8 +1465,9 @@ function renderControlSliders(forceBuild=false){
   const host = $("controlSliderGrid");
   if (!host) return;
   if (forceBuild || !$("controlSlider_0")) buildControlSliders();
+  const sliders = activeSliderAssignments();
   for (let i = 0; i < CONTROL_SLIDER_COUNT; i++){
-    const binding = String(sliderAssignments[i] || "none:none");
+    const binding = String(sliders[i] || "none:none");
     const [mode, key] = binding.split(":");
     const card = $(`controlSliderCard_${i}`);
     const slider = $(`controlSlider_${i}`);
@@ -1212,6 +1508,89 @@ function renderControlSliders(forceBuild=false){
     val.textContent = formatSliderValue(mode, key, readback);
     if (ui.appliedUntil > Date.now()) card.classList.add("applied");
   }
+}
+
+function commandValueToNormalized10(mode, key, value){
+  const meta = sliderCommandMeta(mode, key);
+  if (meta.type === "enum"){
+    const values = meta.values || [];
+    const idx = values.findIndex(v => String(v) === String(value));
+    if (idx < 0 || values.length <= 1) return 0;
+    return clamp((idx * 10 / (values.length - 1)), 0, 10);
+  }
+  const min = Number(meta.min ?? 0);
+  const max = Number(meta.max ?? 10);
+  const n = Number(value);
+  if (!Number.isFinite(n) || max <= min) return 0;
+  return clamp(((n - min) / (max - min)) * 10, 0, 10);
+}
+
+function normalized10ToCommandValue(mode, key, norm){
+  const meta = sliderCommandMeta(mode, key);
+  const n = clamp(Number(norm), 0, 10);
+  if (meta.type === "enum"){
+    const values = meta.values || [];
+    if (!values.length) return null;
+    if (values.length === 1) return values[0];
+    const idx = Math.max(0, Math.min(values.length - 1, Math.round((n / 10) * (values.length - 1))));
+    return values[idx];
+  }
+  const min = Number(meta.min ?? 0);
+  const max = Number(meta.max ?? 10);
+  const step = Number(meta.step ?? 1);
+  if (max <= min) return min;
+  const raw = min + ((n / 10) * (max - min));
+  const snapped = Math.round(raw / step) * step;
+  if (Math.abs(step - Math.round(step)) < 1e-9) return Math.round(snapped);
+  return Number(snapped.toFixed(3));
+}
+
+function renderCommandRows(page){
+  const isSlow = String(page || "") === "slow";
+  const host = $(isSlow ? "slowControlRows" : "fastControlRows");
+  if (!host) return;
+  const mode = isSlow ? "slow" : "fast";
+  const keys = isSlow ? SLOW_ROW_COMMANDS : FAST_ROW_COMMANDS;
+  const activeIdx = isSlow ? slowRowActiveIndex : fastRowActiveIndex;
+  host.innerHTML = "";
+  for (let i = 0; i < keys.length; i++){
+    const key = keys[i];
+    const readback = getSliderReadbackValue(mode, key);
+    const norm = commandValueToNormalized10(mode, key, readback);
+    const row = document.createElement("div");
+    row.className = "command-row" + (i === activeIdx ? " active" : "");
+    row.onclick = () => {
+      if (isSlow) slowRowActiveIndex = i;
+      else fastRowActiveIndex = i;
+      renderCommandRows(page);
+    };
+    const name = document.createElement("div");
+    name.className = "command-row-name";
+    name.textContent = sliderDisplayLabel(key);
+    const value = document.createElement("div");
+    value.className = "command-row-value";
+    value.textContent = String(Math.round(norm));
+    row.appendChild(name);
+    row.appendChild(value);
+    host.appendChild(row);
+  }
+}
+
+function adjustActiveCommandRow(page, dir){
+  const isSlow = String(page || "") === "slow";
+  const mode = isSlow ? "slow" : "fast";
+  const keys = isSlow ? SLOW_ROW_COMMANDS : FAST_ROW_COMMANDS;
+  if (!keys.length) return;
+  const idx = isSlow ? slowRowActiveIndex : fastRowActiveIndex;
+  const key = keys[Math.max(0, Math.min(keys.length - 1, idx))];
+  const readback = getSliderReadbackValue(mode, key);
+  const currentNorm = commandValueToNormalized10(mode, key, readback);
+  // UI_INPUT_SCALING_RULE.md default: coarse normalized 0..10, step=1, no wrap.
+  const nextNorm = clamp(Math.round(currentNorm) + (dir > 0 ? 1 : -1), 0, 10);
+  const cmdValue = normalized10ToCommandValue(mode, key, nextNorm);
+  if (mode === "fast") applyFastSliderValue(key, cmdValue);
+  else applySlowSliderValue(key, cmdValue);
+  renderCommandRows(page);
 }
 
 function updateHeadIdStatus(connectionStatus){
@@ -1257,40 +1636,6 @@ function updateHeadIdBox(){
   const idx = Number(state.selected) || 0;
   const label = (state.heads && state.heads[idx]) ? getHeadLabel(idx) : "";
   box.value = label || "No Head";
-}
-
-function renderInputTests(){
-  const grid = $("inputTestGrid");
-  if (!grid) return;
-  grid.innerHTML = "";
-  for (let i = 0; i < 15; i++){
-    const b = document.createElement("div");
-    b.className = "input-test-btn" + (inputPressed[i] ? " active" : "");
-    b.innerHTML =
-      `<div class="input-test-label">Btn ${i}</div>` +
-      `<div class="input-test-count">Raw:${inputRawRiseCount[i]} Acc:${inputAcceptedRiseCount[i]}</div>` +
-      `<div class="input-test-count">Deb:${inputSuppressedDebounceCount[i]} Grp:${inputSuppressedGroupCount[i]}</div>`;
-    grid.appendChild(b);
-  }
-  $("inputDebounceMs").value = String(inputDebounceMs);
-  $("inputGroupLockoutMs").value = String(inputGroupLockoutMs);
-  const active = inputPressed.reduce((n, v) => n + (v ? 1 : 0), 0);
-  const sumRaw = inputRawRiseCount.reduce((a, b) => a + b, 0);
-  const sumAcc = inputAcceptedRiseCount.reduce((a, b) => a + b, 0);
-  const sumDeb = inputSuppressedDebounceCount.reduce((a, b) => a + b, 0);
-  const sumGrp = inputSuppressedGroupCount.reduce((a, b) => a + b, 0);
-  $("encoderValueSummary").textContent = `Encoder values: E1=${encoderTestValue[0]} E2=${encoderTestValue[1]} E3=${encoderTestValue[2]} E4=${encoderTestValue[3]} E5=${encoderTestValue[4]}`;
-  $("inputTestSummary").textContent = `Input tests: active=${active} debounce=${inputDebounceMs}ms group_lockout=${inputGroupLockoutMs}ms raw=${sumRaw} accepted=${sumAcc} suppressed(deb/group)=${sumDeb}/${sumGrp}`;
-}
-
-function applyEncoderTestValue(colIdx, kind){
-  if (colIdx < 0 || colIdx >= encoderTestValue.length) return;
-  let v = encoderTestValue[colIdx] || 0;
-  if (kind === "cw") v += 1;
-  else if (kind === "ccw") v -= 1;
-  if (v < 0) v = 0;
-  if (v > 10) v = 10;
-  encoderTestValue[colIdx] = v;
 }
 
 function getColumn(i){ return LAYOUT.columns[i] || { id:`C${i+1}`, title:`Column ${i+1}`, positions:[] }; }
@@ -1434,6 +1779,54 @@ function openHeadPicker(){
   $("headPicker").classList.add("open");
 }
 
+function closeHeadConfigEditor(){ $("headConfigEditor").classList.remove("open"); }
+
+function openHeadConfigEditor(){
+  renderIpConfigTable();
+  $("headConfigEditor").classList.add("open");
+}
+
+function closeProfileEditor(){ $("profileEditor").classList.remove("open"); }
+
+function renderProfileList(){
+  const host = $("profileList");
+  if (!host) return;
+  host.innerHTML = "";
+  const profiles = ((((state.ui_config || {}).profiles) || {}).names) || [];
+  const active = String(((((state.ui_config || {}).profiles) || {}).active) || "");
+  for (const name of profiles){
+    const row = document.createElement("div");
+    row.className = "profile-row";
+    const badge = document.createElement("div");
+    badge.className = "info";
+    badge.style.flex = "1";
+    badge.style.maxHeight = "unset";
+    badge.textContent = name + (active === name ? " (active)" : "");
+    const loadBtn = document.createElement("button");
+    loadBtn.type = "button";
+    loadBtn.textContent = "Load";
+    loadBtn.onclick = () => send({ type: "LOAD_USER_PROFILE", name });
+    row.appendChild(badge);
+    row.appendChild(loadBtn);
+    host.appendChild(row);
+  }
+  if (!profiles.length){
+    const empty = document.createElement("div");
+    empty.className = "info";
+    empty.style.maxHeight = "unset";
+    empty.textContent = "No profiles saved.";
+    host.appendChild(empty);
+  }
+}
+
+function openProfileEditor(){
+  const active = String(((((state.ui_config || {}).profiles) || {}).active) || "");
+  $("profileNameInput").value = active || "";
+  renderProfileList();
+  $("profileEditor").classList.add("open");
+  send({ type: "LIST_USER_PROFILES" });
+}
+
 function renderHeadPickerList(){
   const list = $("headPickerList");
   if (!list) return;
@@ -1488,43 +1881,60 @@ function buildHeads(){
   renderHeadPickerList();
 }
 
-const DOCK_PAGE_BY_INDEX = ["control", "slow", "fast", "ipconfig", "inputtests"];
-const PAGE_COLUMN_BY_PAGE = { slow: 1, fast: 2 };
+const DOCK_PAGE_BY_INDEX = ["control", "control2", "slow", "fast", "inputtests"];
 const DOCK_LABEL_BY_PAGE = {
   control: "Control",
+  control2: "Control 2",
   slow: "Slow",
   fast: "Fast",
-  ipconfig: "Network",
   inputtests: "Engineering",
 };
+function updateNavVisualLink(page){
+  const p = String(page || "control");
+  let idx = DOCK_PAGE_BY_INDEX.indexOf(p);
+  if (idx < 0 && p === "ipconfig"){
+    idx = DOCK_PAGE_BY_INDEX.indexOf("inputtests");
+  }
+  if (idx < 0) idx = 0;
+  const x = `${(idx * 20) + 10}%`;
+  document.documentElement.style.setProperty("--nav-link-x", x);
+  document.documentElement.style.setProperty("--nav-link-color", "#57a7ff");
+}
 
 function activatePage(page){
   const p = String(page || "control");
   currentPage = p;
+  if (p === "control" || p === "control2"){
+    assignmentEditBank = p;
+  }
+  const bankSel = $("assignmentBankSelect");
+  if (bankSel) bankSel.value = assignmentEditBank;
+  updateNavVisualLink(p);
   document.querySelectorAll(".tab").forEach(x => x.classList.toggle("active", x.getAttribute("data-page") === p));
   document.querySelectorAll(".page").forEach(x => x.classList.remove("active"));
-  const pageEl = $(`page-${p}`);
+  const pageDomKey = (p === "control2") ? "control" : p;
+  const pageEl = $(`page-${pageDomKey}`);
   if (pageEl) pageEl.classList.add("active");
-  const colIdx = PAGE_COLUMN_BY_PAGE[p];
-  if (Number.isInteger(colIdx)){
-    activeColumn = colIdx;
-    mode = "position";
-    clearActiveValueFreeze();
-  } else {
-    activeColumn = null;
-    mode = "position";
-    clearActiveValueFreeze();
-  }
+  // Page navigation should show page content directly; keep encoder popup closed.
+  activeColumn = null;
+  mode = "position";
+  clearActiveValueFreeze();
+  buildSliderAssignControls();
+  buildQuickButtonAssignControls();
+  renderCommandRows("slow");
+  renderCommandRows("fast");
   renderPopup();
 }
 
 function buildDock(){
   const grid = $("dockGrid");
   grid.innerHTML = "";
+  const activeKey = currentPage === "ipconfig" ? "inputtests" : currentPage;
   for (let i = 0; i < 5; i++){
     const b = document.createElement("button");
     const pageKey = DOCK_PAGE_BY_INDEX[i] || "control";
-    b.className = "dock-btn" + (currentPage === pageKey ? " active" : "");
+    b.className = "dock-btn" + (activeKey === pageKey ? " active" : "");
+    b.setAttribute("data-encoder", `E${i + 1}`);
     b.textContent = DOCK_LABEL_BY_PAGE[pageKey] || `C${i + 1}`;
     b.onclick = () => activatePage(pageKey);
     grid.appendChild(b);
@@ -1533,148 +1943,56 @@ function buildDock(){
 
 function renderPopup(){
   buildDock();
-  const popup = $("popup");
-  if (activeColumn === null){
-    popup.classList.remove("open");
-    $("focusState").textContent = "Column popup: minimized";
-    $("activeSlotState").textContent = "Active slot: none";
-    $("activeValueState").textContent = "Active value: -";
-    return;
-  }
-  popup.classList.add("open");
-  const col = getColumn(activeColumn);
-  $("popupTitle").textContent = `${col.id} - ${col.title}`;
-  $("popupMode").textContent = mode === "position" ? "POSITION SELECT" : "VALUE EDIT";
-  $("popupMode").className = "popup-mode " + (mode === "position" ? "position" : "");
-  $("focusState").textContent = `Column popup: ${col.id}`;
-  const positions = $("positions");
-  positions.innerHTML = "";
-  const activePos = activePosIndexByColumn[activeColumn] || 0;
-  for (let p = 0; p < POS_PER_COL; p++){
-    const pos = getPosition(activeColumn, p);
-    const raw = getSlotValue(pos);
-    const div = document.createElement("div");
-    div.className = "pos" + (p === activePos ? " active" : "") + (mode === "value" && p === activePos ? " value-edit" : "");
-    div.onclick = () => { activePosIndexByColumn[activeColumn] = p; renderPopup(); };
-    div.innerHTML = `<div class="addr">${pos.id}</div><div class="label">${pos.label || "Spare"}</div><div class="val">${valueToLabel(pos, raw)}</div>`;
-    positions.appendChild(div);
-  }
-  const slot = getPosition(activeColumn, activePos);
-  const raw = getSlotValue(slot);
-  $("activeSlotState").textContent = `Active slot: ${slot.id} (${slot.label || "Spare"})`;
-  $("activeValueState").textContent = `Active value: ${valueToLabel(slot, raw)} (${raw === null ? "-" : raw})`;
-  $("encoderState").textContent = `Encoder mode: ${mode}${isHighResSlot(slot) ? " (high-res)" : ""}`;
+  const focus = $("focusState");
+  const slot = $("activeSlotState");
+  const val = $("activeValueState");
+  const enc = $("encoderState");
+  if (focus) focus.textContent = "Popup editing disabled";
+  if (slot) slot.textContent = "Active slot: none";
+  if (val) val.textContent = "Active value: -";
+  if (enc) enc.textContent = "Encoder mode: page navigation + slow/fast row adjust";
 }
 
 function openPopup(colIdx){
-  activeColumn = colIdx;
-  mode = "position";
-  clearActiveValueFreeze();
-  if (colIdx === 1) currentPage = "slow";
-  else if (colIdx === 2) currentPage = "fast";
-  renderPopup();
+  const pageKey = DOCK_PAGE_BY_INDEX[colIdx] || "control";
+  activatePage(pageKey);
 }
 
 function closePopup(){
   activeColumn = null;
   mode = "position";
   clearActiveValueFreeze();
-  if (currentPage === "slow" || currentPage === "fast") currentPage = "control";
   renderPopup();
 }
 
 function cyclePosition(dir){
-  if (activeColumn === null) return;
-  clearActiveValueFreeze();
-  let n = (activePosIndexByColumn[activeColumn] || 0) + dir;
-  if (n < 0) n = 0;
-  if (n >= POS_PER_COL) n = POS_PER_COL - 1;
-  activePosIndexByColumn[activeColumn] = n;
-  renderPopup();
+  return;
 }
 
 function cycleValue(dir){
-  if (activeColumn === null) return;
-  const p = activePosIndexByColumn[activeColumn] || 0;
-  const slot = getPosition(activeColumn, p);
-  if (!slot.commandKey || !slot.values?.length) return;
-  const vals = slot.values;
-  let idx = valueIndexForSlot(slot);
-  if (idx < 0) idx = 0;
-  idx += dir;
-  if (idx < 0) idx = 0;
-  if (idx >= vals.length) idx = vals.length - 1;
-  if (slot.commandKey.startsWith("shape_")) {
-    const v = vals[idx].value;
-    setCommandValue(slot.commandKey, v);
-    updateActiveValueFreeze(slot, v);
-  } else {
-    const v = vals[idx].value;
-    setCommandValue(slot.commandKey, v);
-    updateActiveValueFreeze(slot, v);
-  }
-  if (controlClassForSlot(slot) === "local") scheduleLocalAutoApply();
-  renderPopup();
+  return;
 }
 
 function commitActiveValue(){
-  if (activeColumn === null) return;
-  const p = activePosIndexByColumn[activeColumn] || 0;
-  const slot = getPosition(activeColumn, p);
-  if (!slot.commandKey || !slot.values?.length) return;
-  const v = getSlotValue(slot);
-  if (slot.commandKey.startsWith("shape_")) {
-    if (slot.commandKey === "shape_save_defaults") send({ type: "SAVE_USER_DEFAULTS" });
-    else if (slot.commandKey === "shape_reset_defaults") send({ type: "RESET_USER_DEFAULTS" });
-    else send({ type: "SET_SHAPING", value: state.shaping });
-    setEvent(`shape action ${slot.commandKey}`);
-    return;
-  }
-  if (slot.commandKey === "net_apply") { send({ type: "APPLY_NETWORK_CONFIG" }); return; }
-  if (slot.commandKey === "net_factory_reset") { send({ type: "FACTORY_RESET_NETWORK" }); return; }
-  if (slot.commandKey === "wifi_scan") { send({ type: "WIFI_SCAN" }); return; }
-  if (slot.commandKey === "wifi_disconnect") { send({ type: "WIFI_DISCONNECT" }); return; }
-  send({ type: "SET_SLOW_CONTROL", key: slot.commandKey, value: v });
-  setEvent(`set ${slot.commandKey}=${v}`);
+  return;
 }
 
 function onEncoderSwitch(colIdx){
   const pageKey = DOCK_PAGE_BY_INDEX[colIdx] || "control";
-  if (colIdx === 0 || colIdx === 3 || colIdx === 4){
-    activatePage(pageKey);
-    return;
-  }
-  if (currentPage !== pageKey){
-    activatePage(pageKey);
-    return;
-  }
-  if (activeColumn === null || activeColumn !== colIdx){ activeColumn = colIdx; mode = "position"; clearActiveValueFreeze(); renderPopup(); return; }
-  if (mode === "position"){ mode = "value"; const frozen = getFrozenActiveSlot(); activeValueFreeze = frozen ? { key: frozen.key, value: frozen.value } : null; renderPopup(); return; }
-  const p = activePosIndexByColumn[activeColumn] || 0;
-  const slot = getPosition(activeColumn, p);
-  if (controlClassForSlot(slot) !== "local") commitActiveValue();
-  else if (localAutoApplyTimer) flushLocalAutoApply();
-  mode = "position";
-  clearActiveValueFreeze();
-  renderPopup();
+  activatePage(pageKey);
 }
-function onEncoderTurn(colIdx, dir){ if (activeColumn === colIdx) (mode === "position" ? cyclePosition(dir) : cycleValue(dir)); }
+function onEncoderTurn(colIdx, dir){
+  if (currentPage === "slow" || currentPage === "fast"){
+    adjustActiveCommandRow(currentPage, dir);
+    return;
+  }
+}
 
 function processEncoderButtons(){
   const pads = navigator.getGamepads ? navigator.getGamepads() : [];
   const gp = pads && pads[0];
   if (!gp || !gp.buttons){ requestAnimationFrame(processEncoderButtons); return; }
   const now = performance.now();
-  for (let i = 0; i < 15; i++){
-    const pressed = gp.buttons[i] && gp.buttons[i].pressed ? 1 : 0;
-    const prev = prevButtonState[`raw_${i}`] || 0;
-    inputPressed[i] = pressed;
-    if (pressed && !prev){
-      inputRawRiseCount[i] += 1;
-      inputLastRiseMs[i] = now;
-    }
-    prevButtonState[`raw_${i}`] = pressed;
-  }
   for (const e of (LAYOUT.encoders || [])){
     const colIdx = Math.max(0, (e.column || 1) - 1);
     const map = [
@@ -1687,29 +2005,22 @@ function processEncoderButtons(){
       const pressed = gp.buttons[m.btn] && gp.buttons[m.btn].pressed ? 1 : 0;
       const prev = prevButtonState[m.id] || 0;
       if (pressed && !prev){
-        if (now - inputLastActionMs[m.btn] >= inputDebounceMs){
+        if (now - inputLastActionMs[m.btn] >= INPUT_DEBOUNCE_MS){
           const g = colIdx;
           const lastBtn = inputGroupLastBtn[g];
-          const withinGroupLockout = (now - inputGroupLastActionMs[g]) < inputGroupLockoutMs;
+          const withinGroupLockout = (now - inputGroupLastActionMs[g]) < INPUT_GROUP_LOCKOUT_MS;
           const differentButton = lastBtn !== -1 && lastBtn !== m.btn;
           if (!(withinGroupLockout && differentButton)){
             inputLastActionMs[m.btn] = now;
             inputGroupLastActionMs[g] = now;
             inputGroupLastBtn[g] = m.btn;
-            inputAcceptedRiseCount[m.btn] += 1;
-            applyEncoderTestValue(colIdx, m.kind);
             m.onRise();
-          } else {
-            inputSuppressedGroupCount[m.btn] += 1;
           }
-        } else {
-          inputSuppressedDebounceCount[m.btn] += 1;
         }
       }
       prevButtonState[m.id] = pressed;
     }
   }
-  renderInputTests();
   requestAnimationFrame(processEncoderButtons);
 }
 
@@ -1733,20 +2044,12 @@ function renderState(){
   state.shaping.invert = state.shaping.invert || { yaw:false, pitch:false, roll:false };
   state.shaping.deadband = state.shaping.deadband || { yaw:0, pitch:0, roll:0, zoom:0 };
   if (state.shaping.zoom_feedback === undefined || state.shaping.zoom_feedback === null) state.shaping.zoom_feedback = 1;
-  if (!inputFilterDefaultsLoaded){
-    const cfg = (((state.ui_config || {}).input_tests) || {});
-    const db = Number(cfg.debounce_ms);
-    const gl = Number(cfg.group_lockout_ms);
-    if (Number.isFinite(db)) inputDebounceMs = Math.max(0, Math.min(300, Math.round(db)));
-    if (Number.isFinite(gl)) inputGroupLockoutMs = Math.max(0, Math.min(300, Math.round(gl)));
-    inputFilterDefaultsLoaded = true;
-  }
   syncNetworkDraftFromState();
   updateHeadIdStatus(state.connection_status || {});
   updateHeadIdBox();
-  $("slowState").textContent = `Slow state:\n${JSON.stringify(state.slow_controls, null, 2)}`;
-  $("applyState").textContent = `Apply status:\n${JSON.stringify(state.slow_apply_status || {}, null, 2)}`;
-  $("shapingState").textContent = `Shaping:\n${JSON.stringify(state.shaping || {}, null, 2)}`;
+  if ($("slowState")) $("slowState").textContent = `Slow state:\n${JSON.stringify(state.slow_controls, null, 2)}`;
+  if ($("applyState")) $("applyState").textContent = `Apply status:\n${JSON.stringify(state.slow_apply_status || {}, null, 2)}`;
+  if ($("shapingState")) $("shapingState").textContent = `Shaping:\n${JSON.stringify(state.shaping || {}, null, 2)}`;
   $("connectionState").textContent =
     `Connection:\n${JSON.stringify(state.connection_status || {}, null, 2)}\n\n` +
     `WS:\n${JSON.stringify(wsDiag, null, 2)}`;
@@ -1761,17 +2064,41 @@ function renderState(){
   const z = (pos.zoom !== undefined ? pos.zoom : lens.zoom_position);
   const f = (pos.focus !== undefined ? pos.focus : lens.focus_position);
   const i = (pos.iris !== undefined ? pos.iris : lens.iris_position);
-  $("telemetryState").textContent =
-    `Lens ID: ${lensId}\n` +
-    `Lens Name: ${lensName}\n` +
-    `Zoom Mode: ${zoomMode}\n` +
-    `Zoom Velocity Cmd: ${zoomCmd} (raw:${zoomRaw})\n` +
-    `Positions (zoom/focus/iris): ${z ?? "-"} / ${f ?? "-"} / ${i ?? "-"}\n\n` +
-    `Head feedback:\n${JSON.stringify(state.head_feedback || {}, null, 2)}`;
+  if ($("telemetryState")) {
+    $("telemetryState").textContent =
+      `Lens ID: ${lensId}\n` +
+      `Lens Name: ${lensName}\n` +
+      `Zoom Mode: ${zoomMode}\n` +
+      `Zoom Velocity Cmd: ${zoomCmd} (raw:${zoomRaw})\n` +
+      `Positions (zoom/focus/iris): ${z ?? "-"} / ${f ?? "-"} / ${i ?? "-"}\n\n` +
+      `Head feedback:\n${JSON.stringify(state.head_feedback || {}, null, 2)}`;
+  }
   $("networkInfo").textContent = `Network:\n${JSON.stringify(state.network_config || {}, null, 2)}`;
+  const nd = (((state.ui_config || {}).network_defaults) || {});
+  const host = nd.hostname || "-";
+  const piDef = nd.pi_lan_default_ip || "-";
+  const gwDef = nd.gateway_default || "-";
+  const headBase = nd.head_ip_base || "-";
+  $("networkDefaultHint").textContent =
+    `Derived defaults:\n` +
+    `Host: ${host}\n` +
+    `Pi LAN default: ${piDef}\n` +
+    `Gateway default: ${gwDef}\n` +
+    `Head IP base: ${headBase}`;
   $("wifiStatus").textContent = `WiFi:\n${JSON.stringify(state.wifi_status || {}, null, 2)}`;
+  const ic = state.ifconfig || {};
+  const updatedAt = ic.updated_at ? new Date(Number(ic.updated_at) * 1000).toISOString() : "-";
+  $("ifconfigDump").textContent =
+    `ifconfig snapshot (${updatedAt})\n\n` +
+    `[LAN eth0]\n${ic.lan || "-"}\n\n` +
+    `[WiFi wlan0]\n${ic.wifi || "-"}`;
+  const activeProfile = String(((((state.ui_config || {}).profiles) || {}).active) || "");
+  if ($("profileNameInput")) $("profileNameInput").value = activeProfile;
+  renderProfileList();
   renderControlQuickButtons();
   renderControlSliders();
+  renderCommandRows("slow");
+  renderCommandRows("fast");
   renderPopup();
   renderIpConfigTable();
 }
@@ -1904,7 +2231,8 @@ function renderIpConfigTable(){
   $("piAddress").value = pi.address || "";
   $("piPrefix").value = String(pi.prefix ?? 24);
   $("piGateway").value = pi.gateway || "";
-  const body = $("headTableBody");
+  const body = $("headTableBodyEditor");
+  if (!body) return;
   body.innerHTML = "";
   const heads = networkDraft?.heads || [];
   for (let i = 0; i < Math.min(15, heads.length); i++){
@@ -1916,6 +2244,7 @@ function renderIpConfigTable(){
       <td><input id="h_ip_${i}" readonly value="${h.ip || ""}" /></td>
       <td><input id="h_prefix_${i}" readonly value="${h.prefix ?? 24}" /></td>
       <td><input id="h_gw_${i}" readonly value="${h.gateway || ""}" /></td>
+      <td><button id="h_ping_${i}">Ping Now</button></td>
       <td><button id="h_save_${i}">Save</button></td>
     `;
     body.appendChild(tr);
@@ -1936,6 +2265,11 @@ function renderIpConfigTable(){
       });
       networkDirty.heads[i] = false;
       setEvent(`save head config #${i+1}`);
+    };
+    $(`h_ping_${i}`).onclick = () => {
+      const ip = $(`h_ip_${i}`).value || "(no ip)";
+      setEvent(`ping head #${i+1} ${ip}...`);
+      send({ type: "PING_HEAD", index: i });
     };
   }
 }
@@ -1978,6 +2312,23 @@ function connectWs(){
       } else if (msg.type === "WIFI_SCAN_RESULT"){
         renderWifiTable(msg.networks || []);
         setEvent(msg.ok ? "wifi scan complete" : `wifi scan failed: ${msg.message}`);
+      } else if (msg.type === "PING_HEAD_RESULT"){
+        const firstLine = String(msg.message || "").split("\n")[0];
+        setEvent(`PING_HEAD #${(Number(msg.index) || 0) + 1} ${msg.ip || ""}: ${msg.ok ? "ok" : "fail"} ${firstLine}`);
+      } else if (msg.type === "LIST_USER_PROFILES_RESULT"){
+        if (!state.ui_config) state.ui_config = {};
+        if (!state.ui_config.profiles) state.ui_config.profiles = {};
+        state.ui_config.profiles.names = msg.profiles || [];
+        state.ui_config.profiles.active = msg.active || "";
+        renderProfileList();
+      } else if (msg.type === "SAVE_USER_PROFILE_RESULT"){
+        setEvent(`SAVE_USER_PROFILE: ${msg.ok ? "ok" : "fail"} ${msg.message || ""}`);
+        if (msg.ok) send({ type: "LIST_USER_PROFILES" });
+      } else if (msg.type === "LOAD_USER_PROFILE_RESULT"){
+        setEvent(`LOAD_USER_PROFILE: ${msg.ok ? "ok" : "fail"} ${msg.message || ""}`);
+        if (msg.ok) applyProfileUiPreferences(msg.ui_preferences || {});
+      } else if (msg.type === "RESTORE_FACTORY_DEFAULTS_RESULT"){
+        setEvent(`RESTORE_FACTORY_DEFAULTS: ${msg.ok ? "ok" : "fail"} ${msg.message || ""}`);
       } else if (msg.type && msg.type.endsWith("_RESULT")) {
         setEvent(`${msg.type}: ${msg.ok ? "ok" : "fail"} ${msg.message || ""}`);
       } else if (msg.type === "CALIBRATE_INPUTS_ACCEPTED"){
@@ -2028,47 +2379,32 @@ function bindUI(){
   $("headPickerClose").onclick = closeHeadPicker;
   $("headPickerCancel").onclick = closeHeadPicker;
   $("headPicker").onclick = (e) => { if (e.target === $("headPicker")) closeHeadPicker(); };
+  $("openHeadConfigEditor").onclick = openHeadConfigEditor;
+  $("headConfigClose").onclick = closeHeadConfigEditor;
+  $("headConfigDone").onclick = closeHeadConfigEditor;
+  $("headConfigEditor").onclick = (e) => { if (e.target === $("headConfigEditor")) closeHeadConfigEditor(); };
+  $("openProfileEditor").onclick = openProfileEditor;
+  $("profileClose").onclick = closeProfileEditor;
+  $("profileDone").onclick = closeProfileEditor;
+  $("profileEditor").onclick = (e) => { if (e.target === $("profileEditor")) closeProfileEditor(); };
+  $("profileNameEdit").onclick = () => openKeyboard($("profileNameInput"));
+  $("profileSave").onclick = () => send({ type: "SAVE_USER_PROFILE", name: $("profileNameInput").value, ui_preferences: getProfileUiPreferencesSnapshot() });
+  $("profileRefresh").onclick = () => send({ type: "LIST_USER_PROFILES" });
+  $("profileFactoryRestore").onclick = () => send({ type: "RESTORE_FACTORY_DEFAULTS" });
   $("touchMotorsOn").onclick = () => send({ type: "SET_SLOW_CONTROL", key: "motors_on", value: 1 });
   $("touchMotorsOff").onclick = () => send({ type: "SET_SLOW_CONTROL", key: "motors_on", value: 0 });
-  $("touchGyroSend").onclick = () => send({ type: "SET_SLOW_CONTROL", key: "gyro_heading_correction", value: parseInt($("touchGyroValue").value, 10) || 0 });
-  $("touchSaveDefaults").onclick = () => send({ type: "SAVE_USER_DEFAULTS" });
-  $("touchResetDefaults").onclick = () => send({ type: "RESET_USER_DEFAULTS" });
+  if ($("touchGyroSend")) $("touchGyroSend").onclick = () => send({ type: "SET_SLOW_CONTROL", key: "gyro_heading_correction", value: parseInt($("touchGyroValue").value, 10) || 0 });
+  if ($("touchSaveDefaults")) $("touchSaveDefaults").onclick = () => send({ type: "SAVE_USER_DEFAULTS" });
+  if ($("touchResetDefaults")) $("touchResetDefaults").onclick = () => send({ type: "RESET_USER_DEFAULTS" });
   $("touchCalibrateInputs").onclick = () => send({ type: "CALIBRATE_INPUTS", duration_s: 2.5 });
+  $("openNetworkFromEngineering").onclick = () => activatePage("ipconfig");
+  $("closeNetworkToEngineering").onclick = () => activatePage("inputtests");
+  $("assignmentBankSelect").onchange = (e) => {
+    assignmentEditBank = String(e.target.value || "control");
+    buildSliderAssignControls();
+    buildQuickButtonAssignControls();
+  };
   $("themeSelect").onchange = (e) => applyTheme(e.target.value);
-  $("daYawRange").onchange = (e) => { deadAheadCfg.yaw_range = Number(e.target.value) || 10; saveDeadAheadCfg(); sendDeadAheadConfig(); };
-  $("daPitchRange").onchange = (e) => { deadAheadCfg.pitch_range = Number(e.target.value) || 10; saveDeadAheadCfg(); sendDeadAheadConfig(); };
-  $("daRollRange").onchange = (e) => { deadAheadCfg.roll_range = Number(e.target.value) || 10; saveDeadAheadCfg(); sendDeadAheadConfig(); };
-  $("daDeadband").onchange = (e) => { deadAheadCfg.deadband = Number(e.target.value) || 0; saveDeadAheadCfg(); sendDeadAheadConfig(); };
-  $("daSpeed").onchange = (e) => { deadAheadCfg.speed = Number(e.target.value) || 5; saveDeadAheadCfg(); sendDeadAheadConfig(); };
-  $("inputDebounceDec").onclick = () => { inputDebounceMs = Math.max(0, inputDebounceMs - 5); renderInputTests(); };
-  $("inputDebounceInc").onclick = () => { inputDebounceMs = Math.min(300, inputDebounceMs + 5); renderInputTests(); };
-  $("inputGroupLockoutDec").onclick = () => { inputGroupLockoutMs = Math.max(0, inputGroupLockoutMs - 5); renderInputTests(); };
-  $("inputGroupLockoutInc").onclick = () => { inputGroupLockoutMs = Math.min(300, inputGroupLockoutMs + 5); renderInputTests(); };
-  $("inputResetCounters").onclick = () => {
-    inputRawRiseCount = Array(15).fill(0);
-    inputAcceptedRiseCount = Array(15).fill(0);
-    inputSuppressedDebounceCount = Array(15).fill(0);
-    inputSuppressedGroupCount = Array(15).fill(0);
-    inputLastRiseMs = Array(15).fill(0);
-    inputLastActionMs = Array(15).fill(0);
-    inputGroupLastActionMs = Array(5).fill(0);
-    inputGroupLastBtn = Array(5).fill(-1);
-    encoderTestValue = Array(5).fill(0);
-    renderInputTests();
-  };
-  $("touchToggleMode").onclick = () => {
-    if (activeColumn === null) return;
-    if (mode === "position") mode = "value";
-    else {
-      const p = activePosIndexByColumn[activeColumn] || 0;
-      const slot = getPosition(activeColumn, p);
-      if (controlClassForSlot(slot) !== "local") commitActiveValue();
-      else if (localAutoApplyTimer) flushLocalAutoApply();
-      mode = "position";
-    }
-    renderPopup();
-  };
-  $("touchClosePopup").onclick = () => { activeColumn = null; mode = "position"; renderPopup(); };
   $("savePiLan").onclick = () => {
     send({
       type: "SET_PI_LAN_CONFIG",
@@ -2108,6 +2444,7 @@ function bindUI(){
 
 function buildTouchGyroSelect(){
   const sel = $("touchGyroValue");
+  if (!sel) return;
   sel.innerHTML = "";
   const vals = (((LAYOUT.columns[0] || {}).positions || [])[3] || {}).values || [];
   for (const item of vals){
@@ -2138,7 +2475,6 @@ function init(){
   activatePage("control");
   renderPopup();
   renderControlSliders();
-  renderInputTests();
   startLiveSliderLoop();
   processEncoderButtons();
 }

@@ -189,6 +189,12 @@ SLOW_KEY_FILTER_NUM = 9
 SLOW_KEY_FILTER_DEN = 10
 SLOW_KEY_GYRO_HEADING_CORRECTION = 11
 SLOW_KEY_WASH_WIPE = 12
+SLOW_KEY_PAN_ACCEL = 13
+SLOW_KEY_TILT_ACCEL = 14
+SLOW_KEY_ROLL_ACCEL = 15
+SLOW_KEY_PAN_GAIN = 16
+SLOW_KEY_TILT_GAIN = 17
+SLOW_KEY_ROLL_GAIN = 18
 SLOW_KEY_NAMES = {
     SLOW_KEY_MOTORS_ON: "motors_on",
     SLOW_KEY_CONTROL_MODE: "control_mode",
@@ -202,6 +208,12 @@ SLOW_KEY_NAMES = {
     SLOW_KEY_FILTER_DEN: "filter_den",
     SLOW_KEY_GYRO_HEADING_CORRECTION: "gyro_heading_correction",
     SLOW_KEY_WASH_WIPE: "wash_wipe",
+    SLOW_KEY_PAN_ACCEL: "pan_accel",
+    SLOW_KEY_TILT_ACCEL: "tilt_accel",
+    SLOW_KEY_ROLL_ACCEL: "roll_accel",
+    SLOW_KEY_PAN_GAIN: "pan_gain",
+    SLOW_KEY_TILT_GAIN: "tilt_gain",
+    SLOW_KEY_ROLL_GAIN: "roll_gain",
 }
 
 sock_fast = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -548,6 +560,42 @@ def apply_slow_command(cmd):
         v = 1 if int(value) != 0 else 0
         bgc.set_wash_wipe_mode(v)
         print("Slow apply wash_wipe ->", "wiping" if v else "parked")
+        return
+
+    if key == SLOW_KEY_PAN_ACCEL:
+        v = max(0, min(255, int(value)))
+        bgc.set_axis_accel("yaw", v)
+        print("Slow apply pan_accel ->", v)
+        return
+
+    if key == SLOW_KEY_TILT_ACCEL:
+        v = max(0, min(255, int(value)))
+        bgc.set_axis_accel("pitch", v)
+        print("Slow apply tilt_accel ->", v)
+        return
+
+    if key == SLOW_KEY_ROLL_ACCEL:
+        v = max(0, min(255, int(value)))
+        bgc.set_axis_accel("roll", v)
+        print("Slow apply roll_accel ->", v)
+        return
+
+    if key == SLOW_KEY_PAN_GAIN:
+        v = max(0, min(255, int(value)))
+        bgc.set_axis_gain("yaw", v)
+        print("Slow apply pan_gain ->", v)
+        return
+
+    if key == SLOW_KEY_TILT_GAIN:
+        v = max(0, min(255, int(value)))
+        bgc.set_axis_gain("pitch", v)
+        print("Slow apply tilt_gain ->", v)
+        return
+
+    if key == SLOW_KEY_ROLL_GAIN:
+        v = max(0, min(255, int(value)))
+        bgc.set_axis_gain("roll", v)
+        print("Slow apply roll_gain ->", v)
         return
 
 # ---------- Main Loop ----------

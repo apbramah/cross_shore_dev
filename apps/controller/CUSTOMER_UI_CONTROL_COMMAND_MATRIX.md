@@ -124,6 +124,12 @@ Supported by `mvp_protocol.SLOW_KEY_IDS`:
 - `filter_den`
 - `gyro_heading_correction`
 - `wash_wipe` (`parked` / `wiping`)
+- `pan_accel` (BGC pan-axis accel, 0..255)
+- `tilt_accel` (BGC tilt-axis accel, 0..255)
+- `roll_accel` (BGC roll-axis accel, 0..255)
+- `pan_gain` (BGC pan-axis gain, 0..255)
+- `tilt_gain` (BGC tilt-axis gain, 0..255)
+- `roll_gain` (BGC roll-axis gain, 0..255)
 
 If a new control is added with `SET_SLOW_CONTROL`, it must be added to:
 1) `mvp_ui_3_layout.js` (command key/value options),
