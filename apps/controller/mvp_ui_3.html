@@ -2795,6 +2795,8 @@ function init(){
   buildControlSliders();
   buildTouchGyroSelect();
   buildDock();
+  // Connect immediately so heads/network defaults populate at boot.
+  connectWs();
   activatePage("control");
   renderPopup();
   renderControlSliders();
