@@ -362,6 +362,7 @@ connection_status: dict[str, Any] = {
 }
 wifi_status: dict[str, Any] = {"state": "unknown", "ssid": "", "ip": "", "last_error": ""}
 iface_cli_outputs: dict[str, Any] = {"lan": "", "wifi": "", "updated_at": 0.0}
+display_status: dict[str, Any] = {"supported": False, "device": "", "percent": None, "raw": None, "max": None, "last_error": ""}
 _last_ifconfig_refresh_ts = 0.0
 calibration_status: dict[str, Any] = {
     "state": "idle",
@@ -859,6 +860,7 @@ def _state_payload() -> dict[str, Any]:
         "network_config": copy.deepcopy(network_user),
         "wifi_status": copy.deepcopy(wifi_status),
         "ifconfig": copy.deepcopy(iface_cli_outputs),
+        "display": copy.deepcopy(display_status),
         "calibration": copy.deepcopy(calibration_status),
         "ui_config": {
             "input_tests": dict(UI_INPUT_TEST_DEFAULTS),
@@ -1013,11 +1015,68 @@ def _refresh_iface_cli_outputs(force: bool = False) -> None:
     iface_cli_outputs["updated_at"] = now
 
 
+def _resolve_backlight_device() -> tuple[str, int]:
+    root = "/sys/class/backlight"
+    try:
+        if not os.path.isdir(root):
+            return "", 0
+        for name in sorted(os.listdir(root)):
+            dev = os.path.join(root, name)
+            max_path = os.path.join(dev, "max_brightness")
+            if not os.path.isfile(max_path):
+                continue
+            with open(max_path, "r", encoding="utf-8") as f:
+                max_val = int((f.read() or "0").strip() or "0")
+            if max_val > 0:
+                return dev, max_val
+    except Exception:
+        pass
+    return "", 0
+
+
+def _refresh_display_status() -> None:
+    dev, max_val = _resolve_backlight_device()
+    if not dev or max_val <= 0:
+        display_status.update({"supported": False, "device": "", "percent": None, "raw": None, "max": None, "last_error": "backlight_not_found"})
+        return
+    raw_path = os.path.join(dev, "brightness")
+    try:
+        with open(raw_path, "r", encoding="utf-8") as f:
+            raw = int((f.read() or "0").strip() or "0")
+        pct = int(round(_clamp((raw / max_val) * 100.0, 0.0, 100.0)))
+        display_status.update({"supported": True, "device": os.path.basename(dev), "percent": pct, "raw": raw, "max": max_val, "last_error": ""})
+    except Exception as e:
+        display_status.update({"supported": True, "device": os.path.basename(dev), "percent": None, "raw": None, "max": max_val, "last_error": str(e)})
+
+
+def _set_screen_brightness_percent(percent: Any) -> tuple[bool, str]:
+    dev, max_val = _resolve_backlight_device()
+    if not dev or max_val <= 0:
+        return False, "backlight_not_found"
+    try:
+        p = int(percent)
+    except Exception:
+        return False, "invalid_percent"
+    p = max(5, min(100, p))
+    raw = int(round((p / 100.0) * max_val))
+    raw = max(1, min(max_val, raw))
+    raw_path = os.path.join(dev, "brightness")
+    try:
+        with open(raw_path, "w", encoding="utf-8") as f:
+            f.write(str(raw))
+        _refresh_display_status()
+        return True, "screen_brightness_applied"
+    except Exception as e:
+        _refresh_display_status()
+        return False, str(e)
+
+
 async def status_publish_task() -> None:
     while True:
         _refresh_connection_status()
         _refresh_wifi_status()
         _refresh_iface_cli_outputs()
+        _refresh_display_status()
         _refresh_calibration_status()
         _write_zoom_feedback_runtime()
         await _publish_state()
@@ -1296,6 +1355,9 @@ async def handler(websocket: Any) -> None:
             elif msg_type == "WIFI_STATUS":
                 _refresh_wifi_status()
                 await websocket.send(json.dumps({"type": "WIFI_STATUS_RESULT", "ok": True, "status": wifi_status}))
+            elif msg_type == "SET_SCREEN_BRIGHTNESS":
+                ok, msg = _set_screen_brightness_percent(data.get("percent", 0))
+                await websocket.send(json.dumps({"type": "SET_SCREEN_BRIGHTNESS_RESULT", "ok": ok, "message": msg, "display": copy.deepcopy(display_status)}))
             elif msg_type == "PING_HEAD":
                 idx = int(data.get("index", -1))
                 ok, ip, msg = await asyncio.to_thread(_ping_head, idx)
@@ -1324,6 +1386,7 @@ async def main() -> None:
     _load_factory_defaults_file()
     _load_state()
     _load_network_models()
+    _refresh_display_status()
     _save_selected_head_index()
     _apply_shaping_to_adc_profile()
     print(f"Slow WebSocket server starting on ws://127.0.0.1:{WS_PORT}")

@@ -554,6 +554,21 @@
               </select>
             </div>
             <div class="command-row">
+              <div class="command-row-name">Screen Brightness</div>
+              <select id="screenBrightnessSelect" style="max-width:220px;">
+                <option value="10">10%</option>
+                <option value="20">20%</option>
+                <option value="30">30%</option>
+                <option value="40">40%</option>
+                <option value="50">50%</option>
+                <option value="60">60%</option>
+                <option value="70">70%</option>
+                <option value="80">80%</option>
+                <option value="90">90%</option>
+                <option value="100">100%</option>
+              </select>
+            </div>
+            <div class="command-row">
               <div class="command-row-name">Network / WiFi / Head Config</div>
               <button id="openNetworkFromEngineering">Open</button>
             </div>
@@ -569,6 +584,7 @@
         </div>
         <div class="card stack-row-card"><div id="connectionState" class="info">Connection: -</div></div>
         <div class="card stack-row-card"><div id="calibrationState" class="info">Calibration: -</div></div>
+        <div class="card stack-row-card"><div id="screenBrightnessState" class="info">Screen Brightness: -</div></div>
         <div class="card stack-row-card">
           <div class="command-row">
             <div class="command-row-name">Edit Bank</div>
@@ -2351,6 +2367,24 @@ function renderState(){
     `Connection:\n${JSON.stringify(state.connection_status || {}, null, 2)}\n\n` +
     `WS:\n${JSON.stringify(wsDiag, null, 2)}`;
   $("calibrationState").textContent = `Calibration:\n${JSON.stringify(state.calibration || {}, null, 2)}`;
+  const disp = state.display || {};
+  const dispSupported = !!disp.supported;
+  const dispPct = (disp.percent === null || disp.percent === undefined) ? "-" : `${disp.percent}%`;
+  const dispDev = disp.device || "-";
+  const dispErr = disp.last_error || "";
+  if ($("screenBrightnessState")){
+    $("screenBrightnessState").textContent =
+      `Screen Brightness:\n` +
+      `supported: ${dispSupported ? "yes" : "no"}\n` +
+      `device: ${dispDev}\n` +
+      `level: ${dispPct}` +
+      (dispErr ? `\nerror: ${dispErr}` : "");
+  }
+  const brightSel = $("screenBrightnessSelect");
+  if (brightSel && dispSupported && Number.isFinite(Number(disp.percent))){
+    const snapped = clamp(Math.round((Number(disp.percent) || 0) / 10) * 10, 10, 100);
+    brightSel.value = String(snapped);
+  }
   const lens = (state.head_feedback || {}).lens || {};
   const pos = lens.positions || {};
   const lensId = lens.lens_id || "-";
@@ -2728,6 +2762,10 @@ function bindUI(){
     buildQuickButtonAssignControls();
   };
   $("themeSelect").onchange = (e) => applyTheme(e.target.value);
+  $("screenBrightnessSelect").onchange = (e) => {
+    const pct = clamp(parseInt(e.target.value, 10) || 50, 10, 100);
+    send({ type: "SET_SCREEN_BRIGHTNESS", percent: pct });
+  };
   $("savePiLan").onclick = () => {
     send({
       type: "SET_PI_LAN_CONFIG",
