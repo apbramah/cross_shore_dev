@@ -30,15 +30,13 @@
     input { width:100%; min-width:0; }
     #heads { width:24ch; min-width:24ch; }
     .head-select-trigger { text-align:center; }
-    #headSelectorBtn, #disconnectHeadBtn { min-width:0; width:100%; }
+    #headSelectorBtn { min-width:0; width:100%; }
     button { cursor:pointer; background:linear-gradient(180deg,#347dd0 0%,#2c69aa 100%); border-color:#2c6eb8; font-weight:700; color:#eaf4ff; }
     .pill { padding:6px 10px; border-radius:999px; border:1px solid #5f2e35; background:rgba(239,68,68,.2); color:#ffd5dc; font-weight:650; text-align:center; white-space:nowrap; }
     .pill.on { border-color:#29533a; background:rgba(34,197,94,.18); color:#caf9de; }
     .row.actions .pill { height:36px; display:flex; align-items:center; }
     .btn-danger { background:linear-gradient(180deg,#b43f4b 0%,#913440 100%); border-color:#a84552; }
     .btn-neutral { background:linear-gradient(180deg,#5f6f8f 0%,#4d5c78 100%); border-color:#6f80a2; }
-    .disconnect-btn.connected { background:linear-gradient(180deg,#b43f4b 0%,#913440 100%); border-color:#a84552; }
-    .disconnect-btn.disconnected { background:linear-gradient(180deg,#5f6f8f 0%,#4d5c78 100%); border-color:#6f80a2; }
     .surface { position:relative; overflow:hidden; padding:10px; isolation:isolate; }
     .surface::before {
       content:"";
@@ -301,8 +299,6 @@
     body.theme-blackwhite .tab.active, body.theme-blackwhite .dock-btn.active { background:#2a2a2a !important; box-shadow:0 0 0 2px rgba(242,242,242,.22) inset !important; border-color:#bfbfbf !important; }
     body.theme-blackwhite button { background:linear-gradient(180deg,#505050 0%,#3b3b3b 100%); border-color:#777; color:#fff; }
     body.theme-blackwhite .btn-danger { background:linear-gradient(180deg,#6c4b56 0%,#553944 100%); border-color:#8d6270; color:#ffe8ee; }
-    body.theme-blackwhite .disconnect-btn.connected { background:linear-gradient(180deg,#6c4b56 0%,#553944 100%); border-color:#8d6270; color:#ffe8ee; }
-    body.theme-blackwhite .disconnect-btn.disconnected { background:linear-gradient(180deg,#5f5f5f 0%,#4a4a4a 100%); border-color:#808080; color:#f0f0f0; }
     body.theme-blackwhite .head-id-box.status-off { border-color:#7a7a7a; box-shadow:0 0 0 2px rgba(122,122,122,.2), 0 0 10px rgba(122,122,122,.16); }
     body.theme-blackwhite .head-id-box.status-warn { border-color:#9a8d68; box-shadow:0 0 0 2px rgba(154,141,104,.2), 0 0 12px rgba(154,141,104,.18); }
     body.theme-blackwhite .head-id-box.status-on { border-color:#7ea697; box-shadow:0 0 0 2px rgba(126,166,151,.22), 0 0 14px rgba(126,166,151,.2); }
@@ -360,20 +356,12 @@
       border-color:#6cfff0;
       box-shadow:0 0 0 2px rgba(50,255,231,.38) inset, 0 0 18px rgba(50,255,231,.45);
     }
-    /* High neon: safety-critical and connected-disconnect states */
-    body.theme-neon .btn-danger,
-    body.theme-neon .disconnect-btn.connected {
+    /* High neon: safety-critical actions */
+    body.theme-neon .btn-danger {
       background:linear-gradient(180deg,#5d4a50 0%,#493940 100%);
       border-color:#8b7078;
       color:#ffeef2;
       box-shadow:0 0 0 1px rgba(50,255,231,.52), 0 0 24px rgba(50,255,231,.56);
-    }
-    /* Medium neon: disconnected but still visible/actionable */
-    body.theme-neon .disconnect-btn.disconnected {
-      background:linear-gradient(180deg,#4c4c4c 0%,#3b3b3b 100%);
-      border-color:#7b7b7b;
-      color:#f0f0f0;
-      box-shadow:0 0 0 1px rgba(50,255,231,.4), 0 0 14px rgba(50,255,231,.36);
     }
     body.theme-neon .card {
       background:linear-gradient(180deg,#1a1a1a 0%,#121212 100%);
@@ -440,7 +428,7 @@
 
       .kbd-card { width:96vw; }
       .kbd-key { min-width:36px; height:36px; font-size:12px; }
-      #headSelectorBtn, #disconnectHeadBtn { min-width:0; width:100%; }
+      #headSelectorBtn { min-width:0; width:100%; }
       .topbar > .row.actions { gap:6px; }
       .topbar > .row.actions button { min-width:0; width:100%; }
       .head-picker-card { width:96vw; max-height:92vh; }
@@ -456,7 +444,6 @@
     <div class="topbar">
       <div class="row">
         <button id="headSelectorBtn" class="head-select-trigger" type="button">Select Head</button>
-        <button id="disconnectHeadBtn" class="disconnect-btn disconnected" type="button">Disconnect</button>
         <select id="heads" style="display:none"></select>
       </div>
       <div class="row">
@@ -801,19 +788,9 @@ function setEvent(text){
 function hasDeadAheadKey(key){ return String(key || "").startsWith("da_"); }
 function cloneJson(v){ return JSON.parse(JSON.stringify(v)); }
 
-function updateDisconnectButtonState(){
-  const b = $("disconnectHeadBtn");
-  if (!b) return;
-  const connected = !!(ws && ws.readyState === WebSocket.OPEN);
-  b.disabled = !connected;
-  b.style.opacity = connected ? "1" : "0.6";
-  b.className = "disconnect-btn " + (connected ? "connected" : "disconnected");
-}
-
 function setWsDiagState(stateText, errorText = ""){
   wsDiag.state = stateText;
   wsDiag.lastError = errorText || "";
-  updateDisconnectButtonState();
 }
 
 function loadDeadAheadCfg(){
@@ -2133,14 +2110,6 @@ function requestHeadSelection(index){
   connectWs();
 }
 
-function disconnectHead(){
-  pendingHeadSelectIndex = null;
-  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)){
-    ws.close(1000, "operator_disconnect");
-  }
-  updateHeadIdBox();
-}
-
 function buildHeads(){
   const sel = $("heads");
   sel.innerHTML = "";
@@ -2702,7 +2671,6 @@ function connectWs(){
 function bindUI(){
   $("heads").onchange = (e) => requestHeadSelection(parseInt(e.target.value, 10) || 0);
   $("headSelectorBtn").onclick = openHeadPicker;
-  $("disconnectHeadBtn").onclick = disconnectHead;
   $("lockoffBtn").onclick = () => {
     deadAheadCfg.enabled = !deadAheadCfg.enabled;
     saveDeadAheadCfg();
@@ -2821,7 +2789,6 @@ function init(){
   readQuickButtonAssignments();
   loadDeadAheadCfg();
   initTheme();
-  updateDisconnectButtonState();
   updateHeadIdStatus(state.connection_status || {});
   renderKeyboard();
   bindUI();
