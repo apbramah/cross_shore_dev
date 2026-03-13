@@ -287,6 +287,7 @@
     .profile-card { width:min(760px,96vw); max-height:92vh; border:1px solid #4a5b7f; border-radius:12px; background:#1a2232; padding:10px; display:grid; grid-template-rows:auto auto 1fr auto; gap:8px; }
     .profile-row { display:flex; gap:8px; align-items:center; }
     .profile-list { border:1px solid #34435d; border-radius:8px; padding:8px; overflow:auto; display:grid; gap:6px; align-content:start; }
+    .profile-event-log { min-height:1.2em; font-size:0.9em; color:#8ab; margin:4px 0; }
 
     /* Theme options selected from engineering tab */
     body.theme-blackwhite {
@@ -652,6 +653,7 @@
         <button id="profileNameEdit" type="button">Edit</button>
         <button id="profileSave" type="button">Save Profile</button>
       </div>
+      <div id="profileEventLog" class="profile-event-log" aria-live="polite"></div>
       <div id="profileList" class="profile-list"></div>
       <div class="profile-row" style="justify-content:space-between;">
         <button id="profileFactoryRestore" type="button">Restore Factory Defaults</button>
@@ -2074,6 +2076,7 @@ function renderProfileList(){
 function openProfileEditor(){
   const active = String(((((state.ui_config || {}).profiles) || {}).active) || "");
   $("profileNameInput").value = active || "";
+  const pel = $("profileEventLog"); if (pel) pel.textContent = "";
   renderProfileList();
   $("profileEditor").classList.add("open");
   send({ type: "LIST_USER_PROFILES" });
@@ -2396,7 +2399,8 @@ function renderState(){
   if ($("ifconfigEth")) $("ifconfigEth").textContent = `${ic.lan || "-"}\n\n# updated: ${updatedAt}`;
   if ($("ifconfigWifi")) $("ifconfigWifi").textContent = `${ic.wifi || "-"}\n\n# updated: ${updatedAt}`;
   const activeProfile = String(((((state.ui_config || {}).profiles) || {}).active) || "");
-  if ($("profileNameInput")) $("profileNameInput").value = activeProfile;
+  const profileEditorOpen = $("profileEditor") && $("profileEditor").classList.contains("open");
+  if ($("profileNameInput") && !profileEditorOpen) $("profileNameInput").value = activeProfile;
   renderProfileList();
   renderControlQuickButtons();
   renderControlSliders();
@@ -2648,13 +2652,19 @@ function connectWs(){
         state.ui_config.profiles.active = msg.active || "";
         renderProfileList();
       } else if (msg.type === "SAVE_USER_PROFILE_RESULT"){
+        const saveMsg = msg.ok ? `Saved profile "${msg.name || ""}"` : `Save failed: ${msg.message || ""}`;
         setEvent(`SAVE_USER_PROFILE: ${msg.ok ? "ok" : "fail"} ${msg.message || ""}`);
+        const pel = $("profileEventLog"); if (pel) pel.textContent = saveMsg;
         if (msg.ok) send({ type: "LIST_USER_PROFILES" });
       } else if (msg.type === "LOAD_USER_PROFILE_RESULT"){
+        const loadMsg = msg.ok ? `Loaded profile "${msg.name || ""}"` : `Load failed: ${msg.message || ""}`;
         setEvent(`LOAD_USER_PROFILE: ${msg.ok ? "ok" : "fail"} ${msg.message || ""}`);
+        const pel = $("profileEventLog"); if (pel) pel.textContent = loadMsg;
         if (msg.ok) applyProfileUiPreferences(msg.ui_preferences || {});
       } else if (msg.type === "RESTORE_FACTORY_DEFAULTS_RESULT"){
+        const factoryMsg = msg.ok ? "Factory defaults restored" : `Restore failed: ${msg.message || ""}`;
         setEvent(`RESTORE_FACTORY_DEFAULTS: ${msg.ok ? "ok" : "fail"} ${msg.message || ""}`);
+        const pel = $("profileEventLog"); if (pel) pel.textContent = factoryMsg;
       } else if (msg.type && msg.type.endsWith("_RESULT")) {
         setEvent(`${msg.type}: ${msg.ok ? "ok" : "fail"} ${msg.message || ""}`);
       } else if (msg.type === "CALIBRATE_INPUTS_ACCEPTED"){
@@ -2713,6 +2723,11 @@ function bindUI(){
   $("profileDone").onclick = closeProfileEditor;
   $("profileEditor").onclick = (e) => { if (e.target === $("profileEditor")) closeProfileEditor(); };
   $("profileNameEdit").onclick = () => openKeyboard($("profileNameInput"));
+  const profileNameInputEl = $("profileNameInput");
+  if (profileNameInputEl) {
+    profileNameInputEl.onclick = () => openKeyboard(profileNameInputEl);
+    profileNameInputEl.onfocus = () => openKeyboard(profileNameInputEl);
+  }
   $("profileSave").onclick = () => send({ type: "SAVE_USER_PROFILE", name: $("profileNameInput").value, ui_preferences: getProfileUiPreferencesSnapshot() });
   $("profileRefresh").onclick = () => send({ type: "LIST_USER_PROFILES" });
   $("profileFactoryRestore").onclick = () => send({ type: "RESTORE_FACTORY_DEFAULTS" });
