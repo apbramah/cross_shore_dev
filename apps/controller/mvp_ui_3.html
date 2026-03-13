@@ -237,6 +237,22 @@
     .command-row.editing { border-color:#f59e0b; box-shadow:0 0 0 1px rgba(245,158,11,.45) inset; }
     .command-row-name { font-size:16px; color:#d9e7ff; font-weight:700; line-height:1.15; }
     .command-row-value { font-size:28px; color:#c6dbff; min-width:64px; text-align:right; line-height:1; font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; }
+    .cmd-window { border:1px solid #394863; border-radius:10px; background:#0a0d12; padding:8px; display:grid; gap:6px; }
+    .cmd-title { font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:12px; color:#8be9fd; }
+    .cmd-body {
+      margin:0;
+      font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
+      font-size:12px;
+      color:#d7e4ff;
+      white-space:pre-wrap;
+      word-break:break-word;
+      max-height:220px;
+      overflow:auto;
+      border:1px solid #2a3447;
+      border-radius:8px;
+      background:#0b111b;
+      padding:8px;
+    }
     /* Control tab now displays sliders only (other controls hidden but retained for logic) */
     #page-control { overflow:hidden; }
     #page-control .control-sliders-card { grid-column:1 / -1; height:100%; padding:4px; gap:2px; }
@@ -304,6 +320,9 @@
     body.theme-blackwhite .control-quick-btn.encoder-editing { border-color:#d9d9d9; box-shadow:0 0 0 1px rgba(245,245,245,.4) inset; }
     body.theme-blackwhite .command-row { background:#1c1c1c; border-color:#6c6c6c; }
     body.theme-blackwhite .command-row.active { border-color:#bfbfbf; box-shadow:0 0 0 1px rgba(242,242,242,.3) inset; }
+    body.theme-blackwhite .cmd-window { background:#111; border-color:#6c6c6c; }
+    body.theme-blackwhite .cmd-title { color:#f2f2f2; }
+    body.theme-blackwhite .cmd-body { background:#151515; border-color:#5f5f5f; color:#e6e6e6; }
 
     body.theme-acidtrip {
       --bg:#081108; --card:#122013; --card2:#18291a; --border:#2cff7b; --text:#f5ff70; --muted:#a9ffcb; --accent:#ff36f3; --warn:#ffe05e; --ok:#21ff87; --danger:#ff5478;
@@ -510,7 +529,15 @@
           </div>
         </div>
         <div class="card" style="grid-column:1 / -1;">
-          <div id="ifconfigDump" class="info">ifconfig: -</div>
+          <div class="cmd-window">
+            <div class="cmd-title">$ ifconfig eth0</div>
+            <pre id="ifconfigEth" class="cmd-body">-</pre>
+          </div>
+          <div class="cmd-window">
+            <div class="cmd-title">$ ifconfig wlan0</div>
+            <pre id="ifconfigWifi" class="cmd-body">-</pre>
+          </div>
+          <div id="ifconfigDump" class="info" style="display:none;">ifconfig: -</div>
         </div>
       </div>
       <div id="page-inputtests" class="page">
@@ -2358,10 +2385,13 @@ function renderState(){
   $("wifiStatus").textContent = `WiFi:\n${JSON.stringify(state.wifi_status || {}, null, 2)}`;
   const ic = state.ifconfig || {};
   const updatedAt = ic.updated_at ? new Date(Number(ic.updated_at) * 1000).toISOString() : "-";
-  $("ifconfigDump").textContent =
+  const dumpText =
     `ifconfig snapshot (${updatedAt})\n\n` +
     `[LAN eth0]\n${ic.lan || "-"}\n\n` +
     `[WiFi wlan0]\n${ic.wifi || "-"}`;
+  if ($("ifconfigDump")) $("ifconfigDump").textContent = dumpText;
+  if ($("ifconfigEth")) $("ifconfigEth").textContent = `${ic.lan || "-"}\n\n# updated: ${updatedAt}`;
+  if ($("ifconfigWifi")) $("ifconfigWifi").textContent = `${ic.wifi || "-"}\n\n# updated: ${updatedAt}`;
   const activeProfile = String(((((state.ui_config || {}).profiles) || {}).active) || "");
   if ($("profileNameInput")) $("profileNameInput").value = activeProfile;
   renderProfileList();

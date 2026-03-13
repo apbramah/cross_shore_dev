@@ -982,9 +982,6 @@ def _refresh_wifi_status() -> None:
 
 
 def _read_iface_cli_text(iface: str) -> str:
-    ok, out = _run_nmcli(["-t", "-f", "DEVICE,STATE,CONNECTION", "device", "show", iface])
-    if ok and out:
-        return out
     try:
         p = subprocess.run(["ifconfig", iface], capture_output=True, text=True, check=False, timeout=4)
         txt = (p.stdout or p.stderr or "").strip()
@@ -999,6 +996,9 @@ def _read_iface_cli_text(iface: str) -> str:
             return txt
     except Exception:
         pass
+    ok, out = _run_nmcli(["-t", "-f", "DEVICE,STATE,CONNECTION", "device", "show", iface])
+    if ok and out:
+        return out
     return "(unavailable)"
 
 
