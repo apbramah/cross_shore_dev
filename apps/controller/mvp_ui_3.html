@@ -1272,6 +1272,7 @@ function buildControlQuickButtons(){
       encoderPageState[key] = st;
       renderControlQuickButtons();
       renderControlSliders();
+      centerActiveControlItem(key, true);
     };
     host.appendChild(b);
   }
@@ -1385,6 +1386,7 @@ function buildControlSliders(){
       encoderPageState[key] = st;
       renderControlSliders();
       renderControlQuickButtons();
+      centerActiveControlItem(key, true);
     };
   }
 }
@@ -1522,6 +1524,7 @@ function moveActiveControlSlider(page, dir){
   encoderPageState[key] = st;
   renderControlSliders();
   renderControlQuickButtons();
+  centerActiveControlItem(page, true);
 }
 
 function adjustActiveControlSlider(page, dir){
@@ -1531,6 +1534,7 @@ function adjustActiveControlSlider(page, dir){
   if (idx >= CONTROL_SLIDER_COUNT){
     applyQuickButtonStep(idx - CONTROL_SLIDER_COUNT, dir);
     renderControlQuickButtons();
+    centerActiveControlItem(keyPage, true);
     return;
   }
   const i = idx;
@@ -1550,6 +1554,7 @@ function adjustActiveControlSlider(page, dir){
   }
   renderControlSliders();
   renderControlQuickButtons();
+  centerActiveControlItem(keyPage, true);
 }
 
 function renderControlSliders(forceBuild=false){
@@ -1684,6 +1689,7 @@ function moveActiveCommandRow(page, dir){
   st.index = clamp((Number(st.index) || 0) + (dir > 0 ? 1 : -1), 0, keys.length - 1);
   encoderPageState[key] = st;
   renderCommandRows(page);
+  centerActiveCommandRow(page);
 }
 
 function adjustActiveCommandRow(page, dir){
@@ -1720,7 +1726,60 @@ function getEngineeringEncoderItems(){
   return Array.from(root.querySelectorAll(".command-row, .slider-assign-row"));
 }
 
-function renderEngineeringEncoderFocus(){
+function centerElementInPage(el, pageId, smooth=false){
+  if (!el) return;
+  const pageEl = $(pageId);
+  if (!pageEl) return;
+  const pageRect = pageEl.getBoundingClientRect();
+  const elRect = el.getBoundingClientRect();
+  const currentTop = pageEl.scrollTop;
+  const elCenterFromPageTop = (elRect.top - pageRect.top) + (elRect.height / 2);
+  const targetTop = currentTop + elCenterFromPageTop - (pageEl.clientHeight / 2);
+  const nextTop = Math.max(0, targetTop);
+  if (smooth && typeof pageEl.scrollTo === "function"){
+    pageEl.scrollTo({ top: nextTop, behavior: "smooth" });
+  } else {
+    pageEl.scrollTop = nextTop;
+  }
+}
+
+function centerActiveCommandRow(page, smooth=false){
+  const isSlow = String(page || "") === "slow";
+  const key = isSlow ? "slow" : "fast";
+  const host = $(isSlow ? "slowControlRows" : "fastControlRows");
+  if (!host) return;
+  const st = encoderPageState[key] || { index: 0, edit: false };
+  const idx = clamp(Number(st.index) || 0, 0, Math.max(0, host.children.length - 1));
+  const row = host.children[idx];
+  if (!row) return;
+  centerElementInPage(row, isSlow ? "page-slow" : "page-fast", smooth);
+}
+
+function getControlEncoderElements(){
+  const sliderEls = [];
+  for (let i = 0; i < CONTROL_SLIDER_COUNT; i++){
+    const el = $(`controlSliderCard_${i}`);
+    if (el) sliderEls.push(el);
+  }
+  const quickEls = [];
+  for (let i = 0; i < CONTROL_QUICK_BUTTON_COUNT; i++){
+    const el = $(`controlQuickBtn_${i}`);
+    if (el) quickEls.push(el);
+  }
+  // Required traversal order: slider row 1, slider row 2, then quick buttons.
+  return sliderEls.concat(quickEls);
+}
+
+function centerActiveControlItem(page, smooth=false){
+  const key = String(page || "control") === "control2" ? "control2" : "control";
+  const st = encoderPageState[key] || { index: 0, edit: false };
+  const items = getControlEncoderElements();
+  if (!items.length) return;
+  const idx = clamp(Number(st.index) || 0, 0, items.length - 1);
+  centerElementInPage(items[idx], "page-control", smooth);
+}
+
+function renderEngineeringEncoderFocus(shouldCenter=false, smooth=false){
   const items = getEngineeringEncoderItems();
   const st = encoderPageState.inputtests || { index: 0, edit: false };
   if (!items.length) return;
@@ -1736,6 +1795,7 @@ function renderEngineeringEncoderFocus(){
     items[i].classList.toggle("editing", i === st.index && !!st.edit);
   }
   encoderPageState.inputtests = st;
+  if (shouldCenter) centerElementInPage(items[st.index], "page-inputtests", smooth);
 }
 
 function moveEngineeringItem(dir){
@@ -1744,7 +1804,7 @@ function moveEngineeringItem(dir){
   const st = encoderPageState.inputtests || { index: 0, edit: false };
   st.index = clamp((Number(st.index) || 0) + (dir > 0 ? 1 : -1), 0, items.length - 1);
   encoderPageState.inputtests = st;
-  renderEngineeringEncoderFocus();
+  renderEngineeringEncoderFocus(true, true);
 }
 
 function adjustEngineeringItem(dir){
@@ -2097,7 +2157,9 @@ function activatePage(page){
   buildQuickButtonAssignControls();
   renderCommandRows("slow");
   renderCommandRows("fast");
-  renderEngineeringEncoderFocus();
+  if (pKey === "slow" || pKey === "fast") centerActiveCommandRow(pKey, true);
+  if (pKey === "control" || pKey === "control2") centerActiveControlItem(pKey, true);
+  renderEngineeringEncoderFocus(pKey === "inputtests", true);
   renderPopup();
 }
 
@@ -2167,8 +2229,9 @@ function onEncoderSwitch(colIdx){
   st.edit = !st.edit;
   if (currentKey === "slow" || currentKey === "fast"){
     renderCommandRows(currentKey);
+    centerActiveCommandRow(currentKey, true);
   } else if (currentKey === "inputtests"){
-    renderEngineeringEncoderFocus();
+    renderEngineeringEncoderFocus(true, true);
   }
 }
 function onEncoderTurn(colIdx, dir){
