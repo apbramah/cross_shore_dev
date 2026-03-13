@@ -143,6 +143,8 @@
       padding:12px 14px;
       min-height:58px;
     }
+    #page-inputtests .slider-assign-row.active { border-color:#57a7ff; box-shadow:0 0 0 1px rgba(87,167,255,.4) inset; }
+    #page-inputtests .slider-assign-row.editing { border-color:#f59e0b; box-shadow:0 0 0 1px rgba(245,158,11,.45) inset; }
     #page-inputtests .slider-assign-row label { font-size:16px; font-weight:700; color:#d9e7ff; }
     #page-inputtests .slider-assign-row select { min-width:250px; }
     .input-test-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:8px; }
@@ -153,6 +155,8 @@
     .control-slider-grid { display:grid; grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(2,minmax(0,1fr)); gap:8px; height:100%; }
     .control-quick-row { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:8px; width:100%; margin-bottom:6px; }
     .control-quick-btn { width:100%; min-width:0; height:44px; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .control-quick-btn.encoder-active { border-color:#57a7ff; box-shadow:0 0 0 1px rgba(87,167,255,.4) inset; }
+    .control-quick-btn.encoder-editing { border-color:#f59e0b; box-shadow:0 0 0 1px rgba(245,158,11,.45) inset; }
     .control-slider-card { border:1px solid #425171; border-radius:8px; background:#1f2b40; padding:5px; display:grid; grid-template-rows:auto 1fr auto; gap:4px; justify-items:center; height:100%; }
     .control-slider-name { font-size:12px; color:#d9e7ff; font-weight:700; text-align:center; min-height:22px; }
     .control-slider-track-wrap { width:100%; height:100%; display:flex; align-items:center; justify-content:center; position:relative; }
@@ -212,6 +216,8 @@
     }
     .control-slider-card.pending { border-color:#f59e0b; box-shadow:0 0 0 1px rgba(245,158,11,.45) inset; }
     .control-slider-card.applied { border-color:#22c55e; box-shadow:0 0 0 1px rgba(34,197,94,.45) inset; }
+    .control-slider-card.encoder-active { border-color:#57a7ff; box-shadow:0 0 0 1px rgba(87,167,255,.4) inset; }
+    .control-slider-card.encoder-editing { border-color:#f59e0b; box-shadow:0 0 0 1px rgba(245,158,11,.45) inset; }
     .control-slider-value { font-size:12px; color:#c6dbff; font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; }
     .slider-assign-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px; }
     .slider-assign-row { display:grid; grid-template-columns:auto 1fr; gap:8px; align-items:center; }
@@ -228,6 +234,7 @@
     .command-row-list { display:grid; gap:8px; }
     .command-row { display:grid; grid-template-columns:1fr auto; gap:12px; align-items:center; border:1px solid #425171; border-radius:10px; background:#1f2b40; padding:12px 14px; min-height:58px; }
     .command-row.active { border-color:#57a7ff; box-shadow:0 0 0 1px rgba(87,167,255,.4) inset; }
+    .command-row.editing { border-color:#f59e0b; box-shadow:0 0 0 1px rgba(245,158,11,.45) inset; }
     .command-row-name { font-size:16px; color:#d9e7ff; font-weight:700; line-height:1.15; }
     .command-row-value { font-size:28px; color:#c6dbff; min-width:64px; text-align:right; line-height:1; font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; }
     /* Control tab now displays sliders only (other controls hidden but retained for logic) */
@@ -291,6 +298,10 @@
     body.theme-blackwhite .control-slider-card { background:#1c1c1c; border-color:#6c6c6c; }
     body.theme-blackwhite .control-slider-card.applied { border-color:#a5a5a5; box-shadow:0 0 0 1px rgba(220,220,220,.25) inset; }
     body.theme-blackwhite .control-slider-card.pending { border-color:#8f8f8f; box-shadow:0 0 0 1px rgba(200,200,200,.2) inset; }
+    body.theme-blackwhite .control-slider-card.encoder-active { border-color:#bfbfbf; box-shadow:0 0 0 1px rgba(242,242,242,.3) inset; }
+    body.theme-blackwhite .control-slider-card.encoder-editing { border-color:#d9d9d9; box-shadow:0 0 0 1px rgba(245,245,245,.4) inset; }
+    body.theme-blackwhite .control-quick-btn.encoder-active { border-color:#bfbfbf; box-shadow:0 0 0 1px rgba(242,242,242,.3) inset; }
+    body.theme-blackwhite .control-quick-btn.encoder-editing { border-color:#d9d9d9; box-shadow:0 0 0 1px rgba(245,245,245,.4) inset; }
     body.theme-blackwhite .command-row { background:#1c1c1c; border-color:#6c6c6c; }
     body.theme-blackwhite .command-row.active { border-color:#bfbfbf; box-shadow:0 0 0 1px rgba(242,242,242,.3) inset; }
 
@@ -673,6 +684,13 @@ let homeHoldTimer = null;
 let homeHoldTriggered = false;
 let liveSliderLoopStarted = false;
 let currentPage = "control";
+const encoderPageState = {
+  control: { index: 0, edit: false },
+  control2: { index: 0, edit: false },
+  slow: { index: 0, edit: false },
+  fast: { index: 0, edit: false },
+  inputtests: { index: 0, edit: false },
+};
 const THEME_STORAGE_KEY = "mvp_ui3_theme";
 const VALID_THEMES = ["starship", "blackwhite", "neon", "acidtrip"];
 const CONTROL_SLIDER_COUNT = 6;
@@ -719,8 +737,6 @@ const DEFAULT_QUICK_BUTTON_ASSIGNMENTS = [
   "none:none",
 ];
 let assignmentEditBank = "control";
-let slowRowActiveIndex = 0;
-let fastRowActiveIndex = 0;
 let controlBanks = {
   control: {
     sliders: DEFAULT_SLIDER_ASSIGNMENTS.slice(),
@@ -788,6 +804,15 @@ function getControlBank(bankName){
 
 function activeControlBankName(){
   return controlBankForPage(currentPage);
+}
+
+function activeControlEncoderKey(){
+  return currentPage === "control2" ? "control2" : "control";
+}
+
+function activeControlEncoderState(){
+  const key = activeControlEncoderKey();
+  return encoderPageState[key] || { index: 0, edit: false };
 }
 
 function activeSliderAssignments(){
@@ -1240,40 +1265,62 @@ function buildControlQuickButtons(){
     b.type = "button";
     b.className = "control-quick-btn";
     b.onclick = () => triggerQuickButton(i);
+    b.onpointerdown = () => {
+      const key = currentPage === "control2" ? "control2" : "control";
+      const st = encoderPageState[key] || { index: 0, edit: false };
+      st.index = CONTROL_SLIDER_COUNT + i;
+      encoderPageState[key] = st;
+      renderControlQuickButtons();
+      renderControlSliders();
+    };
     host.appendChild(b);
   }
 }
 
 function triggerQuickButton(i){
+  return applyQuickButtonStep(i, +1);
+}
+
+function applyQuickButtonStep(i, dir){
   const quick = activeQuickAssignments();
   const binding = String(quick[i] || "none:none");
   const [mode, key] = binding.split(":");
   if (!mode || mode === "none" || !key || key === "none"){
     setEvent(`quick B${i + 1}: unassigned`);
-    return;
+    return false;
   }
   const meta = sliderCommandMeta(mode, key);
   if (meta.type !== "enum"){
     setEvent(`quick B${i + 1}: ${sliderDisplayLabel(key)} needs enum definition`);
-    return;
+    return false;
   }
   const values = meta.values || [];
-  if (!values.length) return;
+  if (!values.length) return false;
   const current = getSliderReadbackValue(mode, key);
   let idx = values.findIndex(v => String(v) === String(current));
   if (idx < 0) idx = 0;
-  const next = values[(idx + 1) % values.length];
+  const step = dir >= 0 ? 1 : -1;
+  const next = values[(idx + step + values.length) % values.length];
   if (mode === "fast") applyFastSliderValue(key, next);
   else applySlowSliderValue(key, next);
   setEvent(`quick B${i + 1}: ${sliderDisplayLabel(key)} -> ${formatSliderValue(mode, key, next)}`);
   renderControlQuickButtons();
+  return true;
 }
 
 function renderControlQuickButtons(){
   const quick = activeQuickAssignments();
+  const isControlPage = currentPage === "control" || currentPage === "control2";
+  const encState = activeControlEncoderState();
+  const encQuickIndex = clamp((Number(encState.index) || 0) - CONTROL_SLIDER_COUNT, 0, CONTROL_QUICK_BUTTON_COUNT - 1);
   for (let i = 0; i < CONTROL_QUICK_BUTTON_COUNT; i++){
     const b = $(`controlQuickBtn_${i}`);
     if (!b) continue;
+    b.classList.remove("encoder-active", "encoder-editing");
+    if (isControlPage && i === encQuickIndex && (Number(encState.index) || 0) >= CONTROL_SLIDER_COUNT){
+      b.classList.add("encoder-active");
+      if (encState.edit) b.classList.add("encoder-editing");
+    }
     const binding = String(quick[i] || "none:none");
     const [mode, key] = binding.split(":");
     if (!mode || mode === "none" || !key || key === "none"){
@@ -1331,6 +1378,14 @@ function buildControlSliders(){
     host.appendChild(card);
     input.onchange = () => commitControlSlider(i);
     input.onpointerup = () => commitControlSlider(i);
+    input.onpointerdown = () => {
+      const key = currentPage === "control2" ? "control2" : "control";
+      const st = encoderPageState[key] || { index: 0, edit: false };
+      st.index = i;
+      encoderPageState[key] = st;
+      renderControlSliders();
+      renderControlQuickButtons();
+    };
   }
 }
 
@@ -1368,7 +1423,6 @@ function pickFirstNormalized(obj, keys){
 }
 
 function readLiveAxisSignal(axis){
-  const headConnected = String((((state.connection_status || {}).head || {}).state || "")).toLowerCase() === "connected";
   const bgc = ((state.head_feedback || {}).bgc) || {};
   const keyMap = {
     yaw: ["yaw_cmd_norm","yaw_norm","yaw_cmd","yaw","pan_cmd_norm","pan_cmd","pan"],
@@ -1376,10 +1430,9 @@ function readLiveAxisSignal(axis){
     roll: ["roll_cmd_norm","roll_norm","roll_cmd","roll"],
     zoom: ["zoom_cmd_norm","zoom_norm","zoom_cmd","zoom"],
   };
-  if (headConnected){
-    const picked = pickFirstNormalized(bgc, keyMap[axis] || []);
-    if (picked != null) return picked;
-  }
+  // Prefer any command feedback present in BGC telemetry, even if connection state is stale.
+  const picked = pickFirstNormalized(bgc, keyMap[axis] || []);
+  if (picked != null) return picked;
   // Fallback: show local joystick movement if telemetry command echo is unavailable.
   const gp = (navigator.getGamepads && navigator.getGamepads()[0]) || null;
   if (!gp || !gp.axes) return 0;
@@ -1461,11 +1514,52 @@ function commitControlSlider(i){
   }
 }
 
+function moveActiveControlSlider(page, dir){
+  const key = String(page || "control") === "control2" ? "control2" : "control";
+  const st = encoderPageState[key] || { index: 0, edit: false };
+  const total = CONTROL_SLIDER_COUNT + CONTROL_QUICK_BUTTON_COUNT;
+  st.index = clamp((Number(st.index) || 0) + (dir > 0 ? 1 : -1), 0, total - 1);
+  encoderPageState[key] = st;
+  renderControlSliders();
+  renderControlQuickButtons();
+}
+
+function adjustActiveControlSlider(page, dir){
+  const keyPage = String(page || "control") === "control2" ? "control2" : "control";
+  const st = encoderPageState[keyPage] || { index: 0, edit: false };
+  const idx = clamp(Number(st.index) || 0, 0, CONTROL_SLIDER_COUNT + CONTROL_QUICK_BUTTON_COUNT - 1);
+  if (idx >= CONTROL_SLIDER_COUNT){
+    applyQuickButtonStep(idx - CONTROL_SLIDER_COUNT, dir);
+    renderControlQuickButtons();
+    return;
+  }
+  const i = idx;
+  const sliders = activeSliderAssignments();
+  const binding = String(sliders[i] || "none:none");
+  const [mode, key] = binding.split(":");
+  if (!mode || mode === "none" || !key || key === "none") return;
+  const readback = getSliderReadbackValue(mode, key);
+  const currentNorm = commandValueToNormalized10(mode, key, readback);
+  const nextNorm = clamp(Math.round(currentNorm) + (dir > 0 ? 1 : -1), 0, 10);
+  const targetValue = normalized10ToCommandValue(mode, key, nextNorm);
+  if (mode === "fast"){
+    applyFastSliderValue(key, targetValue);
+  } else {
+    sliderUiState[i].pending = { key, targetValue, targetPercent: commandValueToPercent(mode, key, targetValue) };
+    applySlowSliderValue(key, targetValue);
+  }
+  renderControlSliders();
+  renderControlQuickButtons();
+}
+
 function renderControlSliders(forceBuild=false){
   const host = $("controlSliderGrid");
   if (!host) return;
   if (forceBuild || !$("controlSlider_0")) buildControlSliders();
   const sliders = activeSliderAssignments();
+  const pageKey = currentPage === "control2" ? "control2" : "control";
+  const encState = encoderPageState[pageKey] || { index: 0, edit: false };
+  const encIndex = clamp(Number(encState.index) || 0, 0, CONTROL_SLIDER_COUNT - 1);
   for (let i = 0; i < CONTROL_SLIDER_COUNT; i++){
     const binding = String(sliders[i] || "none:none");
     const [mode, key] = binding.split(":");
@@ -1475,6 +1569,10 @@ function renderControlSliders(forceBuild=false){
     const val = $(`controlSliderValue_${i}`);
     if (!card || !slider || !name || !val) continue;
     card.className = "control-slider-card";
+    if ((currentPage === "control" || currentPage === "control2") && i === encIndex && (Number(encState.index) || 0) < CONTROL_SLIDER_COUNT){
+      card.classList.add("encoder-active");
+      if (encState.edit) card.classList.add("encoder-editing");
+    }
     if (!mode || mode === "none" || !key || key === "none"){
       name.textContent = "(unassigned)";
       slider.value = "0";
@@ -1551,17 +1649,18 @@ function renderCommandRows(page){
   if (!host) return;
   const mode = isSlow ? "slow" : "fast";
   const keys = isSlow ? SLOW_ROW_COMMANDS : FAST_ROW_COMMANDS;
-  const activeIdx = isSlow ? slowRowActiveIndex : fastRowActiveIndex;
+  const st = encoderPageState[isSlow ? "slow" : "fast"] || { index: 0, edit: false };
+  const activeIdx = Math.max(0, Math.min(keys.length - 1, Number(st.index) || 0));
+  st.index = activeIdx;
   host.innerHTML = "";
   for (let i = 0; i < keys.length; i++){
     const key = keys[i];
     const readback = getSliderReadbackValue(mode, key);
     const norm = commandValueToNormalized10(mode, key, readback);
     const row = document.createElement("div");
-    row.className = "command-row" + (i === activeIdx ? " active" : "");
+    row.className = "command-row" + (i === activeIdx ? " active" : "") + ((i === activeIdx && st.edit) ? " editing" : "");
     row.onclick = () => {
-      if (isSlow) slowRowActiveIndex = i;
-      else fastRowActiveIndex = i;
+      st.index = i;
       renderCommandRows(page);
     };
     const name = document.createElement("div");
@@ -1576,12 +1675,24 @@ function renderCommandRows(page){
   }
 }
 
+function moveActiveCommandRow(page, dir){
+  const isSlow = String(page || "") === "slow";
+  const key = isSlow ? "slow" : "fast";
+  const keys = isSlow ? SLOW_ROW_COMMANDS : FAST_ROW_COMMANDS;
+  if (!keys.length) return;
+  const st = encoderPageState[key] || { index: 0, edit: false };
+  st.index = clamp((Number(st.index) || 0) + (dir > 0 ? 1 : -1), 0, keys.length - 1);
+  encoderPageState[key] = st;
+  renderCommandRows(page);
+}
+
 function adjustActiveCommandRow(page, dir){
   const isSlow = String(page || "") === "slow";
   const mode = isSlow ? "slow" : "fast";
   const keys = isSlow ? SLOW_ROW_COMMANDS : FAST_ROW_COMMANDS;
   if (!keys.length) return;
-  const idx = isSlow ? slowRowActiveIndex : fastRowActiveIndex;
+  const st = encoderPageState[isSlow ? "slow" : "fast"] || { index: 0, edit: false };
+  const idx = Number(st.index) || 0;
   const key = keys[Math.max(0, Math.min(keys.length - 1, idx))];
   const readback = getSliderReadbackValue(mode, key);
   const currentNorm = commandValueToNormalized10(mode, key, readback);
@@ -1591,6 +1702,67 @@ function adjustActiveCommandRow(page, dir){
   if (mode === "fast") applyFastSliderValue(key, cmdValue);
   else applySlowSliderValue(key, cmdValue);
   renderCommandRows(page);
+}
+
+function getPageEncoderKey(page){
+  const p = String(page || "");
+  if (p === "ipconfig") return "inputtests";
+  return p;
+}
+
+function pageEncoderIndex(page){
+  return DOCK_PAGE_BY_INDEX.indexOf(getPageEncoderKey(page));
+}
+
+function getEngineeringEncoderItems(){
+  const root = $("page-inputtests");
+  if (!root) return [];
+  return Array.from(root.querySelectorAll(".command-row, .slider-assign-row"));
+}
+
+function renderEngineeringEncoderFocus(){
+  const items = getEngineeringEncoderItems();
+  const st = encoderPageState.inputtests || { index: 0, edit: false };
+  if (!items.length) return;
+  st.index = clamp(Number(st.index) || 0, 0, items.length - 1);
+  for (let i = 0; i < items.length; i++){
+    items[i].onclick = () => {
+      const s = encoderPageState.inputtests || { index: 0, edit: false };
+      s.index = i;
+      encoderPageState.inputtests = s;
+      renderEngineeringEncoderFocus();
+    };
+    items[i].classList.toggle("active", i === st.index);
+    items[i].classList.toggle("editing", i === st.index && !!st.edit);
+  }
+  encoderPageState.inputtests = st;
+}
+
+function moveEngineeringItem(dir){
+  const items = getEngineeringEncoderItems();
+  if (!items.length) return;
+  const st = encoderPageState.inputtests || { index: 0, edit: false };
+  st.index = clamp((Number(st.index) || 0) + (dir > 0 ? 1 : -1), 0, items.length - 1);
+  encoderPageState.inputtests = st;
+  renderEngineeringEncoderFocus();
+}
+
+function adjustEngineeringItem(dir){
+  const items = getEngineeringEncoderItems();
+  if (!items.length) return;
+  const st = encoderPageState.inputtests || { index: 0, edit: false };
+  const idx = clamp(Number(st.index) || 0, 0, items.length - 1);
+  const row = items[idx];
+  if (!row) return;
+  const sel = row.querySelector("select");
+  if (sel && sel.options && sel.options.length){
+    const next = clamp(sel.selectedIndex + (dir > 0 ? 1 : -1), 0, sel.options.length - 1);
+    if (next !== sel.selectedIndex){
+      sel.selectedIndex = next;
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    return;
+  }
 }
 
 function updateHeadIdStatus(connectionStatus){
@@ -1904,6 +2076,8 @@ function updateNavVisualLink(page){
 function activatePage(page){
   const p = String(page || "control");
   currentPage = p;
+  const pKey = getPageEncoderKey(p);
+  if (encoderPageState[pKey]) encoderPageState[pKey].edit = false;
   if (p === "control" || p === "control2"){
     assignmentEditBank = p;
   }
@@ -1923,6 +2097,7 @@ function activatePage(page){
   buildQuickButtonAssignControls();
   renderCommandRows("slow");
   renderCommandRows("fast");
+  renderEngineeringEncoderFocus();
   renderPopup();
 }
 
@@ -1947,10 +2122,13 @@ function renderPopup(){
   const slot = $("activeSlotState");
   const val = $("activeValueState");
   const enc = $("encoderState");
+  const key = getPageEncoderKey(currentPage);
+  const st = encoderPageState[key];
+  const modeText = st ? (st.edit ? "value edit" : "item browse") : "page navigation";
   if (focus) focus.textContent = "Popup editing disabled";
   if (slot) slot.textContent = "Active slot: none";
   if (val) val.textContent = "Active value: -";
-  if (enc) enc.textContent = "Encoder mode: page navigation + slow/fast row adjust";
+  if (enc) enc.textContent = `Encoder mode: ${modeText}`;
 }
 
 function openPopup(colIdx){
@@ -1978,12 +2156,41 @@ function commitActiveValue(){
 }
 
 function onEncoderSwitch(colIdx){
-  const pageKey = DOCK_PAGE_BY_INDEX[colIdx] || "control";
-  activatePage(pageKey);
+  const targetPageKey = DOCK_PAGE_BY_INDEX[colIdx] || "control";
+  const currentKey = getPageEncoderKey(currentPage);
+  if (targetPageKey !== currentKey){
+    activatePage(targetPageKey);
+    return;
+  }
+  const st = encoderPageState[currentKey];
+  if (!st) return;
+  st.edit = !st.edit;
+  if (currentKey === "slow" || currentKey === "fast"){
+    renderCommandRows(currentKey);
+  } else if (currentKey === "inputtests"){
+    renderEngineeringEncoderFocus();
+  }
 }
 function onEncoderTurn(colIdx, dir){
-  if (currentPage === "slow" || currentPage === "fast"){
-    adjustActiveCommandRow(currentPage, dir);
+  const currentKey = getPageEncoderKey(currentPage);
+  const expectedIdx = pageEncoderIndex(currentKey);
+  if (expectedIdx >= 0 && colIdx !== expectedIdx) return;
+  if (currentKey === "control" || currentKey === "control2"){
+    const st = encoderPageState[currentKey] || { index: 0, edit: false };
+    if (st.edit) adjustActiveControlSlider(currentKey, dir);
+    else moveActiveControlSlider(currentKey, dir);
+    return;
+  }
+  if (currentKey === "slow" || currentKey === "fast"){
+    const st = encoderPageState[currentKey] || { index: 0, edit: false };
+    if (st.edit) adjustActiveCommandRow(currentKey, dir);
+    else moveActiveCommandRow(currentKey, dir);
+    return;
+  }
+  if (currentKey === "inputtests"){
+    const st = encoderPageState.inputtests || { index: 0, edit: false };
+    if (st.edit) adjustEngineeringItem(dir);
+    else moveEngineeringItem(dir);
     return;
   }
 }
@@ -2099,6 +2306,7 @@ function renderState(){
   renderControlSliders();
   renderCommandRows("slow");
   renderCommandRows("fast");
+  renderEngineeringEncoderFocus();
   renderPopup();
   renderIpConfigTable();
 }
@@ -2175,11 +2383,32 @@ function renderKeyboard(){
 
 function syncNetworkDraftFromState(force=false){
   const src = state.network_config || { pi_lan: {}, heads: [] };
-  if (!networkDraft || force){
-    networkDraft = cloneJson(src);
+  const nd = (((state.ui_config || {}).network_defaults) || {});
+  const piDefault = String(nd.pi_lan_default_ip || "").trim();
+  const gwDefault = String(nd.gateway_default || "").trim();
+  const headBase = String(nd.head_ip_base || "").trim();
+  const baseParts = headBase.split(".");
+  const headPrefix = baseParts.length >= 3 ? `${baseParts[0]}.${baseParts[1]}.${baseParts[2]}` : "";
+  const defaultHeadIp = (idx) => headPrefix ? `${headPrefix}.${Math.max(1, Math.min(254, idx + 1))}` : "";
+  const applyNetworkDraftDefaults = () => {
     networkDraft.pi_lan = networkDraft.pi_lan || {};
+    if (!String(networkDraft.pi_lan.address || "").trim() && piDefault) networkDraft.pi_lan.address = piDefault;
+    if (!String(networkDraft.pi_lan.gateway || "").trim() && gwDefault) networkDraft.pi_lan.gateway = gwDefault;
+    networkDraft.pi_lan.prefix = parseInt(networkDraft.pi_lan.prefix, 10) || 24;
     networkDraft.heads = networkDraft.heads || [];
     while (networkDraft.heads.length < 15) networkDraft.heads.push({});
+    for (let i = 0; i < 15; i++){
+      const h = networkDraft.heads[i] || {};
+      if (!String(h.ip || "").trim()) h.ip = defaultHeadIp(i);
+      if (!String(h.gateway || "").trim() && gwDefault) h.gateway = gwDefault;
+      h.prefix = parseInt(h.prefix, 10) || 24;
+      if (!String(h.name || "").trim()) h.name = `HEAD-${String(i + 1).padStart(2, "0")}`;
+      networkDraft.heads[i] = h;
+    }
+  };
+  if (!networkDraft || force){
+    networkDraft = cloneJson(src);
+    applyNetworkDraftDefaults();
     return;
   }
   if (!networkDirty.pi_lan){
@@ -2191,6 +2420,7 @@ function syncNetworkDraftFromState(force=false){
       networkDraft.heads[i] = cloneJson(srcHeads[i] || {});
     }
   }
+  applyNetworkDraftDefaults();
 }
 
 function markNetworkDraftDirtyForInput(inputId){

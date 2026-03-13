@@ -549,6 +549,25 @@ def _load_network_models() -> None:
         h = dict(base["heads"][i])
         h.update(src)
         h["index"] = i
+        # Normalize required fields so blank persisted values don't mask defaults.
+        if not str(h.get("name", "")).strip():
+            h["name"] = base["heads"][i]["name"]
+        if not str(h.get("ip", "")).strip():
+            h["ip"] = base["heads"][i]["ip"]
+        if not str(h.get("gateway", "")).strip():
+            h["gateway"] = base["heads"][i]["gateway"]
+        try:
+            h["prefix"] = int(h.get("prefix", 24) or 24)
+        except Exception:
+            h["prefix"] = 24
+        try:
+            h["port_fast"] = int(h.get("port_fast", mvp_protocol.FAST_PORT) or mvp_protocol.FAST_PORT)
+        except Exception:
+            h["port_fast"] = mvp_protocol.FAST_PORT
+        try:
+            h["port_slow_cmd"] = int(h.get("port_slow_cmd", mvp_protocol.SLOW_CMD_PORT) or mvp_protocol.SLOW_CMD_PORT)
+        except Exception:
+            h["port_slow_cmd"] = mvp_protocol.SLOW_CMD_PORT
         merged_heads.append(h)
     network_user["heads"] = merged_heads
     network_factory["heads"] = (network_factory.get("heads") or base["heads"])[:15]
@@ -561,6 +580,14 @@ def _load_network_models() -> None:
         factory_pi["gateway"] = gateway_ip
     if not network_user.get("pi_lan", {}).get("address"):
         network_user["pi_lan"] = copy.deepcopy(network_factory.get("pi_lan", {}))
+    else:
+        user_pi = network_user.setdefault("pi_lan", {})
+        if not str(user_pi.get("gateway", "")).strip():
+            user_pi["gateway"] = str(network_factory.get("pi_lan", {}).get("gateway", gateway_ip))
+        try:
+            user_pi["prefix"] = int(user_pi.get("prefix", 24) or 24)
+        except Exception:
+            user_pi["prefix"] = 24
     _safe_save_json(NETWORK_FACTORY_FILE, network_factory)
     _safe_save_json(NETWORK_USER_FILE, network_user)
     _apply_network_user_to_heads()
