@@ -1519,7 +1519,7 @@ function buildControlQuickButtons(){
     b.onpointerdown = () => {
       const key = currentPage === "control2" ? "control2" : "control";
       const st = encoderPageState[key] || { index: 0, edit: false };
-      st.index = CONTROL_SLIDER_COUNT + i;
+      st.index = i;
       encoderPageState[key] = st;
       renderControlQuickButtons();
       renderControlSliders();
@@ -1594,12 +1594,12 @@ function applyQuickButtonStep(i, dir){
 function renderControlQuickButtons(){
   const isControlPage = currentPage === "control" || currentPage === "control2";
   const encState = activeControlEncoderState();
-  const encQuickIndex = clamp((Number(encState.index) || 0) - CONTROL_SLIDER_COUNT, 0, CONTROL_QUICK_BUTTON_COUNT - 1);
+  const encQuickIndex = clamp(Number(encState.index) || 0, 0, CONTROL_QUICK_BUTTON_COUNT - 1);
   for (let i = 0; i < CONTROL_QUICK_BUTTON_COUNT; i++){
     const b = $(`controlQuickBtn_${i}`);
     if (!b) continue;
     b.classList.remove("encoder-active", "encoder-editing");
-    if (isControlPage && i === encQuickIndex && (Number(encState.index) || 0) >= CONTROL_SLIDER_COUNT){
+    if (isControlPage && i === encQuickIndex && (Number(encState.index) || 0) < CONTROL_QUICK_BUTTON_COUNT){
       b.classList.add("encoder-active");
       if (encState.edit) b.classList.add("encoder-editing");
     }
@@ -1670,7 +1670,7 @@ function buildControlSliders(){
     input.onpointerdown = () => {
       const key = currentPage === "control2" ? "control2" : "control";
       const st = encoderPageState[key] || { index: 0, edit: false };
-      st.index = i;
+      st.index = CONTROL_QUICK_BUTTON_COUNT + i;
       encoderPageState[key] = st;
       renderControlSliders();
       renderControlQuickButtons();
@@ -1725,7 +1725,7 @@ function buildSlowSliders(){
     input.onpointerup = () => { clearSlowSliderThrottle(); commitSlowSlider(i); };
     input.onpointerdown = () => {
       const st = encoderPageState.slow || { index: 0, edit: false };
-      st.index = i;
+      st.index = CONTROL_QUICK_BUTTON_COUNT + i;
       encoderPageState.slow = st;
       renderSlowSliders();
       renderSlowQuickButtons();
@@ -1755,6 +1755,7 @@ function renderSlowSliders(forceBuild){
   const sliders = getSlowSliderAssignments();
   const st = encoderPageState.slow || { index: 0, edit: false };
   const encIndex = clamp(Number(st.index) || 0, 0, SLOW_SLIDER_COUNT + CONTROL_QUICK_BUTTON_COUNT - 1);
+  const activeSliderIdx = encIndex - CONTROL_QUICK_BUTTON_COUNT;
   for (let i = 0; i < SLOW_SLIDER_COUNT; i++){
     const binding = String(sliders[i] || "none:none");
     const [, key] = binding.split(":");
@@ -1764,8 +1765,8 @@ function renderSlowSliders(forceBuild){
     const val = $(`slowSliderValue_${i}`);
     if (!card || !slider || !name || !val) continue;
     card.className = "control-slider-card";
-    card.classList.toggle("encoder-active", currentPage === "slow" && i === encIndex && encIndex < SLOW_SLIDER_COUNT);
-    card.classList.toggle("encoder-editing", currentPage === "slow" && i === encIndex && encIndex < SLOW_SLIDER_COUNT && !!st.edit);
+    card.classList.toggle("encoder-active", currentPage === "slow" && i === activeSliderIdx && encIndex >= CONTROL_QUICK_BUTTON_COUNT);
+    card.classList.toggle("encoder-editing", currentPage === "slow" && i === activeSliderIdx && encIndex >= CONTROL_QUICK_BUTTON_COUNT && !!st.edit);
     if (!key || key === "none"){
       name.textContent = "(unassigned)";
       slider.value = "0";
@@ -1809,7 +1810,7 @@ function renderSlowQuickButtons(){
     const b = $(`slowQuickBtn_${i}`);
     if (!b) continue;
     b.classList.remove("encoder-active", "encoder-editing");
-    if (currentPage === "slow" && i === encIndex - SLOW_SLIDER_COUNT && encIndex >= SLOW_SLIDER_COUNT){
+    if (currentPage === "slow" && i === encIndex && encIndex < CONTROL_QUICK_BUTTON_COUNT){
       b.classList.add("encoder-active");
       if (st.edit) b.classList.add("encoder-editing");
     }
@@ -1846,7 +1847,7 @@ function buildSlowQuickButtons(){
     b.onclick = () => triggerControlQuickFixed(i);
     b.onpointerdown = () => {
       const st = encoderPageState.slow || { index: 0, edit: false };
-      st.index = SLOW_SLIDER_COUNT + i;
+      st.index = i;
       encoderPageState.slow = st;
       renderSlowSliders();
       renderSlowQuickButtons();
@@ -1999,7 +2000,8 @@ function moveActiveControlSlider(page, dir){
   const key = String(page || "control") === "control2" ? "control2" : "control";
   const st = encoderPageState[key] || { index: 0, edit: false };
   const total = CONTROL_SLIDER_COUNT + CONTROL_QUICK_BUTTON_COUNT;
-  st.index = clamp((Number(st.index) || 0) + (dir > 0 ? 1 : -1), 0, total - 1);
+  const cur = clamp(Number(st.index) || 0, 0, total - 1);
+  st.index = (cur + (dir > 0 ? 1 : -1) + total) % total;
   encoderPageState[key] = st;
   renderControlSliders();
   renderControlQuickButtons();
@@ -2010,13 +2012,13 @@ function adjustActiveControlSlider(page, dir){
   const keyPage = String(page || "control") === "control2" ? "control2" : "control";
   const st = encoderPageState[keyPage] || { index: 0, edit: false };
   const idx = clamp(Number(st.index) || 0, 0, CONTROL_SLIDER_COUNT + CONTROL_QUICK_BUTTON_COUNT - 1);
-  if (idx >= CONTROL_SLIDER_COUNT){
-    applyQuickButtonStep(idx - CONTROL_SLIDER_COUNT, dir);
+  if (idx < CONTROL_QUICK_BUTTON_COUNT){
+    applyQuickButtonStep(idx, dir);
     renderControlQuickButtons();
     centerActiveControlItem(keyPage, true);
     return;
   }
-  const i = idx;
+  const i = idx - CONTROL_QUICK_BUTTON_COUNT;
   const sliders = getControlSliderAssignments();
   const binding = String(sliders[i] || "none:none");
   const [mode, key] = binding.split(":");
@@ -2043,7 +2045,8 @@ function renderControlSliders(forceBuild=false){
   const sliders = getControlSliderAssignments();
   const pageKey = currentPage === "control2" ? "control2" : "control";
   const encState = encoderPageState[pageKey] || { index: 0, edit: false };
-  const encIndex = clamp(Number(encState.index) || 0, 0, CONTROL_SLIDER_COUNT - 1);
+  const encIndex = clamp(Number(encState.index) || 0, 0, CONTROL_SLIDER_COUNT + CONTROL_QUICK_BUTTON_COUNT - 1);
+  const activeSliderIdx = encIndex - CONTROL_QUICK_BUTTON_COUNT;
   for (let i = 0; i < CONTROL_SLIDER_COUNT; i++){
     const binding = String(sliders[i] || "none:none");
     const [mode, key] = binding.split(":");
@@ -2053,7 +2056,7 @@ function renderControlSliders(forceBuild=false){
     const val = $(`controlSliderValue_${i}`);
     if (!card || !slider || !name || !val) continue;
     card.className = "control-slider-card";
-    if ((currentPage === "control" || currentPage === "control2") && i === encIndex && (Number(encState.index) || 0) < CONTROL_SLIDER_COUNT){
+    if ((currentPage === "control" || currentPage === "control2") && i === activeSliderIdx && encIndex >= CONTROL_QUICK_BUTTON_COUNT){
       card.classList.add("encoder-active");
       if (encState.edit) card.classList.add("encoder-editing");
     }
@@ -2170,7 +2173,8 @@ function renderCommandRows(page){
 function moveActiveSlowItem(dir){
   const total = SLOW_SLIDER_COUNT + CONTROL_QUICK_BUTTON_COUNT;
   const st = encoderPageState.slow || { index: 0, edit: false };
-  st.index = clamp((Number(st.index) || 0) + (dir > 0 ? 1 : -1), 0, total - 1);
+  const cur = clamp(Number(st.index) || 0, 0, total - 1);
+  st.index = (cur + (dir > 0 ? 1 : -1) + total) % total;
   encoderPageState.slow = st;
   renderSlowSliders();
   renderSlowQuickButtons();
@@ -2180,9 +2184,10 @@ function moveActiveSlowItem(dir){
 function adjustActiveSlowItem(dir){
   const st = encoderPageState.slow || { index: 0, edit: false };
   const idx = Number(st.index) || 0;
-  if (idx < SLOW_SLIDER_COUNT){
+  if (idx >= CONTROL_QUICK_BUTTON_COUNT){
+    const sliderIdx = idx - CONTROL_QUICK_BUTTON_COUNT;
     const sliders = getSlowSliderAssignments();
-    const binding = String(sliders[idx] || "none:none");
+    const binding = String(sliders[sliderIdx] || "none:none");
     const [, key] = binding.split(":");
     if (!key || key === "none") return;
     const readback = getSliderReadbackValue("slow", key);
@@ -2191,7 +2196,7 @@ function adjustActiveSlowItem(dir){
     const cmdValue = normalized10ToCommandValue("slow", key, nextNorm);
     applySlowSliderValue(key, cmdValue);
   } else {
-    triggerControlQuickFixed(idx - SLOW_SLIDER_COUNT);
+    triggerControlQuickFixed(idx);
   }
   renderSlowSliders();
   renderSlowQuickButtons();
@@ -2272,12 +2277,12 @@ function centerElementInPage(el, pageId, smooth=false){
 
 function getSlowEncoderElements(){
   const els = [];
-  for (let i = 0; i < SLOW_SLIDER_COUNT; i++){
-    const el = $(`slowSliderCard_${i}`);
-    if (el) els.push(el);
-  }
   for (let i = 0; i < CONTROL_QUICK_BUTTON_COUNT; i++){
     const el = $(`slowQuickBtn_${i}`);
+    if (el) els.push(el);
+  }
+  for (let i = 0; i < SLOW_SLIDER_COUNT; i++){
+    const el = $(`slowSliderCard_${i}`);
     if (el) els.push(el);
   }
   return els;
@@ -2304,18 +2309,18 @@ function centerActiveCommandRow(page, smooth=false){
 }
 
 function getControlEncoderElements(){
-  const sliderEls = [];
-  for (let i = 0; i < CONTROL_SLIDER_COUNT; i++){
-    const el = $(`controlSliderCard_${i}`);
-    if (el) sliderEls.push(el);
-  }
   const quickEls = [];
   for (let i = 0; i < CONTROL_QUICK_BUTTON_COUNT; i++){
     const el = $(`controlQuickBtn_${i}`);
     if (el) quickEls.push(el);
   }
-  // Required traversal order: slider row 1, slider row 2, then quick buttons.
-  return sliderEls.concat(quickEls);
+  const sliderEls = [];
+  for (let i = 0; i < CONTROL_SLIDER_COUNT; i++){
+    const el = $(`controlSliderCard_${i}`);
+    if (el) sliderEls.push(el);
+  }
+  // Required traversal order: quick buttons, then slider row 1, then slider row 2.
+  return quickEls.concat(sliderEls);
 }
 
 function centerActiveControlItem(page, smooth=false){
