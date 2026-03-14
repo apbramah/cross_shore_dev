@@ -2,6 +2,21 @@
 
 Use this after you've pushed from your PC. Run each block on the Pi in order.
 
+**Important:** The kiosk does **not** serve the UI from the git repo. It serves from **`/opt/ui/`**. So after `git pull` you **must** copy files into `/opt/ui/` (and restart). Otherwise you will keep seeing the old UI no matter how many times you restart. Use the steps below or the one-command script.
+
+---
+
+## One-command deploy (after pull)
+
+From the repo root on the Pi:
+
+```bash
+cd ~/Dev/cross_shore_dev
+bash apps/controller/deploy-to-pi.sh
+```
+
+This copies UI and bridge from repo → `/opt/ui/` and `/opt/wsbridge/`, then restarts wsbridge and kiosk.
+
 ---
 
 ## Step 3a – Go to repo and pull latest

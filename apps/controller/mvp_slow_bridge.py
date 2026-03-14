@@ -708,6 +708,9 @@ def _build_controller_runtime_file_path(filename: str) -> str:
     return os.path.join(os.path.dirname(_build_adc_profile_file_path()), filename)
 
 
+FAST_AXES_LATEST_FILENAME = "fast_axes_latest.json"
+
+
 def _zoom_feedback_runtime_path() -> str:
     """Path for zoom feedback runtime JSON consumed by ADC bridge. Prefer /opt/wsbridge."""
     opt_ws = "/opt/wsbridge"
@@ -717,6 +720,34 @@ def _zoom_feedback_runtime_path() -> str:
     except Exception:
         pass
     return _build_controller_runtime_file_path(ZOOM_FEEDBACK_RUNTIME_FILENAME)
+
+
+def _fast_axes_runtime_path() -> str:
+    """Path for fast axes snapshot written by ADC bridge (for sim / position display). Prefer /opt/wsbridge."""
+    opt_ws = "/opt/wsbridge"
+    try:
+        if os.path.isdir(opt_ws):
+            return os.path.join(opt_ws, FAST_AXES_LATEST_FILENAME)
+    except Exception:
+        pass
+    return _build_controller_runtime_file_path(FAST_AXES_LATEST_FILENAME)
+
+
+def _load_fast_axes_latest() -> tuple[dict[str, Any] | None, float | None]:
+    """Return (axes dict, updated_at) or (None, None) if missing/stale. Axes are float [-1,1] keyed X,Y,Z,Xrotate,Yrotate,Zrotate."""
+    path = _fast_axes_runtime_path()
+    try:
+        if not os.path.isfile(path):
+            return None, None
+        with open(path) as f:
+            data = json.load(f)
+        if not isinstance(data, dict) or "axes" not in data:
+            return None, None
+        axes = data.get("axes") or {}
+        updated = data.get("updated_at")
+        return axes, (float(updated) if updated is not None else None)
+    except Exception:
+        return None, None
 
 
 def _load_adc_profile() -> dict[str, Any]:
@@ -901,7 +932,8 @@ def _normalize_lens_feedback(lens_payload: dict[str, Any]) -> dict[str, Any]:
 
 def _state_payload() -> dict[str, Any]:
     subnet_prefix, pi_default_ip, gateway_ip = _derived_default_lan_seed()
-    return {
+    fast_axes, fast_axes_updated_at = _load_fast_axes_latest()
+    payload = {
         "type": "STATE",
         "schema_version": SCHEMA_VERSION,
         "heads": heads,
@@ -931,7 +963,10 @@ def _state_payload() -> dict[str, Any]:
                 "names": _list_user_profiles(),
             },
         },
+        "fast_axes": copy.deepcopy(fast_axes) if fast_axes else None,
+        "fast_axes_updated_at": fast_axes_updated_at,
     }
+    return payload
 
 
 async def _broadcast(payload: dict[str, Any]) -> None:

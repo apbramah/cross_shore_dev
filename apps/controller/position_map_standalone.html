@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Position Map – Hydravision</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; font-family: "DJI Droid Sans", "SF Pro Display", system-ui, -apple-system, sans-serif; background: #0a0e14; color: #e8f0ff; }
+    .app { display: grid; grid-template-rows: auto 1fr; height: 100vh; }
+    /* Top bar: DJI-style dark strip with key inputs */
+    .topbar { display: flex; align-items: center; gap: 12px; padding: 8px 12px; background: rgba(12, 18, 28, 0.92); border-bottom: 1px solid rgba(64, 120, 220, 0.35); flex-wrap: wrap; }
+    .topbar-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #6b8cbe; }
+    .topbar input { width: 100px; padding: 6px 8px; border-radius: 6px; border: 1px solid rgba(64, 120, 220, 0.5); background: rgba(20, 28, 44, 0.9); color: #e8f0ff; font-size: 13px; font-variant-numeric: tabular-nums; }
+    .topbar input::placeholder { color: #5a6d8a; }
+    .topbar button { padding: 6px 14px; border-radius: 6px; border: 1px solid rgba(64, 160, 255, 0.6); background: rgba(40, 80, 160, 0.4); color: #a8d4ff; font-weight: 600; font-size: 13px; cursor: pointer; }
+    .topbar button:active { background: rgba(60, 100, 180, 0.5); }
+    .topbar .sep { width: 1px; height: 20px; background: rgba(64, 120, 220, 0.3); }
+    #map { width: 100%; height: 100%; background: #1a2332; }
+    /* Overlay panels: DJI-style rounded dark glass */
+    .overlay-panel { position: absolute; z-index: 1000; background: rgba(10, 16, 26, 0.88); border: 1px solid rgba(64, 120, 220, 0.25); border-radius: 10px; padding: 10px 12px; backdrop-filter: blur(8px); }
+    .overlay-panel h3 { margin: 0 0 8px 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #6b8cbe; font-weight: 600; }
+    .position-readouts { bottom: 16px; left: 16px; display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; align-items: baseline; font-variant-numeric: tabular-nums; }
+    .position-readouts .label { font-size: 12px; color: #8aa0c4; }
+    .position-readouts .value { font-size: 16px; font-weight: 600; color: #b8d4ff; min-width: 72px; text-align: right; }
+    .compass-wrap { top: 12px; right: 12px; width: 72px; height: 72px; }
+    .compass-ring { width: 100%; height: 100%; border-radius: 50%; border: 2px solid rgba(64, 120, 220, 0.4); background: rgba(10, 16, 26, 0.75); position: relative; display: flex; align-items: center; justify-content: center; }
+    .compass-north { position: absolute; top: 4px; left: 50%; transform: translateX(-50%); font-size: 10px; color: #6b8cbe; font-weight: 700; }
+    .compass-needle { width: 4px; height: 28px; background: linear-gradient(to top, #4080ff 0%, transparent 100%); border-radius: 2px; transform-origin: center 14px; box-shadow: 0 0 12px rgba(64, 128, 255, 0.5); }
+    .head-marker { background: none !important; border: none !important; }
+    .head-marker div { filter: drop-shadow(0 2px 6px rgba(0,0,0,0.5)); }
+
+    /* Pictorial axes: fire-control / cinema / DJI / helicopter style */
+    .axes-panel { bottom: 16px; right: 16px; width: 280px; }
+    .axes-panel h3 { margin-bottom: 6px; }
+    .axes-instruments { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+    .axis-widget { background: rgba(0, 0, 0, 0.35); border: 1px solid rgba(64, 120, 220, 0.3); border-radius: 6px; padding: 6px; position: relative; }
+    .axis-widget .axis-title { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: #5a6d8a; text-align: center; margin-bottom: 2px; }
+    .axis-widget svg { display: block; width: 100%; height: auto; }
+    .axis-widget .axis-value { font-size: 10px; color: #8aa0c4; text-align: center; font-variant-numeric: tabular-nums; margin-top: 2px; }
+    .axis-widget.pan-tilt { grid-column: 1 / -1; }
+    .axis-widget.pan-tilt .combined-svg { display: flex; justify-content: center; gap: 8px; align-items: center; }
+    .axis-widget.pan-tilt .combined-svg svg { flex: 0 0 auto; }
+
+    /* Sim mode: drive instruments from fast axes (sliders or decoded UDP packet) */
+    .sim-panel { top: 60px; left: 16px; width: 200px; display: none; }
+    .sim-panel.visible { display: block; }
+    .sim-panel .axis-row { display: grid; grid-template-columns: 42px 1fr 48px; gap: 6px; align-items: center; margin-bottom: 6px; }
+    .sim-panel .axis-row label { font-size: 10px; color: #8aa0c4; font-variant-numeric: tabular-nums; }
+    .sim-panel input[type="range"] { width: 100%; height: 6px; -webkit-appearance: none; appearance: none; background: rgba(64, 120, 220, 0.25); border-radius: 3px; }
+    .sim-panel input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #4080ff; border: 1px solid #70b0ff; cursor: pointer; }
+    .sim-panel input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: #4080ff; border: 1px solid #70b0ff; cursor: pointer; }
+    .sim-panel .packet-row { margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(64, 120, 220, 0.25); }
+    .sim-panel .packet-row input { width: 100%; font-size: 10px; font-family: ui-monospace, monospace; }
+    .sim-panel .packet-row button { margin-top: 4px; font-size: 11px; padding: 4px 8px; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="topbar">
+      <div>
+        <div class="topbar-label">Paste lat, long</div>
+        <input type="text" id="pasteLatLon" placeholder="50.564782, -2.449499" style="width:220px;" />
+      </div>
+      <div>
+        <div class="topbar-label">Latitude</div>
+        <input type="text" id="lat" placeholder="lat" value="50.56478249783015" />
+      </div>
+      <div>
+        <div class="topbar-label">Longitude</div>
+        <input type="text" id="lon" placeholder="lon" value="-2.449499288081317" />
+      </div>
+      <div>
+        <div class="topbar-label">Heading °</div>
+        <input type="number" id="heading" min="0" max="359" step="1" placeholder="0–359" value="45" />
+      </div>
+      <div class="sep"></div>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+        <input type="checkbox" id="simMode" />
+        <span class="topbar-label" style="margin:0;">Sim mode</span>
+      </label>
+      <div style="align-self: flex-end;">
+        <button type="button" id="apply">Apply</button>
+      </div>
+    </div>
+    <div id="map"></div>
+  </div>
+
+  <div class="overlay-panel sim-panel" id="simPanel">
+    <h3>Sim — fast axes → ±180°</h3>
+    <div class="packet-row" style="margin-top:0;padding-top:0;border-top:0;">
+      <div class="topbar-label">Live from controller (Pi)</div>
+      <input type="text" id="wsUrl" placeholder="ws://localhost:8766 or ws://&lt;pi-ip&gt;:8766" style="font-size:11px;" />
+      <button type="button" id="wsConnect">Connect</button>
+      <span id="wsStatus" style="font-size:10px;color:#5a6d8a;"></span>
+    </div>
+    <div class="axis-row"><label id="lblPan">Pan</label><input type="range" id="simPan" min="-180" max="180" value="45" step="1" /><label id="valSimPan">45°</label></div>
+    <div class="axis-row"><label id="lblTilt">Tilt</label><input type="range" id="simTilt" min="-180" max="180" value="0" step="1" /><label id="valSimTilt">0°</label></div>
+    <div class="axis-row"><label id="lblRoll">Roll</label><input type="range" id="simRoll" min="-180" max="180" value="0" step="1" /><label id="valSimRoll">0°</label></div>
+    <div class="axis-row"><label>Zoom</label><input type="range" id="simZoom" min="-180" max="180" value="0" step="1" /><label id="valSimZoom">0°</label></div>
+    <div class="axis-row"><label>Focus</label><input type="range" id="simFocus" min="0" max="100" value="50" step="1" /><label id="valSimFocus">50%</label></div>
+    <div class="packet-row">
+      <div class="topbar-label">Fast packet (19-byte hex)</div>
+      <input type="text" id="fastPacketHex" placeholder="dead10..." maxlength="38" />
+      <button type="button" id="decodePacket">Decode</button>
+    </div>
+  </div>
+
+  <div class="overlay-panel position-readouts">
+    <h3>Position <span style="font-weight:400;color:#5a6d8a;font-size:10px;">(head telemetry when connected)</span></h3>
+    <span class="label">Pan</span><span class="value" id="valPan">—</span>
+    <span class="label">Tilt</span><span class="value" id="valTilt">—</span>
+    <span class="label">Roll</span><span class="value" id="valRoll">—</span>
+    <span class="label">Zoom</span><span class="value" id="valZoom">—</span>
+    <span class="label">Focus</span><span class="value" id="valFocus">—</span>
+  </div>
+
+  <div class="overlay-panel compass-wrap">
+    <div class="compass-ring">
+      <span class="compass-north">N</span>
+      <div class="compass-needle" id="compassNeedle"></div>
+    </div>
+  </div>
+
+  <div class="overlay-panel axes-panel">
+    <h3>Axes</h3>
+    <div class="axes-instruments">
+      <div class="axis-widget pan-tilt">
+        <div class="axis-title">Azimuth / Elevation</div>
+        <div class="combined-svg">
+          <svg id="axisPan" width="80" height="48" viewBox="0 0 80 48" xmlns="http://www.w3.org/2000/svg">
+            <path fill="none" stroke="rgba(64,120,220,0.4)" stroke-width="1.5" d="M 8 40 A 36 36 0 0 1 72 40"/>
+            <line x1="40" y1="40" x2="40" y2="24" stroke="rgba(64,120,220,0.5)" stroke-width="0.5"/>
+            <text x="12" y="44" font-size="6" fill="#5a6d8a">0</text>
+            <text x="38" y="44" font-size="6" fill="#5a6d8a">180</text>
+            <text x="68" y="44" font-size="6" fill="#5a6d8a">360</text>
+            <line id="panNeedle" x1="40" y1="40" x2="40" y2="12" stroke="#4080ff" stroke-width="2" stroke-linecap="round" transform="rotate(0 40 40)"/>
+          </svg>
+          <svg id="axisTilt" width="56" height="48" viewBox="0 0 56 48" xmlns="http://www.w3.org/2000/svg">
+            <path fill="none" stroke="rgba(64,120,220,0.4)" stroke-width="1.5" d="M 28 4 A 24 24 0 0 1 28 44"/>
+            <line x1="28" y1="24" x2="52" y2="24" stroke="rgba(64,120,220,0.5)" stroke-width="0.5"/>
+            <text x="2" y="18" font-size="5" fill="#5a6d8a">+90</text>
+            <text x="2" y="26" font-size="5" fill="#5a6d8a">0</text>
+            <text x="2" y="44" font-size="5" fill="#5a6d8a">-90</text>
+            <line id="tiltNeedle" x1="28" y1="24" x2="28" y2="24" stroke="#4080ff" stroke-width="2" stroke-linecap="round" transform="rotate(0 28 24)"/>
+          </svg>
+        </div>
+        <div class="axis-value" id="axisPanTiltVal">— / —</div>
+      </div>
+      <div class="axis-widget">
+        <div class="axis-title">Roll</div>
+        <svg id="axisRoll" width="100%" height="44" viewBox="0 0 60 44" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+          <circle cx="30" cy="22" r="18" fill="none" stroke="rgba(64,120,220,0.4)" stroke-width="1.5"/>
+          <line x1="30" y1="4" x2="30" y2="40" stroke="rgba(64,120,220,0.3)" stroke-width="0.5"/>
+          <line x1="12" y1="22" x2="48" y2="22" stroke="rgba(64,120,220,0.3)" stroke-width="0.5"/>
+          <line id="rollNeedle" x1="30" y1="22" x2="30" y2="6" stroke="#4080ff" stroke-width="2" stroke-linecap="round" transform="rotate(0 30 22)"/>
+          <circle cx="30" cy="22" r="3" fill="#0a0e14" stroke="#4080ff"/>
+        </svg>
+        <div class="axis-value" id="axisRollVal">—</div>
+      </div>
+      <div class="axis-widget">
+        <div class="axis-title">Zoom</div>
+        <svg id="axisZoom" width="100%" height="32" viewBox="0 0 120 32" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+          <rect x="8" y="12" width="104" height="8" rx="2" fill="rgba(20,28,44,0.9)" stroke="rgba(64,120,220,0.4)" stroke-width="1"/>
+          <rect id="zoomFill" x="8" y="12" width="0" height="8" rx="2" fill="rgba(64,128,255,0.6)"/>
+          <text x="4" y="22" font-size="7" fill="#5a6d8a">W</text>
+          <text x="112" y="22" font-size="7" fill="#5a6d8a">T</text>
+        </svg>
+        <div class="axis-value" id="axisZoomVal">—</div>
+      </div>
+      <div class="axis-widget">
+        <div class="axis-title">Focus</div>
+        <svg id="axisFocus" width="100%" height="32" viewBox="0 0 120 32" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+          <rect x="8" y="12" width="104" height="8" rx="2" fill="rgba(20,28,44,0.9)" stroke="rgba(64,120,220,0.4)" stroke-width="1"/>
+          <rect id="focusFill" x="8" y="12" width="0" height="8" rx="2" fill="rgba(64,200,160,0.6)"/>
+          <text x="2" y="22" font-size="7" fill="#5a6d8a">∞</text>
+          <text x="108" y="22" font-size="7" fill="#5a6d8a">M</text>
+        </svg>
+        <div class="axis-value" id="axisFocusVal">—</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const latInput = document.getElementById("lat");
+      const lonInput = document.getElementById("lon");
+      const headingInput = document.getElementById("heading");
+      const applyBtn = document.getElementById("apply");
+      const compassNeedle = document.getElementById("compassNeedle");
+
+      let map;
+      let headMarker = null;
+      let headIcon = null;
+      let headingLine = null;
+
+      function parseNum(id, def) {
+        const v = parseFloat(document.getElementById(id).value);
+        return Number.isFinite(v) ? v : def;
+      }
+
+      function getLat() { return parseNum("lat", 50.56478249783015); }
+      function getLon() { return parseNum("lon", -2.449499288081317); }
+      function getHeading() {
+        const v = parseInt(document.getElementById("heading").value, 10);
+        return Number.isFinite(v) ? ((v % 360) + 360) % 360 : 0;
+      }
+
+      function updateReadouts(pan, tilt, roll, zoom, focus) {
+        document.getElementById("valPan").textContent = pan != null ? String(pan) : "—";
+        document.getElementById("valTilt").textContent = tilt != null ? String(tilt) : "—";
+        document.getElementById("valRoll").textContent = roll != null ? String(roll) : "—";
+        document.getElementById("valZoom").textContent = zoom != null ? String(zoom) : "—";
+        document.getElementById("valFocus").textContent = focus != null ? String(focus) : "—";
+      }
+
+      function updateCompass(deg) {
+        if (compassNeedle) compassNeedle.style.transform = "rotate(" + deg + "deg)";
+      }
+
+      function updateAxisInstruments(pan, tilt, roll, zoomNorm, focusNorm) {
+        const panDeg = Number.isFinite(pan) ? pan : 0;
+        const tiltDeg = Number.isFinite(tilt) ? tilt : 0;
+        const rollDeg = Number.isFinite(roll) ? roll : 0;
+        const zoom = Number.isFinite(zoomNorm) ? Math.max(0, Math.min(100, zoomNorm)) : 0;
+        const focus = Number.isFinite(focusNorm) ? Math.max(0, Math.min(100, focusNorm)) : 0;
+
+        const panNeedle = document.getElementById("panNeedle");
+        const tiltNeedle = document.getElementById("tiltNeedle");
+        const rollNeedle = document.getElementById("rollNeedle");
+        const zoomFill = document.getElementById("zoomFill");
+        const focusFill = document.getElementById("focusFill");
+
+        if (panNeedle) panNeedle.setAttribute("transform", "rotate(" + panDeg + " 40 40)");
+        if (tiltNeedle) {
+          const len = 20;
+          const tr = (tiltDeg * Math.PI) / 180;
+          const ex = 28 + len * Math.cos(tr);
+          const ey = 24 - len * Math.sin(tr);
+          tiltNeedle.setAttribute("x2", ex);
+          tiltNeedle.setAttribute("y2", ey);
+          tiltNeedle.setAttribute("x1", 28);
+          tiltNeedle.setAttribute("y1", 24);
+        }
+        if (rollNeedle) rollNeedle.setAttribute("transform", "rotate(" + rollDeg + " 30 22)");
+        if (zoomFill) zoomFill.setAttribute("width", (104 * zoom / 100));
+        if (focusFill) focusFill.setAttribute("width", (104 * focus / 100));
+
+        document.getElementById("axisPanTiltVal").textContent = (Number.isFinite(pan) ? Math.round(pan) + "°" : "—") + " / " + (Number.isFinite(tilt) ? Math.round(tilt) + "°" : "—");
+        document.getElementById("axisRollVal").textContent = Number.isFinite(roll) ? Math.round(roll) + "°" : "—";
+        document.getElementById("axisZoomVal").textContent = Number.isFinite(zoomNorm) ? Math.round(zoom) + "%" : "—";
+        document.getElementById("axisFocusVal").textContent = Number.isFinite(focusNorm) ? Math.round(focus) + "%" : "—";
+      }
+
+      function createHeadIcon(headingDeg) {
+        const r = (headingDeg * Math.PI) / 180;
+        const size = 40;
+        const cx = size / 2, cy = size / 2;
+        const nose = 16;
+        const tail = 8;
+        const tipX = cx + nose * Math.sin(r);
+        const tipY = cy - nose * Math.cos(r);
+        const lX = cx - tail * Math.cos(r) - 5 * Math.sin(r);
+        const lY = cy + tail * Math.sin(r) - 5 * Math.cos(r);
+        const rX = cx - tail * Math.cos(r) + 5 * Math.sin(r);
+        const rY = cy + tail * Math.sin(r) + 5 * Math.cos(r);
+        const path = "M " + tipX + " " + tipY + " L " + lX + " " + lY + " L " + cx + " " + cy + " L " + rX + " " + rY + " Z";
+        const svg = "<svg xmlns='http://www.w3.org/2000/svg' width='" + size + "' height='" + size + "' viewBox='0 0 " + size + " " + size + "'><path fill='#4080ff' stroke='#70b0ff' stroke-width='1.5' d='" + path + "'/><circle cx='" + cx + "' cy='" + cy + "' r='4' fill='#0a0e14' stroke='#4080ff'/></svg>";
+        return L.divIcon({
+          html: "<div style='width:" + size + "px;height:" + size + "px;margin-left:-" + (size/2) + "px;margin-top:-" + (size/2) + "px;'>" + svg + "</div>",
+          className: "head-marker",
+          iconSize: [size, size],
+          iconAnchor: [size/2, size/2],
+        });
+      }
+
+      function projectHeading(lat, lon, headingDeg, lengthMeters) {
+        const R = 6371000;
+        const d = lengthMeters / R;
+        const br = (headingDeg * Math.PI) / 180;
+        const lat1 = (lat * Math.PI) / 180;
+        const lon1 = (lon * Math.PI) / 180;
+        const lat2 = Math.asin(Math.sin(lat1) * Math.cos(d) + Math.cos(lat1) * Math.sin(d) * Math.cos(br));
+        const lon2 = lon1 + Math.atan2(Math.sin(br) * Math.sin(d) * Math.cos(lat1), Math.cos(d) - Math.sin(lat1) * Math.sin(lat2));
+        return [lat2 * 180 / Math.PI, lon2 * 180 / Math.PI];
+      }
+
+      function apply() {
+        const lat = getLat();
+        const lon = getLon();
+        const heading = getHeading();
+
+        if (!map) return;
+        map.setView([lat, lon], map.getZoom());
+
+        if (headMarker) map.removeLayer(headMarker);
+        headIcon = createHeadIcon(heading);
+        headMarker = L.marker([lat, lon], { icon: headIcon }).addTo(map);
+
+        if (headingLine) map.removeLayer(headingLine);
+        const end = projectHeading(lat, lon, heading, 80);
+        headingLine = L.polyline([[lat, lon], end], {
+          color: "#4080ff",
+          weight: 3,
+          opacity: 0.85,
+          dashArray: "8,6",
+        }).addTo(map);
+
+        updateCompass(heading);
+        updateReadouts(heading, 0, 0, "—", "—");
+        updateAxisInstruments(heading, 0, 0, 50, 50);
+      }
+
+      applyBtn.addEventListener("click", apply);
+
+      function simPanTo360(deg180) {
+        var d = Number(deg180);
+        if (!Number.isFinite(d)) return 0;
+        return ((d + 360) % 360 + 360) % 360;
+      }
+
+      function applySimToInstruments() {
+        var pan180 = parseInt(document.getElementById("simPan").value, 10) || 0;
+        var tilt = parseInt(document.getElementById("simTilt").value, 10) || 0;
+        var roll = parseInt(document.getElementById("simRoll").value, 10) || 0;
+        var zoom = parseInt(document.getElementById("simZoom").value, 10) || 0;
+        var focus = parseInt(document.getElementById("simFocus").value, 10) || 0;
+        document.getElementById("valSimPan").textContent = pan180 + "°";
+        document.getElementById("valSimTilt").textContent = tilt + "°";
+        document.getElementById("valSimRoll").textContent = roll + "°";
+        document.getElementById("valSimZoom").textContent = zoom + "°";
+        document.getElementById("valSimFocus").textContent = focus + "%";
+        var pan360 = simPanTo360(pan180);
+        var zoomPct = Math.max(0, Math.min(100, (zoom + 180) / 360 * 100));
+        updateReadouts(pan360, tilt, roll, zoom, focus);
+        updateAxisInstruments(pan360, tilt, roll, zoomPct, focus);
+        updateCompass(pan360);
+        if (headMarker && map) {
+          var lat = getLat(), lon = getLon();
+          if (headMarker) map.removeLayer(headMarker);
+          headMarker = L.marker([lat, lon], { icon: createHeadIcon(pan360) }).addTo(map);
+          if (headingLine) map.removeLayer(headingLine);
+          var end = projectHeading(lat, lon, pan360, 80);
+          headingLine = L.polyline([[lat, lon], end], { color: "#4080ff", weight: 3, opacity: 0.85, dashArray: "8,6" }).addTo(map);
+        }
+      }
+
+      document.getElementById("simMode").addEventListener("change", function () {
+        document.getElementById("simPanel").classList.toggle("visible", this.checked);
+        if (this.checked) applySimToInstruments();
+      });
+
+      ["simPan", "simTilt", "simRoll", "simZoom", "simFocus"].forEach(function (id) {
+        document.getElementById(id).addEventListener("input", applySimToInstruments);
+      });
+
+      function decodeFastPacketV2(hex) {
+        hex = (hex || "").replace(/\s/g, "");
+        if (hex.length !== 38) return null;
+        var bytes = [];
+        for (var i = 0; i < 19; i++) {
+          var b = parseInt(hex.substr(i * 2, 2), 16);
+          if (isNaN(b)) return null;
+          bytes.push(b);
+        }
+        if (bytes[0] !== 0xDE || bytes[1] !== 0xFD || bytes[2] !== 0x10) return null;
+        var seq = bytes[3] | (bytes[4] << 8);
+        var zoom = bytes[5] | (bytes[6] << 8); if (zoom >= 32768) zoom -= 65536;
+        var focus = bytes[7] | (bytes[8] << 8);
+        var iris = bytes[9] | (bytes[10] << 8);
+        var yaw = bytes[11] | (bytes[12] << 8);
+        var pitch = bytes[13] | (bytes[14] << 8);
+        var roll = bytes[15] | (bytes[16] << 8);
+        var pan180 = Math.max(-180, Math.min(180, Math.round((yaw - 32768) / 32768 * 180)));
+        var tilt180 = Math.max(-180, Math.min(180, Math.round((pitch - 32768) / 32768 * 180)));
+        var roll180 = Math.max(-180, Math.min(180, Math.round((roll - 32768) / 32768 * 180)));
+        var zoom180 = Math.max(-180, Math.min(180, Math.round(zoom / 32767 * 180)));
+        var focusPct = Math.max(0, Math.min(100, Math.round(focus / 65535 * 100)));
+        return { seq: seq, pan180: pan180, tilt180: tilt180, roll180: roll180, zoom180: zoom180, focusPct: focusPct };
+      }
+
+      document.getElementById("decodePacket").addEventListener("click", function () {
+        var hex = document.getElementById("fastPacketHex").value.trim();
+        var decoded = decodeFastPacketV2(hex);
+        if (!decoded) {
+          alert("Invalid 19-byte fast packet. Use 38 hex chars (e.g. DE FD 10 ...).");
+          return;
+        }
+        document.getElementById("simPan").value = decoded.pan180;
+        document.getElementById("simTilt").value = decoded.tilt180;
+        document.getElementById("simRoll").value = decoded.roll180;
+        document.getElementById("simZoom").value = decoded.zoom180;
+        document.getElementById("simFocus").value = decoded.focusPct;
+        applySimToInstruments();
+      });
+
+      var simWs = null;
+      function setWsStatus(txt) {
+        var el = document.getElementById("wsStatus");
+        if (el) el.textContent = txt;
+        var btn = document.getElementById("wsConnect");
+        if (btn) btn.textContent = (simWs && simWs.readyState === WebSocket.OPEN) ? "Disconnect" : "Connect";
+      }
+      function applyFastAxesToSim(axes) {
+        if (!axes || typeof axes !== "object") return;
+        var x = Number(axes.X);
+        var y = Number(axes.Y);
+        var z = Number(axes.Z);
+        var zr = Number(axes.Zrotate);
+        var xr = Number(axes.Xrotate);
+        if (!Number.isFinite(x)) x = 0;
+        if (!Number.isFinite(y)) y = 0;
+        if (!Number.isFinite(z)) z = 0;
+        if (!Number.isFinite(zr)) zr = 0;
+        if (!Number.isFinite(xr)) xr = 0;
+        var pan180 = Math.max(-180, Math.min(180, Math.round(x * 180)));
+        var tilt180 = Math.max(-180, Math.min(180, Math.round(y * 180)));
+        var roll180 = Math.max(-180, Math.min(180, Math.round(z * 180)));
+        var zoom180 = Math.max(-180, Math.min(180, Math.round(zr * 180)));
+        var focusPct = Math.max(0, Math.min(100, Math.round((xr + 1) * 50)));
+        document.getElementById("simPan").value = pan180;
+        document.getElementById("simTilt").value = tilt180;
+        document.getElementById("simRoll").value = roll180;
+        document.getElementById("simZoom").value = zoom180;
+        document.getElementById("simFocus").value = focusPct;
+        applySimToInstruments();
+      }
+      document.getElementById("wsConnect").addEventListener("click", function () {
+        if (simWs && simWs.readyState === WebSocket.OPEN) {
+          simWs.close();
+          simWs = null;
+          setWsStatus("Closed");
+          return;
+        }
+        var url = document.getElementById("wsUrl").value.trim();
+        if (!url) {
+          var host = window.location.hostname || "localhost";
+          url = (window.location.protocol === "https:" ? "wss:" : "ws:") + "//" + host + ":8766";
+        }
+        setWsStatus("Connecting…");
+        try {
+          simWs = new WebSocket(url);
+          simWs.onopen = function () { setWsStatus("Live"); };
+          simWs.onclose = function () { simWs = null; setWsStatus("Closed"); };
+          simWs.onerror = function () { setWsStatus("Error"); };
+          simWs.onmessage = function (ev) {
+            try {
+              var msg = JSON.parse(ev.data);
+              if (msg && msg.type === "STATE" && msg.fast_axes) applyFastAxesToSim(msg.fast_axes);
+            } catch (e) {}
+          };
+        } catch (e) {
+          setWsStatus("Error: " + (e.message || e));
+        }
+      });
+
+      document.getElementById("pasteLatLon").addEventListener("paste", function (e) {
+        setTimeout(function () {
+          const raw = document.getElementById("pasteLatLon").value.trim();
+          const m = raw.match(/^(-?[\d.]+)\s*[,;\s]\s*(-?[\d.]+)\s*$/);
+          if (m) {
+            document.getElementById("lat").value = m[1];
+            document.getElementById("lon").value = m[2];
+            document.getElementById("pasteLatLon").value = "";
+          }
+        }, 0);
+      });
+      document.getElementById("pasteLatLon").addEventListener("change", function () {
+        const raw = this.value.trim();
+        const m = raw.match(/^(-?[\d.]+)\s*[,;\s]\s*(-?[\d.]+)\s*$/);
+        if (m) {
+          document.getElementById("lat").value = m[1];
+          document.getElementById("lon").value = m[2];
+          this.value = "";
+        }
+      });
+
+      map = L.map("map", { zoomControl: true }).setView([50.56478249783015, -2.449499288081317], 16);
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+        attribution: "&copy; OpenStreetMap, &copy; CARTO",
+        maxZoom: 19,
+      }).addTo(map);
+      map.attributionControl.setPrefix("");
+
+      latInput.value = "50.56478249783015";
+      lonInput.value = "-2.449499288081317";
+      headingInput.value = "45";
+      apply();
+    })();
+  </script>
+</body>
+</html>

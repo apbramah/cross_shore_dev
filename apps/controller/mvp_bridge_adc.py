@@ -338,15 +338,19 @@ def _run_output_loop(
     slow_interval_s: float,
     stop: threading.Event,
     fast_debug: bool = False,
+    profile_dir: str | None = None,
 ) -> None:
-    """Background thread: consume shaped axes from queue, send fast/slow UDP."""
+    """Background thread: consume shaped axes from queue, send fast/slow UDP; optionally write axes to runtime file for sim."""
     sock = None
     last_fast = 0.0
     last_slow = 0.0
     current_axes: dict[str, Any] | None = None
     fast_send_count = 0
     last_fast_log = 0.0
+    last_axes_write = 0.0
     FAST_DEBUG_INTERVAL_S = 5.0
+    FAST_AXES_WRITE_INTERVAL_S = 0.1
+    FAST_AXES_FILENAME = "fast_axes_latest.json"
     current_host = host
     current_fast_port = fast_port
     current_slow_port = slow_port
@@ -380,6 +384,16 @@ def _run_output_loop(
             sock = send_fast(current_axes, current_host, current_fast_port, sock)
             last_fast = now
             fast_send_count += 1
+        if profile_dir and now - last_axes_write >= FAST_AXES_WRITE_INTERVAL_S:
+            last_axes_write = now
+            try:
+                path = os.path.join(profile_dir, FAST_AXES_FILENAME)
+                ax = current_axes or neutral_axes()
+                payload = {"axes": dict(ax), "updated_at": now}
+                with open(path, "w") as f:
+                    json.dump(payload, f)
+            except Exception:
+                pass
         if now - last_slow >= slow_interval_s:
             send_slow(current_axes, current_host, current_slow_port, sock)
             last_slow = now
@@ -471,6 +485,7 @@ def run_bridge(
             slow_interval_s,
             stop,
             use_fast_debug,
+            runtime_dir,
         ),
         daemon=True,
     )
