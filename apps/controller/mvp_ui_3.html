@@ -3086,7 +3086,7 @@ function bindUI(){
     const overlay = $("positionMapOverlay");
     const frame = $("positionMapFrame");
     if (overlay && frame) {
-      frame.src = "position_map_standalone.html";
+      frame.src = "position_map_standalone.html?v=" + Date.now();
       overlay.classList.add("open");
       try { overlay.requestFullscreen && overlay.requestFullscreen(); } catch (e) {}
     }
