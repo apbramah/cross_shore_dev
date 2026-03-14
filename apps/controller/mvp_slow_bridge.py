@@ -141,6 +141,52 @@ def _default_shaping_profile() -> dict[str, Any]:
     }
 
 
+DEFAULT_SLIDER_ASSIGNMENTS = [
+    "fast:shape_top_speed_yaw",
+    "fast:shape_top_speed_pitch",
+    "fast:shape_top_speed_roll",
+    "fast:shape_top_speed_zoom",
+    "slow:gyro_heading_correction",
+    "slow:filter_num",
+]
+DEFAULT_QUICK_BUTTON_ASSIGNMENTS = ["none:none"] * 5
+
+
+def _default_control_banks() -> dict[str, Any]:
+    return {
+        "control": {
+            "sliders": list(DEFAULT_SLIDER_ASSIGNMENTS),
+            "quick": list(DEFAULT_QUICK_BUTTON_ASSIGNMENTS),
+        },
+        "control2": {
+            "sliders": list(DEFAULT_SLIDER_ASSIGNMENTS),
+            "quick": list(DEFAULT_QUICK_BUTTON_ASSIGNMENTS),
+        },
+    }
+
+
+def _normalize_factory_control_banks(raw: Any) -> dict[str, Any]:
+    base = _default_control_banks()
+    if not isinstance(raw, dict):
+        return base
+    for bank_name in ("control", "control2"):
+        src = raw.get(bank_name)
+        if not isinstance(src, dict):
+            continue
+        sliders = src.get("sliders")
+        quick = src.get("quick")
+        if isinstance(sliders, list):
+            pad = list(DEFAULT_SLIDER_ASSIGNMENTS)
+            base[bank_name]["sliders"] = [str(v) for v in sliders[:6]]
+            while len(base[bank_name]["sliders"]) < 6:
+                base[bank_name]["sliders"].append(pad[len(base[bank_name]["sliders"])])
+        if isinstance(quick, list):
+            base[bank_name]["quick"] = [str(v) for v in quick[:5]]
+            while len(base[bank_name]["quick"]) < 5:
+                base[bank_name]["quick"].append("none:none")
+    return base
+
+
 def _clamp(v: float, lo: float, hi: float) -> float:
     if v < lo:
         return lo
@@ -343,7 +389,11 @@ slow_apply_status: dict[str, dict[str, Any]] = {
     for k in mvp_protocol.SLOW_KEY_IDS.keys()
 }
 
-factory_defaults = {"slow": _default_slow_state(), "shaping": _default_shaping_profile()}
+factory_defaults = {
+    "slow": _default_slow_state(),
+    "shaping": _default_shaping_profile(),
+    "control_banks": _default_control_banks(),
+}
 user_defaults = {"shaping": _default_shaping_profile()}
 shaping_state = _default_shaping_profile()
 active_profile_name = ""
@@ -517,7 +567,11 @@ def _restore_factory_defaults() -> tuple[bool, str]:
 
 def _load_factory_defaults_file() -> None:
     global factory_defaults
-    base = {"slow": _default_slow_state(), "shaping": _default_shaping_profile()}
+    base = {
+        "slow": _default_slow_state(),
+        "shaping": _default_shaping_profile(),
+        "control_banks": _default_control_banks(),
+    }
     data = _safe_load_json(FACTORY_DEFAULTS_FILE, base)
     if not isinstance(data, dict):
         data = base
@@ -527,9 +581,11 @@ def _load_factory_defaults_file() -> None:
     for k in merged_slow.keys():
         if k in slow:
             merged_slow[k] = _normalize_slow_value(k, slow[k])
+    control_banks = _normalize_factory_control_banks(data.get("control_banks", {}))
     factory_defaults = {
         "slow": merged_slow,
         "shaping": _normalized_shaping_profile(shaping if shaping else base["shaping"]),
+        "control_banks": control_banks,
     }
     _safe_save_json(FACTORY_DEFAULTS_FILE, factory_defaults)
 
@@ -902,7 +958,11 @@ async def slow_sender_task() -> None:
         await asyncio.sleep(SLOW_SEND_INTERVAL_S)
         if not heads:
             continue
+        have_telem = bool(head_feedback.get("updated_at"))
         for key in mvp_protocol.SLOW_KEY_IDS.keys():
+            # Don't send lens_select until we have telemetry (so we use head's detected lens_id, not default fuji).
+            if key == "lens_select" and not have_telem:
+                continue
             _send_one_slow_key_now(key)
 
 
@@ -941,6 +1001,12 @@ async def telemetry_receiver_task() -> None:
             head_feedback["lens"] = _normalize_lens_feedback(telem.get("lens", {}))
             head_feedback["bgc"] = telem.get("bgc", {})
             head_feedback["updated_at"] = time.time()
+            # Sync lens_select to head's detected lens so we don't send fuji when head has canon.
+            lens_id = (head_feedback.get("lens") or {}).get("lens_id")
+            if lens_id and str(lens_id).strip().lower() in ("canon", "fuji"):
+                reported = str(lens_id).strip().lower()
+                if dual_slow_state.get("lens_select") != reported:
+                    dual_slow_state["lens_select"] = reported
 
 
 def _refresh_connection_status() -> None:
@@ -1325,7 +1391,10 @@ async def handler(websocket: Any) -> None:
                 await websocket.send(json.dumps({"type": "LOAD_USER_PROFILE_RESULT", "ok": ok, "message": msg, "name": _sanitize_profile_name(data.get("name", "")), "ui_preferences": ui_preferences}))
             elif msg_type == "RESTORE_FACTORY_DEFAULTS":
                 ok, msg = _restore_factory_defaults()
-                await websocket.send(json.dumps({"type": "RESTORE_FACTORY_DEFAULTS_RESULT", "ok": ok, "message": msg}))
+                payload = {"type": "RESTORE_FACTORY_DEFAULTS_RESULT", "ok": ok, "message": msg}
+                if ok:
+                    payload["control_banks"] = copy.deepcopy(factory_defaults.get("control_banks", _default_control_banks()))
+                await websocket.send(json.dumps(payload))
             elif msg_type == "LIST_USER_PROFILES":
                 await websocket.send(json.dumps({"type": "LIST_USER_PROFILES_RESULT", "ok": True, "profiles": _list_user_profiles(), "active": active_profile_name}))
             elif msg_type == "SET_PI_LAN_CONFIG":
