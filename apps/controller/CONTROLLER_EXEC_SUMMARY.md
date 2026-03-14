@@ -2,83 +2,63 @@
 
 ## Current Runtime Shape (What is live now)
 
-- The controller side is currently split into two independent paths:
-  - **Slow control path (UI-driven):** USB gamepad encoder buttons -> browser (`mvp_ui_2.html`) -> WebSocket slow bridge (`mvp_slow_bridge.py`, port `8766`) -> UDP slow commands to head (`port_slow_cmd`, default `8890`).
-  - **Fast motion path (USB ingest):** USB CDC axis stream (`ADCv1` frames) -> ADC bridge (`mvp_bridge_adc.py`) -> fast UDP control packets to head (`port_fast`, default `8888`).
-- Head targeting is coordinated via `mvp_selected_head.json`; slow bridge writes selected head index, ADC bridge follows it when `--host` is not overridden.
-- `mvp_ui_2.html` is a **slow-control console**, not a fast-axis sender.
+- Runtime is split into two coordinated planes:
+  - **Slow/control plane:** `mvp_ui_3.html` -> WebSocket `mvp_slow_bridge.py` (`:8766`) -> UDP slow commands (`8890`).
+  - **Fast/motion plane:** USB CDC ADC stream -> `mvp_bridge_adc.py` -> UDP fast packets (`8888`).
+- Head selection is shared across both planes through `heads.json` + `mvp_selected_head.json`.
+- Slow bridge now publishes a richer canonical `STATE` model (slow controls, apply status, shaping, defaults, telemetry, connection/network, Wi-Fi, calibration, UI defaults).
 
 ## End-to-End Data Flow
 
-1. **Operator input (USB gamepad encoders)**  
-   Browser reads `navigator.getGamepads()[0].buttons` and maps 15 buttons as five encoder lanes (`CW/CCW/SW` per lane).
-2. **UI state and commands**  
-   Encoder lane logic drives UI focus/edit/apply for:
-   - `SELECT_HEAD`
-   - `SET_SLOW_CONTROL` for `motors_on` and `gyro_heading_correction`
-3. **Slow message server (`mvp_slow_bridge.py`)**  
-   Receives WebSocket commands, persists state (`mvp_slow_state.json`), and emits UDP slow command packets every `0.5s` (plus immediate send for gyro updates).
-4. **Fast axis ingest (`mvp_bridge_adc_ingest.py`)**  
-   Reads Teensy CDC lines in format:  
-   `ADCv1,<seq>,<teensy_us>,<x>,<y>,<z>,<rx>,<ry>,<rz>`
-5. **Number shaping (`mvp_bridge_adc_shape.py`)**  
-   Converts raw `0..4095` to `[-1.0..1.0]`, then applies per-axis: center offset, deadband, expo, LPF, slew, invert, gain, clamp.
-6. **Fast output (`mvp_bridge_adc_output.py`)**  
-   Sends v2 fast UDP packets at configured rate (default `50 Hz`) to selected head fast port (`8888`).
+1. **Operator input**
+   - Browser reads 15 encoder buttons (`CW/CCW/SW` for 5 encoder lanes) and touch controls.
+2. **UI actions**
+   - Sends `SELECT_HEAD`, `SET_SLOW_CONTROL`, `SET_SHAPING`, `SAVE/RESET_USER_DEFAULTS`, network and Wi-Fi actions, and `CALIBRATE_INPUTS`.
+3. **Slow bridge (`mvp_slow_bridge.py`)**
+   - Persists state, sends immediate/periodic slow commands, ingests ACK + telemetry, and publishes merged runtime state to UI.
+4. **ADC bridge (`mvp_bridge_adc.py`)**
+   - Ingests CDC `ADCv1` frames, applies shaping profile, and sends fast control packets to selected head.
+5. **Calibration loop**
+   - UI request file -> ADC sample median per axis -> center offset update in `adc_bridge_profile.json` -> status reflected back in UI.
 
-## Number Handling (Important)
+## Key Runtime Behaviors Added
 
-- **Encoder/buttons path:** edge-triggered digital events only; no analog math.
-- **Slow values encoding:**
-  - `motors_on`: bool -> `0/1`
-  - `gyro_heading_correction`: int passthrough (defaults to `0x1500` if invalid)
-  - slow packet value field is a signed 32-bit int (`build_slow_cmd_packet`).
-- **Fast values encoding:**
-  - USB raw ADC `0..4095` -> normalized float `[-1..1]`
-  - shaped float axes -> packet fields:
-    - `yaw/pitch/roll/focus/iris`: mapped to unsigned `u16` via center `32768`
-    - `zoom`: signed `s16` (scaled by `zoom_gain`)
+- Full slow-command coverage baseline with per-key apply status (`pending/sent/confirmed/rejected/send_error`).
+- Shaping persistence with user defaults and factory reset behavior.
+- Deadband controls exposed for `yaw/pitch/roll/zoom`.
+- Input Tests diagnostics:
+  - raw/accepted/debounce-suppressed/group-suppressed counters
+  - per-encoder non-wrapping test values `0..10`
+  - backend-configurable default debounce/lockout values.
+- Wi-Fi provisioning and IP config workflows from UI.
+- Connection status layering:
+  - physical link
+  - selected-head connectivity state
+  - bridge/UI health
+  - live Pi LAN snapshot separated from saved LAN config.
 
-## Slow Server API (`mvp_slow_bridge.py`, WS `:8766`)
+## Number Handling (Current Rule Set)
 
-### Client -> Server
+- **UI scale rule:**
+  - default numeric controls target `0..10`
+  - high-res slots use `0.0..10.0`
+  - numeric fields are non-wrapping
+  - text-backed values may wrap.
+- **Shaping normalization:**
+  - UI stores shaping on `0..10`
+  - bridge maps to engineering ranges when writing ADC profile:
+    - expo: `0..10 -> -1.0..1.0`
+    - top speed: `0..10 -> 0.0..2.0`
+    - deadband: `0..10 -> 0.0..0.25`
+  - legacy shaping values are migrated forward during load.
 
-- `{"type":"SELECT_HEAD","index":<int>}`
-- `{"type":"SET_SLOW_CONTROL","key":"motors_on","value":0|1}`
-- `{"type":"SET_SLOW_CONTROL","key":"gyro_heading_correction","value":<int>}`
+## Telemetry Summary
 
-### Server -> Client
-
-- `STATE` (on connect): heads list, selected index, slow_controls snapshot
-- `SELECTED`: confirms selected head index
-- `SLOW_APPLIED`: confirms applied slow key/value
-
-### Server -> Head (UDP)
-
-- Port: `port_slow_cmd` in `heads.json` (fallback `8890`)
-- Packet type: `PKT_SLOW_CMD (0x20)`
-- Keys currently transmitted by this bridge loop:
-  - `motors_on`
-  - `gyro_heading_correction`
-
-## Fast Server / Fast Path API
-
-### Runtime producer now (ADC bridge)
-
-- Producer: `mvp_bridge_adc.py` + `mvp_bridge_adc_output.py`
-- Transport: UDP fast channel to `port_fast` (fallback `8888`)
-- Packet: v2 fast packet (`build_fast_packet_v2`)
-  - Struct: `<BBBHhHHHHHH>`
-  - Fields: `magic, ver, type, seq, zoom, focus, iris, yaw, pitch, roll, reserved`
-
-### Alternate WebSocket bridge (available, not used by `mvp_ui_2.html`)
-
-- `mvp_bridge.py` on WS `:8765` accepts `GAMEPAD` + control messages and emits fast UDP + slow UDP.
-- This is the path used by `mvp_ui.html`/`ui_dev`, not by `mvp_ui_2.html`.
+- Lens telemetry includes canonical `positions` (`zoom/focus/iris`) + `lens_full_name`.
+- Zoom telemetry now uses lens feedback with safe Fuji polling at ~3 Hz.
+- Slow telemetry + ACK are filtered against selected head IP to avoid cross-head contamination.
 
 ## Practical Conclusion
 
-- You currently have a **clean split**:
-  - **Slow:** encoder-button UX in HTML -> slow bridge (`8766`) -> UDP `8890`
-  - **Fast:** USB ADC/jpysticks-style axis ingest in Python -> fast UDP `8888`
-- The integration pivot is already in place: `mvp_selected_head.json` links both paths to the same selected head target.
+- Controller runtime is now feature-complete for the expansion baseline with focus on deterministic behavior, persistence, and measurable diagnostics.
+- Known risky path (full UI normalized stepping variant) was reverted after kiosk regression and replaced with safer incremental normalization.

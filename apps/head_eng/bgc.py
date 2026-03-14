@@ -154,6 +154,38 @@ class BGC:
         else:
             self.motors_off(0)
 
+    def set_wash_wipe_mode(self, mode_raw: int):
+        """
+        Requested mode:
+          0 => parked
+          1 => wiping
+
+        NOTE: Servo PWM1 command mapping is platform-specific and must be
+        finalized against the active BGC profile/adj-var IDs.
+        """
+        mode_i = 1 if int(mode_raw) != 0 else 0
+        print("BGC wash_wipe mode requested:", mode_i, "(TODO: map to Servo PWM1 command path)")
+
+    def set_axis_accel(self, axis: str, value_raw: int):
+        axis_name = str(axis or "").strip().lower()
+        axis_name = axis_name if axis_name in ("yaw", "pitch", "roll") else "yaw"
+        v = int(value_raw)
+        if v < 0:
+            v = 0
+        if v > 255:
+            v = 255
+        print(f"BGC axis accel requested: axis={axis_name} value={v} (TODO: map to BGC accel adj-var ID)")
+
+    def set_axis_gain(self, axis: str, value_raw: int):
+        axis_name = str(axis or "").strip().lower()
+        axis_name = axis_name if axis_name in ("yaw", "pitch", "roll") else "yaw"
+        v = int(value_raw)
+        if v < 0:
+            v = 0
+        if v > 255:
+            v = 255
+        print(f"BGC axis gain requested: axis={axis_name} value={v} (TODO: map to BGC gain adj-var ID)")
+
 
 def _decode_lens_control(ctrl0: int, ctrl1: int):
     if ctrl1 != 0xA5:

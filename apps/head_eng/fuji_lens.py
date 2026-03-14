@@ -103,6 +103,7 @@ class FujiLens:
         self._last_control_tx_ms = 0
         self._last_zoom_feedback = None
         self._last_focus_feedback = None
+        self._last_iris_feedback = None
         self._zoom_active_until_ms = 0
         self._last_input_delta_ms = 0
         self._last_zoom_input = 0
@@ -301,6 +302,14 @@ class FujiLens:
                 if FUJI_RUNTIME_TX_PROFILE == "normal":
                     self._send_axis_controls(now_ms)
                 self._next_control_tx_ms = now_ms + CONTROL_TX_PERIOD_MS
+            if _time_after(now_ms, self._next_poll_ms):
+                self.transport.write(build_position_request_zoom())
+                if not zoom_active:
+                    self.transport.write(build_position_request_focus())
+                    self.transport.write(build_position_request_iris())
+                    self._next_poll_ms = now_ms + POLL_INTERVAL_MS_IDLE
+                else:
+                    self._next_poll_ms = now_ms + POLL_INTERVAL_MS_ACTIVE_ZOOM
         else:
             if _time_after(now_ms, self._next_keepalive_ms):
                 demand_active = (
@@ -653,6 +662,11 @@ class FujiLens:
                     )
                 )
             self._last_focus_feedback = value
+        elif func == FUNC_IRIS_POSITION and payload:
+            value = decode_position_response(payload)
+            if value is None:
+                return
+            self._last_iris_feedback = value
 
     def _send_focus_control(self, now_ms):
         self.transport.write(build_focus_control(self.focus))

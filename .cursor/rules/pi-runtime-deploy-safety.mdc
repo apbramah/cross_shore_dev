@@ -1,0 +1,19 @@
+---
+description: Prevent Pi deploy drift and false "done" status
+alwaysApply: true
+---
+
+# Pi Runtime Deploy Safety
+
+When changes affect Pi behavior, do not mark work complete until runtime parity is verified.
+
+- Treat these as separate states: dev repo, Pi repo, Pi runtime (`/opt/ui`, `/opt/wsbridge`).
+- Never assume service names or paths; verify on device from `systemctl cat` and active units.
+- After every Pi-facing change, provide exact deploy commands for touched files only.
+- Require restart of only relevant services and report the exact units restarted.
+- Require post-deploy verification commands:
+  - Source vs runtime hash checks for each touched file.
+  - `systemctl is-active` for required services.
+  - Targeted runtime grep/probe proving the intended change exists in runtime files.
+- If verification is missing or fails, explicitly state "not deployed/verified yet".
+- Prefer smallest safe change scope (one function/feature at a time) and verify before next change.

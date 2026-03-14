@@ -92,6 +92,7 @@ class ADCBridgeState:
         self._profile_dir = profile_dir or os.path.dirname(os.path.abspath(__file__))
         self._lock = threading.Lock()
         self._profile = default_profile()
+        self._profile_mtime: float | None = None
         self._load_profile()
         # Health snapshot (updated by ingest/output)
         self._health: dict[str, Any] = {
@@ -112,6 +113,7 @@ class ADCBridgeState:
         if not os.path.isfile(path):
             return
         try:
+            self._profile_mtime = os.path.getmtime(path)
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
             ok, _ = validate_profile(data)
@@ -120,17 +122,37 @@ class ADCBridgeState:
         except Exception:
             pass
 
+    def _maybe_reload_profile(self) -> None:
+        path = self._profile_path()
+        try:
+            if not os.path.isfile(path):
+                return
+            mtime = os.path.getmtime(path)
+            if self._profile_mtime is not None and mtime <= self._profile_mtime:
+                return
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            ok, _ = validate_profile(data)
+            if ok:
+                self._profile = data
+                self._profile_mtime = mtime
+        except Exception:
+            pass
+
     def get_profile(self) -> dict[str, Any]:
         with self._lock:
+            self._maybe_reload_profile()
             return json.loads(json.dumps(self._profile))
 
     def get_axis_tuning(self, axis: str) -> dict[str, Any]:
         with self._lock:
+            self._maybe_reload_profile()
             axes = self._profile.get("axes", {})
             return dict(axes.get(axis, DEFAULT_AXIS_TUNING))
 
     def get_stale_timeout_ms(self) -> float:
         with self._lock:
+            self._maybe_reload_profile()
             return float(self._profile.get("stale_timeout_ms", STALE_TIMEOUT_MS_DEFAULT))
 
     def apply_profile_update(self, new_profile: dict[str, Any]) -> tuple[bool, str]:
@@ -144,6 +166,7 @@ class ADCBridgeState:
             path = self._profile_path()
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(new_profile, f, indent=2)
+            self._profile_mtime = os.path.getmtime(path)
         except Exception as e:
             return False, str(e)
         return True, "ACK"
