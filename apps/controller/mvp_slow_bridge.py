@@ -958,10 +958,9 @@ async def slow_sender_task() -> None:
         await asyncio.sleep(SLOW_SEND_INTERVAL_S)
         if not heads:
             continue
-        have_telem = bool(head_feedback.get("updated_at"))
         for key in mvp_protocol.SLOW_KEY_IDS.keys():
-            # Don't send lens_select until we have telemetry (so we use head's detected lens_id, not default fuji).
-            if key == "lens_select" and not have_telem:
+            # Never send lens_select: head detects lens at boot; controller must not override it.
+            if key == "lens_select":
                 continue
             _send_one_slow_key_now(key)
 
@@ -1001,12 +1000,6 @@ async def telemetry_receiver_task() -> None:
             head_feedback["lens"] = _normalize_lens_feedback(telem.get("lens", {}))
             head_feedback["bgc"] = telem.get("bgc", {})
             head_feedback["updated_at"] = time.time()
-            # Sync lens_select to head's detected lens so we don't send fuji when head has canon.
-            lens_id = (head_feedback.get("lens") or {}).get("lens_id")
-            if lens_id and str(lens_id).strip().lower() in ("canon", "fuji"):
-                reported = str(lens_id).strip().lower()
-                if dual_slow_state.get("lens_select") != reported:
-                    dual_slow_state["lens_select"] = reported
 
 
 def _refresh_connection_status() -> None:

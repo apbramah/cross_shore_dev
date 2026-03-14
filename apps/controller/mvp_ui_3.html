@@ -20,6 +20,7 @@
     .head-id-box.status-off { border-color:#5b6880; box-shadow:0 0 0 2px rgba(91,104,128,.18), 0 0 10px rgba(91,104,128,.16); }
     .head-id-box.status-warn { border-color:#c59a3a; box-shadow:0 0 0 2px rgba(197,154,58,.2), 0 0 12px rgba(197,154,58,.18); }
     .head-id-box.status-on { border-color:#36b462; box-shadow:0 0 0 2px rgba(54,180,98,.22), 0 0 14px rgba(54,180,98,.2); }
+    .lens-name-box { width:20ch; min-width:20ch; font-size:0.9em; text-align:center; border:2px solid #5b6880; background:#1a1d24; color:#c0c4cc; padding:6px 8px; border-radius:6px; }
     .tabs { display:flex; gap:8px; padding:6px; }
     .tab { flex:1; border-radius:8px; border:1px solid #44557a; background:#202b40; color:#d7e5ff; font-weight:700; font-size:15px; }
     .tab.active { border-color:var(--accent); box-shadow:0 0 0 2px rgba(87,167,255,.25) inset; background:#284362; }
@@ -447,8 +448,9 @@
         <button id="headSelectorBtn" class="head-select-trigger" type="button">Select Head</button>
         <select id="heads" style="display:none"></select>
       </div>
-      <div class="row">
+      <div class="row" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
         <input id="headIdBox" class="head-id-box status-off" readonly value="No Head" />
+        <div id="lensNameBox" class="lens-name-box" title="Lens reported by head">—</div>
       </div>
       <div class="row actions">
         <button id="homeBtn" class="top-action-btn" type="button">Home</button>
@@ -741,14 +743,14 @@ const FAST_SLIDER_COMMANDS = [
   "shape_deadband_roll", "shape_deadband_zoom", "shape_zoom_feedback",
 ];
 const SLOW_SLIDER_COMMANDS = [
-  "motors_on", "control_mode", "lens_select", "source_zoom", "source_focus", "source_iris",
+  "motors_on", "control_mode", "source_zoom", "source_focus", "source_iris",
   "filter_enable_focus", "filter_enable_iris", "filter_num", "filter_den", "gyro_heading_correction", "wash_wipe",
   "pan_accel", "tilt_accel", "roll_accel", "pan_gain", "tilt_gain", "roll_gain",
   "da_enabled", "da_yaw_range", "da_pitch_range", "da_roll_range", "da_deadband", "da_speed",
 ];
 const FAST_QUICK_COMMANDS = ["shape_invert_yaw", "shape_invert_pitch", "shape_invert_roll"];
 const SLOW_QUICK_COMMANDS = [
-  "motors_on", "control_mode", "lens_select", "source_zoom", "source_focus", "source_iris",
+  "motors_on", "control_mode", "source_zoom", "source_focus", "source_iris",
   "filter_enable_focus", "filter_enable_iris", "wash_wipe",
 ];
 const SLOW_ROW_COMMANDS = SLOW_SLIDER_COMMANDS.slice();
@@ -2361,6 +2363,8 @@ function renderState(){
   const pos = lens.positions || {};
   const lensId = lens.lens_id || "-";
   const lensName = lens.lens_full_name || "(unknown)";
+  const lensDisplay = (lensName && lensName !== "(unknown)") ? lensName : (lensId !== "-" ? lensId : "—");
+  if ($("lensNameBox")) $("lensNameBox").textContent = lensDisplay;
   const zoomMode = lens.zoom_control_mode || "position";
   const zoomCmd = lens.zoom_velocity_cmd ?? 0;
   const zoomRaw = lens.zoom_speed_raw ?? 0;
@@ -2665,6 +2669,7 @@ function connectWs(){
         const factoryMsg = msg.ok ? "Factory defaults restored" : `Restore failed: ${msg.message || ""}`;
         setEvent(`RESTORE_FACTORY_DEFAULTS: ${msg.ok ? "ok" : "fail"} ${msg.message || ""}`);
         const pel = $("profileEventLog"); if (pel) pel.textContent = factoryMsg;
+        if (msg.ok && msg.control_banks) applyProfileUiPreferences({ control_banks: msg.control_banks });
       } else if (msg.type && msg.type.endsWith("_RESULT")) {
         setEvent(`${msg.type}: ${msg.ok ? "ok" : "fail"} ${msg.message || ""}`);
       } else if (msg.type === "CALIBRATE_INPUTS_ACCEPTED"){
