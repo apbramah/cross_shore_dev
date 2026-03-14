@@ -22,9 +22,10 @@
     /* Overlay panels: DJI-style rounded dark glass */
     .overlay-panel { position: absolute; z-index: 1000; background: rgba(10, 16, 26, 0.88); border: 1px solid rgba(64, 120, 220, 0.25); border-radius: 10px; padding: 10px 12px; backdrop-filter: blur(8px); }
     .overlay-panel h3 { margin: 0 0 8px 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #6b8cbe; font-weight: 600; }
-    .position-readouts { bottom: 16px; left: 16px; display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; align-items: baseline; font-variant-numeric: tabular-nums; }
-    .position-readouts .label { font-size: 12px; color: #8aa0c4; }
-    .position-readouts .value { font-size: 16px; font-weight: 600; color: #b8d4ff; min-width: 72px; text-align: right; }
+    .position-readouts { bottom: 12px; left: 12px; max-width: min(220px, 28vw); display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; align-items: baseline; font-variant-numeric: tabular-nums; padding: 6px 10px; }
+    .position-readouts h3 { margin: 0 0 4px 0; font-size: 9px; }
+    .position-readouts .label { font-size: 10px; color: #8aa0c4; }
+    .position-readouts .value { font-size: 12px; font-weight: 600; color: #b8d4ff; min-width: 2.5em; text-align: right; }
     .compass-wrap { top: 12px; right: 12px; width: 72px; height: 72px; }
     .compass-ring { width: 100%; height: 100%; border-radius: 50%; border: 2px solid rgba(64, 120, 220, 0.4); background: rgba(10, 16, 26, 0.75); position: relative; display: flex; align-items: center; justify-content: center; }
     .compass-north { position: absolute; top: 4px; left: 50%; transform: translateX(-50%); font-size: 10px; color: #6b8cbe; font-weight: 700; }
@@ -77,10 +78,11 @@
         <input type="number" id="heading" min="0" max="359" step="1" placeholder="0–359" value="45" />
       </div>
       <div class="sep"></div>
-      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;" title="Show sliders and live controller link to drive map from axes">
         <input type="checkbox" id="simMode" />
         <span class="topbar-label" style="margin:0;">Sim mode</span>
       </label>
+      <span class="topbar-label" style="font-size:9px;color:#5a6d8a;max-width:140px;">(check to show sliders)</span>
       <div style="align-self: flex-end;">
         <button type="button" id="apply">Apply</button>
       </div>
