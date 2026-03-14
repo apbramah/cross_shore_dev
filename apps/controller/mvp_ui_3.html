@@ -45,7 +45,7 @@
     .row { display:flex; align-items:center; gap:8px; min-width:0; }
     .row.actions { gap:6px; justify-content:flex-end; flex-wrap:wrap; }
     .row label { color:var(--muted); font-size:12px; font-weight:500; letter-spacing:.01em; white-space:nowrap; }
-    input, select, button { height:46px; border-radius:8px; border:1px solid #1d2737; background:var(--card2); color:var(--text); padding:0 10px; font-size:14px; font-weight:500; }
+    input, select, button { height:46px; border-radius:8px; border:1px solid #1d2737; background:var(--card2); color:var(--text); padding:0 10px; font-size:14px; font-weight:500; font-variant-numeric:tabular-nums; font-feature-settings:"tnum" 1; }
     button { border-color:#212d40; }
     input { width:100%; min-width:0; }
     #heads { width:24ch; min-width:24ch; }
@@ -200,8 +200,8 @@
     .control-quick-btn.encoder-active { border-color:#57a7ff; box-shadow:0 0 0 1px rgba(87,167,255,.4) inset; }
     .control-quick-btn.encoder-editing { border-color:#f59e0b; box-shadow:0 0 0 1px rgba(245,158,11,.45) inset; }
     .control-slider-card { border:1px solid #425171; border-radius:8px; background:#1f2b40; padding:5px; display:grid; grid-template-rows:auto 1fr; gap:4px; justify-items:center; height:100%; }
-    .control-slider-name { font-size:12px; color:#9eabba; font-weight:500; letter-spacing:.006em; text-align:center; min-height:20px; }
-    .control-slider-track-wrap { width:100%; height:100%; display:flex; align-items:center; justify-content:center; position:relative; }
+    .control-slider-name { font-size:12px; color:#9eabba; font-weight:500; letter-spacing:.006em; text-align:center; min-height:20px; font-variant-numeric:tabular-nums; font-feature-settings:"tnum" 1; }
+    .control-slider-track-wrap { width:100%; height:100%; display:flex; align-items:center; justify-content:center; position:relative; transform:translateY(-2px); }
     .control-live-track {
       position:absolute;
       left:6px;
@@ -278,7 +278,7 @@
     .command-row.active { border-color:#57a7ff; box-shadow:0 0 0 1px rgba(87,167,255,.4) inset; }
     .command-row.editing { border-color:#f59e0b; box-shadow:0 0 0 1px rgba(245,158,11,.45) inset; }
     .command-row-name { font-size:15px; color:#d9e7ff; font-weight:600; line-height:1.2; letter-spacing:.005em; }
-    .command-row-value { font-size:24px; color:#c6dbff; min-width:64px; text-align:right; line-height:1; font-weight:600; font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; }
+    .command-row-value { font-size:24px; color:#c6dbff; min-width:64px; text-align:right; line-height:1; font-weight:600; font-family:Inter, "Segoe UI", system-ui, -apple-system, sans-serif; font-variant-numeric:tabular-nums; font-feature-settings:"tnum" 1; letter-spacing:.01em; }
     .cmd-window { border:1px solid #394863; border-radius:10px; background:#0a0d12; padding:8px; display:grid; gap:6px; }
     .cmd-title { font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:11px; color:#9fcff7; letter-spacing:.012em; }
     .cmd-body {
@@ -396,6 +396,48 @@
     }
 
     /* Theme options selected from engineering tab */
+    body.theme-graphite {
+      --bg:#080b11; --card:#10151f; --card2:#131a26; --border:#202a3a; --text:#d8e0ea; --muted:#8c97a8; --accent:#9fb0c8; --warn:#9fb0c8; --ok:#9fb0c8; --danger:#9fb0c8; --nav-link-color:#9fb0c8;
+      background:#06090f;
+    }
+    body.theme-graphite .app { background:linear-gradient(180deg,#0b1017 0%,#06090f 100%); }
+    body.theme-graphite .topbar, body.theme-graphite .tabs, body.theme-graphite .surface, body.theme-graphite .dock { background:#0f1621; }
+    body.theme-graphite button { background:#1a2433; border-color:#263449; color:#dce5ef; }
+    body.theme-graphite .tab.active, body.theme-graphite .dock-btn.active { box-shadow:0 0 0 1px rgba(159,176,200,.38) inset, 0 0 18px rgba(159,176,200,.18) !important; color:#eef3f8; }
+
+    body.theme-slate {
+      --bg:#090d14; --card:#121a26; --card2:#162031; --border:#26384f; --text:#dbe5f4; --muted:#93a5c0; --accent:#7fa8d8; --warn:#7fa8d8; --ok:#7fa8d8; --danger:#7fa8d8; --nav-link-color:#7fa8d8;
+      background:#070b11;
+    }
+    body.theme-slate .app { background:linear-gradient(180deg,#0c1420 0%,#070b11 100%); }
+    body.theme-slate .topbar, body.theme-slate .tabs, body.theme-slate .surface, body.theme-slate .dock { background:#121b2a; }
+    body.theme-slate button { background:#1c2a3f; border-color:#345172; color:#e2ecfb; }
+    body.theme-slate .tab.active, body.theme-slate .dock-btn.active { box-shadow:0 0 0 1px rgba(127,168,216,.42) inset, 0 0 20px rgba(127,168,216,.2) !important; color:#f2f7ff; }
+
+    body.theme-olivetactical {
+      --bg:#090d0a; --card:#131914; --card2:#171f18; --border:#2b3a2d; --text:#d7e1d2; --muted:#8f9f8c; --accent:#8faa74; --warn:#8faa74; --ok:#8faa74; --danger:#8faa74; --nav-link-color:#8faa74;
+      background:#070a07;
+    }
+    body.theme-olivetactical .app { background:linear-gradient(180deg,#0d140e 0%,#070a07 100%); }
+    body.theme-olivetactical .topbar, body.theme-olivetactical .tabs, body.theme-olivetactical .surface, body.theme-olivetactical .dock { background:#141c15; }
+    body.theme-olivetactical button { background:#202b21; border-color:#435846; color:#e0ebdb; }
+    body.theme-olivetactical .tab.active, body.theme-olivetactical .dock-btn.active { box-shadow:0 0 0 1px rgba(143,170,116,.34) inset, 0 0 12px rgba(143,170,116,.12) !important; color:#f0f7ea; }
+    body.theme-olivetactical .head-option.active,
+    body.theme-olivetactical .pos.active,
+    body.theme-olivetactical .control-slider-card.pending,
+    body.theme-olivetactical .control-slider-card.applied,
+    body.theme-olivetactical .control-slider-card.encoder-active,
+    body.theme-olivetactical .control-slider-card.encoder-editing,
+    body.theme-olivetactical .control-quick-btn.encoder-active,
+    body.theme-olivetactical .control-quick-btn.encoder-editing,
+    body.theme-olivetactical #page-inputtests .slider-assign-row.active,
+    body.theme-olivetactical #page-inputtests .slider-assign-row.editing,
+    body.theme-olivetactical .command-row.active,
+    body.theme-olivetactical .command-row.editing {
+      box-shadow:0 0 0 1px rgba(143,170,116,.34) inset, 0 0 10px rgba(143,170,116,.1);
+      background:#1b261c;
+    }
+
     body.theme-blackwhite {
       --bg:#0d0d0d; --card:#171717; --card2:#202020; --border:#8c8c8c; --text:#f2f2f2; --muted:#bdbdbd; --accent:#ffffff; --warn:#d9d9d9; --ok:#f2f2f2; --danger:#9e9e9e; --nav-link-color:#f2f2f2;
       background:#000;
@@ -577,6 +619,7 @@
       .app { grid-template-rows:124px 1fr 76px; }
       .topbar { grid-template-columns:minmax(0,1.2fr) minmax(0,1fr); gap:6px; padding:6px; }
       .connection-pill { width:100%; min-width:0; }
+      .connection-pill, .logo-pill { height:36px; }
       .tab { font-size:13px; }
       .row label { font-size:12px; }
 
@@ -713,6 +756,9 @@
               <div class="command-row-name">Theme</div>
               <select id="themeSelect" style="max-width:220px;">
                 <option value="starship">Starship</option>
+                <option value="graphite">Graphite</option>
+                <option value="slate">Slate</option>
+                <option value="olivetactical">Olive tactical</option>
                 <option value="blackwhite">Black and White</option>
                 <option value="highcontrast">High contrast (bright)</option>
                 <option value="highcontrastgreen">High contrast (dark green)</option>
@@ -855,7 +901,7 @@ const encoderPageState = {
   inputtests: { index: 0, edit: false },
 };
 const THEME_STORAGE_KEY = "mvp_ui3_theme";
-const VALID_THEMES = ["starship", "blackwhite", "highcontrast", "highcontrastgreen", "neon", "acidtrip"];
+const VALID_THEMES = ["starship", "graphite", "slate", "olivetactical", "blackwhite", "highcontrast", "highcontrastgreen", "neon", "acidtrip"];
 const CONTROL_SLIDER_COUNT = 6;
 const CONTROL_QUICK_BUTTON_COUNT = 5;
 /** Fixed quick row on Control page: Tilt, Roll Invert, Zoom Invert, Wipe Once, Wiper On/Off */
@@ -2349,7 +2395,7 @@ function updateHeadIdStatus(connectionStatus){
 function applyTheme(themeName){
   const requested = String(themeName || "").toLowerCase();
   const theme = VALID_THEMES.includes(requested) ? requested : "starship";
-  document.body.classList.remove("theme-starship", "theme-blackwhite", "theme-highcontrast", "theme-highcontrastgreen", "theme-neon", "theme-acidtrip");
+  document.body.classList.remove("theme-starship", "theme-graphite", "theme-slate", "theme-olivetactical", "theme-blackwhite", "theme-highcontrast", "theme-highcontrastgreen", "theme-neon", "theme-acidtrip");
   document.body.classList.add(`theme-${theme}`);
   const sel = $("themeSelect");
   if (sel) sel.value = theme;
