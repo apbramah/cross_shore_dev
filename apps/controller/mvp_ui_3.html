@@ -14,23 +14,24 @@
     .topbar { display:grid; grid-template-columns:minmax(0,1.35fr) minmax(0,1fr); grid-template-rows:auto auto; align-items:center; gap:8px; padding:8px; }
     .topbar > .row:nth-of-type(1) { grid-column:1; grid-row:1; min-width:0; }
     .topbar > .row:nth-of-type(2) { grid-column:2; grid-row:1; min-width:0; }
-    .topbar > .row.actions { grid-column:1 / -1; grid-row:2; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; align-items:center; }
+    .topbar > .row.actions { grid-column:1 / -1; grid-row:2; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; align-items:center; }
     .top-title { font-size:20px; font-weight:700; }
-    .head-id-box { width:22ch; min-width:22ch; font-weight:700; text-align:center; border:3px solid #5b6880; }
-    .head-id-box.status-off { border-color:#5b6880; box-shadow:0 0 0 2px rgba(91,104,128,.18), 0 0 10px rgba(91,104,128,.16); }
-    .head-id-box.status-warn { border-color:#c59a3a; box-shadow:0 0 0 2px rgba(197,154,58,.2), 0 0 12px rgba(197,154,58,.18); }
-    .head-id-box.status-on { border-color:#36b462; box-shadow:0 0 0 2px rgba(54,180,98,.22), 0 0 14px rgba(54,180,98,.2); }
-    .lens-name-box { width:20ch; min-width:20ch; font-size:0.9em; text-align:center; border:2px solid #5b6880; background:#1a1d24; color:#c0c4cc; padding:6px 8px; border-radius:6px; }
+    .connection-pill { font-weight:700; text-align:center; border:3px solid #5b6880; padding:8px 16px; border-radius:999px; white-space:nowrap; min-width:0; }
+    .connection-pill.status-off { border-color:#5b6880; box-shadow:0 0 0 2px rgba(91,104,128,.18), 0 0 10px rgba(91,104,128,.16); color:#9fb0cb; }
+    .connection-pill.status-warn { border-color:#c59a3a; box-shadow:0 0 0 2px rgba(197,154,58,.2), 0 0 12px rgba(197,154,58,.18); color:#e8d4a0; }
+    .connection-pill.status-on { border-color:#36b462; box-shadow:0 0 0 2px rgba(54,180,98,.22), 0 0 14px rgba(54,180,98,.2); color:#a8e6c4; }
     .tabs { display:flex; gap:8px; padding:6px; }
     .tab { flex:1; border-radius:8px; border:1px solid #44557a; background:#202b40; color:#d7e5ff; font-weight:700; font-size:15px; }
     .tab.active { border-color:var(--accent); box-shadow:0 0 0 2px rgba(87,167,255,.25) inset; background:#284362; }
     .row { display:flex; align-items:center; gap:8px; min-width:0; }
     .row.actions { gap:6px; justify-content:flex-end; flex-wrap:wrap; }
     .row label { color:var(--muted); font-size:14px; white-space:nowrap; }
-    input, select, button { height:46px; border-radius:8px; border:1px solid #41506d; background:var(--card2); color:var(--text); padding:0 10px; font-size:16px; }
+    input, select, button { height:46px; border-radius:8px; border:1px solid var(--border); background:var(--card2); color:var(--text); padding:0 10px; font-size:16px; }
+    button { border-color:#2c6eb8; }
     input { width:100%; min-width:0; }
     #heads { width:24ch; min-width:24ch; }
-    .head-select-trigger { text-align:center; }
+    .head-select-trigger { text-align:center; position:relative; padding-right:1.5em; }
+    .head-select-trigger::after { content:" ▾"; font-size:1.5em; opacity:0.9; position:absolute; right:6px; top:50%; transform:translateY(-50%); pointer-events:none; }
     #headSelectorBtn { min-width:0; width:100%; }
     button { cursor:pointer; background:linear-gradient(180deg,#347dd0 0%,#2c69aa 100%); border-color:#2c6eb8; font-weight:700; color:#eaf4ff; }
     .pill { padding:6px 10px; border-radius:999px; border:1px solid #5f2e35; background:rgba(239,68,68,.2); color:#ffd5dc; font-weight:650; text-align:center; white-space:nowrap; }
@@ -67,11 +68,24 @@
     .page.active { display:grid; grid-template-columns:1fr 1fr; }
     #page-control.page.active { grid-template-columns:1fr; }
     #page-slow.page.active, #page-fast.page.active, #page-inputtests.page.active { grid-template-columns:1fr; }
+    #page-slow .slow-sliders-card { grid-column:1 / -1; width:100%; height:100%; padding:4px; gap:2px; }
+    #page-slow .slow-sliders-card > :not(#slowSliderGrid):not(#slowQuickButtonRow) { display:none; }
+    #page-slow .control-slider-card { grid-template-rows:auto minmax(0,0.88fr); }
+    #page-slow .control-slider-track-wrap { height:100%; min-height:0; }
+    #page-slow .control-slider { height:100%; min-height:42px; }
+    #page-ipconfig .head-config-full-width { grid-column:1 / -1; width:100%; }
+    #page-ipconfig input, #page-ipconfig select { border-color: var(--border); }
     .stack-list { align-content:start; gap:8px; }
     .stack-row-card { grid-column:1 / -1; width:100%; }
     .card { border:1px solid var(--border); border-radius:10px; background:linear-gradient(180deg,#1b2434 0%,#161e2c 100%); padding:10px; display:grid; gap:8px; align-content:start; }
     .card h3 { margin:0; font-size:16px; color:#dbe8ff; }
-    .info { font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:12px; color:var(--muted); border:1px solid #34435d; border-radius:8px; padding:8px; background:rgba(16,24,36,.65); overflow:auto; max-height:170px; white-space:pre-wrap; }
+    .card-desc { margin:0 0 8px 0; font-size:13px; color:var(--muted); }
+    .page, .surface, .info, .table-wrap, .head-picker-list, .head-config-body { scrollbar-color: var(--border) var(--card2); scrollbar-width: thin; }
+    .page::-webkit-scrollbar, .surface::-webkit-scrollbar, .info::-webkit-scrollbar, .table-wrap::-webkit-scrollbar, .head-picker-list::-webkit-scrollbar, .head-config-body::-webkit-scrollbar { width:10px; height:10px; }
+    .page::-webkit-scrollbar-track, .surface::-webkit-scrollbar-track, .info::-webkit-scrollbar-track, .table-wrap::-webkit-scrollbar-track, .head-picker-list::-webkit-scrollbar-track, .head-config-body::-webkit-scrollbar-track { background:var(--card2); border-radius:4px; }
+    .page::-webkit-scrollbar-thumb, .surface::-webkit-scrollbar-thumb, .info::-webkit-scrollbar-thumb, .table-wrap::-webkit-scrollbar-thumb, .head-picker-list::-webkit-scrollbar-thumb, .head-config-body::-webkit-scrollbar-thumb { background:var(--border); border-radius:4px; }
+    .page::-webkit-scrollbar-thumb:hover, .surface::-webkit-scrollbar-thumb:hover, .info::-webkit-scrollbar-thumb:hover, .table-wrap::-webkit-scrollbar-thumb:hover, .head-picker-list::-webkit-scrollbar-thumb:hover, .head-config-body::-webkit-scrollbar-thumb:hover { background:var(--accent); }
+    .info { font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:12px; color:var(--muted); border:1px solid var(--border); border-radius:8px; padding:8px; background:rgba(16,24,36,.65); overflow:auto; max-height:170px; white-space:pre-wrap; }
     .dock { position:relative; padding:8px; overflow:visible; }
     .dock::before {
       content:"";
@@ -128,7 +142,7 @@
     .pos .val { color:#a5b6d6; font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; }
     .pos.active { border-color:var(--accent); box-shadow:inset 0 0 0 1px rgba(87,167,255,.35); background:rgba(43,73,112,.5); }
     .pos.value-edit { border-color:var(--warn); box-shadow:inset 0 0 0 1px rgba(245,158,11,.45); }
-    .table-wrap { max-height:360px; overflow:auto; border:1px solid #34435d; border-radius:8px; }
+    .table-wrap { max-height:360px; overflow:auto; border:1px solid var(--border); border-radius:8px; }
     table { width:100%; border-collapse:collapse; font-size:13px; }
     th, td { border-bottom:1px solid #2f3e57; padding:6px; text-align:left; }
     .input-test-controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
@@ -256,7 +270,6 @@
     #page-control { overflow:hidden; }
     #page-control .control-sliders-card { grid-column:1 / -1; height:100%; padding:4px; gap:2px; }
     #page-control .control-sliders-card > :not(#controlSliderGrid):not(#controlQuickButtonRow) { display:none; }
-    #page-control .control-slider-value { display:none; }
     #page-control .control-slider-card { grid-template-rows:auto minmax(0,0.88fr); }
     #page-control .control-slider-track-wrap { height:100%; min-height:0; }
     #page-control .control-slider { height:100%; min-height:42px; }
@@ -301,9 +314,9 @@
     body.theme-blackwhite .tab.active, body.theme-blackwhite .dock-btn.active { background:#2a2a2a !important; box-shadow:0 0 0 2px rgba(242,242,242,.22) inset !important; border-color:#bfbfbf !important; }
     body.theme-blackwhite button { background:linear-gradient(180deg,#505050 0%,#3b3b3b 100%); border-color:#777; color:#fff; }
     body.theme-blackwhite .btn-danger { background:linear-gradient(180deg,#6c4b56 0%,#553944 100%); border-color:#8d6270; color:#ffe8ee; }
-    body.theme-blackwhite .head-id-box.status-off { border-color:#7a7a7a; box-shadow:0 0 0 2px rgba(122,122,122,.2), 0 0 10px rgba(122,122,122,.16); }
-    body.theme-blackwhite .head-id-box.status-warn { border-color:#9a8d68; box-shadow:0 0 0 2px rgba(154,141,104,.2), 0 0 12px rgba(154,141,104,.18); }
-    body.theme-blackwhite .head-id-box.status-on { border-color:#7ea697; box-shadow:0 0 0 2px rgba(126,166,151,.22), 0 0 14px rgba(126,166,151,.2); }
+    body.theme-blackwhite .connection-pill.status-off { border-color:#7a7a7a; box-shadow:0 0 0 2px rgba(122,122,122,.2), 0 0 10px rgba(122,122,122,.16); color:#d8d8d8; }
+    body.theme-blackwhite .connection-pill.status-warn { border-color:#9a8d68; box-shadow:0 0 0 2px rgba(154,141,104,.2), 0 0 12px rgba(154,141,104,.18); color:#e8e0c8; }
+    body.theme-blackwhite .connection-pill.status-on { border-color:#7ea697; box-shadow:0 0 0 2px rgba(126,166,151,.22), 0 0 14px rgba(126,166,151,.2); color:#c8e6dc; }
     body.theme-blackwhite .card { background:linear-gradient(180deg,#1a1a1a 0%,#121212 100%); }
     body.theme-blackwhite .info { background:rgba(20,20,20,.85); border-color:#5f5f5f; color:#d8d8d8; }
     body.theme-blackwhite .control-slider { background:#202020; border-color:#737373; }
@@ -375,18 +388,21 @@
       color:#d8d8d8;
       box-shadow:0 0 10px rgba(50,255,231,.2);
     }
-    /* Head ID status still maps state, with turquoise-dominant neon */
-    body.theme-neon .head-id-box.status-off {
+    /* Connection pill status with turquoise-dominant neon */
+    body.theme-neon .connection-pill.status-off {
       border-color:#7a7a7a;
       box-shadow:0 0 0 2px rgba(50,255,231,.24), 0 0 14px rgba(50,255,231,.22);
+      color:#bdbdbd;
     }
-    body.theme-neon .head-id-box.status-warn {
+    body.theme-neon .connection-pill.status-warn {
       border-color:#a5a5a5;
       box-shadow:0 0 0 2px rgba(50,255,231,.36), 0 0 18px rgba(50,255,231,.34);
+      color:#e0e0e0;
     }
-    body.theme-neon .head-id-box.status-on {
+    body.theme-neon .connection-pill.status-on {
       border-color:#d0d0d0;
       box-shadow:0 0 0 2px rgba(50,255,231,.48), 0 0 26px rgba(50,255,231,.5);
+      color:#f0f0f0;
     }
     body.theme-neon .head-option.active {
       border-color:#79fff0;
@@ -394,11 +410,81 @@
       background:#2e2e2e;
     }
 
+    /* High contrast: black background, white text/borders — for bright outdoor/sunlight viewing */
+    body.theme-highcontrast {
+      --bg:#000; --card:#0a0a0a; --card2:#141414; --border:#fff; --text:#fff; --muted:#fff; --accent:#fff; --warn:#ffeb3b; --ok:#00ff00; --danger:#ff4444; --nav-link-color:#fff;
+      background:#000;
+    }
+    body.theme-highcontrast, body.theme-highcontrast * { color:#fff; }
+    body.theme-highcontrast .btn-danger { color:#ffcccc !important; }
+    body.theme-highcontrast .app { background:#000; }
+    body.theme-highcontrast .topbar, body.theme-highcontrast .tabs, body.theme-highcontrast .surface, body.theme-highcontrast .dock {
+      background:#0a0a0a; border:0.5px solid #fff;
+    }
+    body.theme-highcontrast .tab, body.theme-highcontrast .dock-btn { background:#111; border:0.5px solid #fff; color:#fff; }
+    body.theme-highcontrast .tab.active, body.theme-highcontrast .dock-btn.active { background:#222 !important; border:0.5px solid #fff !important; box-shadow:0 0 0 0.5px rgba(255,255,255,.5) inset !important; }
+    body.theme-highcontrast button { background:#111; border:0.5px solid #fff; color:#fff; }
+    body.theme-highcontrast .btn-danger { background:#2a1115; border:0.5px solid #ff4444; color:#ffcccc !important; }
+    body.theme-highcontrast .connection-pill.status-off { border:0.5px solid #fff; color:#fff; }
+    body.theme-highcontrast .connection-pill.status-warn { border:0.5px solid #ffeb3b; color:#fff; }
+    body.theme-highcontrast .connection-pill.status-on { border:0.5px solid #00ff00; color:#fff; }
+    body.theme-highcontrast .card { background:#0a0a0a; border:0.5px solid #fff; }
+    body.theme-highcontrast .info { background:#0a0a0a; border:0.5px solid #fff; color:#fff; }
+    body.theme-highcontrast .control-slider { background:#111; border:0.5px solid #fff; }
+    body.theme-highcontrast .control-slider::-webkit-slider-thumb { background:#fff; border:0.5px solid #000; }
+    body.theme-highcontrast .control-slider::-moz-range-thumb { background:#fff; border:0.5px solid #000; }
+    body.theme-highcontrast .control-slider-card { background:#0a0a0a; border:0.5px solid #fff; }
+    body.theme-highcontrast .control-slider-card.applied, body.theme-highcontrast .control-slider-card.pending,
+    body.theme-highcontrast .control-slider-card.encoder-active, body.theme-highcontrast .control-slider-card.encoder-editing { border:0.5px solid #fff; box-shadow:0 0 0 0.5px rgba(255,255,255,.3) inset; }
+    body.theme-highcontrast .control-quick-btn.encoder-active, body.theme-highcontrast .control-quick-btn.encoder-editing { border:0.5px solid #fff; box-shadow:0 0 0 0.5px rgba(255,255,255,.3) inset; }
+    body.theme-highcontrast .command-row { background:#0a0a0a; border:0.5px solid #fff; }
+    body.theme-highcontrast .command-row.active { border:0.5px solid #fff; box-shadow:0 0 0 0.5px rgba(255,255,255,.4) inset; }
+    body.theme-highcontrast .cmd-window { background:#0a0a0a; border:0.5px solid #fff; }
+    body.theme-highcontrast .cmd-title { color:#fff; }
+    body.theme-highcontrast .cmd-body { background:#111; border:0.5px solid #fff; color:#fff; }
+    body.theme-highcontrast .head-option.active { border:0.5px solid #fff; box-shadow:0 0 0 0.5px rgba(255,255,255,.4) inset; background:#222; }
+    body.theme-highcontrast input, body.theme-highcontrast select { background:#111; border:0.5px solid #fff; color:#fff; }
+
+    /* High contrast dark green: same as high contrast but text/lines are dark green */
+    body.theme-highcontrastgreen {
+      --bg:#000; --card:#0a0a0a; --card2:#141414; --border:#1a5c1a; --text:#1a5c1a; --muted:#1a5c1a; --accent:#1a5c1a; --warn:#ffeb3b; --ok:#00aa00; --danger:#ff4444; --nav-link-color:#1a5c1a;
+      background:#000;
+    }
+    body.theme-highcontrastgreen, body.theme-highcontrastgreen * { color:#1a5c1a; }
+    body.theme-highcontrastgreen .btn-danger { color:#ffcccc !important; }
+    body.theme-highcontrastgreen .app { background:#000; }
+    body.theme-highcontrastgreen .topbar, body.theme-highcontrastgreen .tabs, body.theme-highcontrastgreen .surface, body.theme-highcontrastgreen .dock {
+      background:#0a0a0a; border:0.5px solid #1a5c1a;
+    }
+    body.theme-highcontrastgreen .tab, body.theme-highcontrastgreen .dock-btn { background:#111; border:0.5px solid #1a5c1a; color:#1a5c1a; }
+    body.theme-highcontrastgreen .tab.active, body.theme-highcontrastgreen .dock-btn.active { background:#0d1f0d !important; border:0.5px solid #1a5c1a !important; box-shadow:0 0 0 0.5px rgba(26,92,26,.5) inset !important; }
+    body.theme-highcontrastgreen button { background:#111; border:0.5px solid #1a5c1a; color:#1a5c1a; }
+    body.theme-highcontrastgreen .btn-danger { background:#2a1115; border:0.5px solid #ff4444; color:#ffcccc !important; }
+    body.theme-highcontrastgreen .connection-pill.status-off { border:0.5px solid #1a5c1a; color:#1a5c1a; }
+    body.theme-highcontrastgreen .connection-pill.status-warn { border:0.5px solid #ffeb3b; color:#1a5c1a; }
+    body.theme-highcontrastgreen .connection-pill.status-on { border:0.5px solid #00aa00; color:#1a5c1a; }
+    body.theme-highcontrastgreen .card { background:#0a0a0a; border:0.5px solid #1a5c1a; }
+    body.theme-highcontrastgreen .info { background:#0a0a0a; border:0.5px solid #1a5c1a; color:#1a5c1a; }
+    body.theme-highcontrastgreen .control-slider { background:#111; border:0.5px solid #1a5c1a; }
+    body.theme-highcontrastgreen .control-slider::-webkit-slider-thumb { background:#1a5c1a; border:0.5px solid #000; }
+    body.theme-highcontrastgreen .control-slider::-moz-range-thumb { background:#1a5c1a; border:0.5px solid #000; }
+    body.theme-highcontrastgreen .control-slider-card { background:#0a0a0a; border:0.5px solid #1a5c1a; }
+    body.theme-highcontrastgreen .control-slider-card.applied, body.theme-highcontrastgreen .control-slider-card.pending,
+    body.theme-highcontrastgreen .control-slider-card.encoder-active, body.theme-highcontrastgreen .control-slider-card.encoder-editing { border:0.5px solid #1a5c1a; box-shadow:0 0 0 0.5px rgba(26,92,26,.3) inset; }
+    body.theme-highcontrastgreen .control-quick-btn.encoder-active, body.theme-highcontrastgreen .control-quick-btn.encoder-editing { border:0.5px solid #1a5c1a; box-shadow:0 0 0 0.5px rgba(26,92,26,.3) inset; }
+    body.theme-highcontrastgreen .command-row { background:#0a0a0a; border:0.5px solid #1a5c1a; }
+    body.theme-highcontrastgreen .command-row.active { border:0.5px solid #1a5c1a; box-shadow:0 0 0 0.5px rgba(26,92,26,.4) inset; }
+    body.theme-highcontrastgreen .cmd-window { background:#0a0a0a; border:0.5px solid #1a5c1a; }
+    body.theme-highcontrastgreen .cmd-title { color:#1a5c1a; }
+    body.theme-highcontrastgreen .cmd-body { background:#111; border:0.5px solid #1a5c1a; color:#1a5c1a; }
+    body.theme-highcontrastgreen .head-option.active { border:0.5px solid #1a5c1a; box-shadow:0 0 0 0.5px rgba(26,92,26,.4) inset; background:#0d1f0d; }
+    body.theme-highcontrastgreen input, body.theme-highcontrastgreen select { background:#111; border:0.5px solid #1a5c1a; color:#1a5c1a; }
+
     /* Step 1: 800x480 typography/control sizing pass (no layout reflow) */
     @media (max-width: 900px) and (max-height: 520px) {
       .app { grid-template-rows:124px 1fr 76px; }
       .topbar { grid-template-columns:minmax(0,1.2fr) minmax(0,1fr); gap:6px; padding:6px; }
-      .head-id-box { width:100%; min-width:0; }
+      .connection-pill { width:100%; min-width:0; }
       .tab { font-size:13px; }
       .row label { font-size:12px; }
 
@@ -449,11 +535,9 @@
         <select id="heads" style="display:none"></select>
       </div>
       <div class="row" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-        <input id="headIdBox" class="head-id-box status-off" readonly value="No Head" />
-        <div id="lensNameBox" class="lens-name-box" title="Lens reported by head">—</div>
+        <div id="connectionPill" class="connection-pill status-off" title="Head and lens connection status">Head: none Lens: none</div>
       </div>
       <div class="row actions">
-        <button id="homeBtn" class="top-action-btn" type="button">Home</button>
         <button id="lockoffBtn" class="lockoff-btn top-action-btn" type="button">Lockoff</button>
         <button id="touchMotorsOn" class="top-action-btn">Motors ON</button>
         <button id="touchMotorsOff" class="btn-danger">Motors OFF</button>
@@ -467,9 +551,9 @@
         </div>
       </div>
       <div id="page-slow" class="page">
-        <div class="card stack-row-card">
-          <div class="command-list-title">Slow Controls (1-10)</div>
-          <div id="slowControlRows" class="command-row-list"></div>
+        <div class="card control-sliders-card slow-sliders-card">
+          <div id="slowQuickButtonRow" class="control-quick-row"></div>
+          <div id="slowSliderGrid" class="control-slider-grid"></div>
         </div>
       </div>
       <div id="page-fast" class="page">
@@ -480,21 +564,26 @@
       </div>
       <div id="page-ipconfig" class="page">
         <div class="card">
-          <div class="row">
-            <button id="closeNetworkToEngineering" type="button">Back to Engineering</button>
-          </div>
+          <h3 class="card-title">LAN settings</h3>
+          <p class="card-desc">Ethernet (eth0): address, prefix, gateway.</p>
           <div class="row"><label>Address</label><input id="piAddress" readonly /></div>
           <div class="row"><label>Prefix</label><input id="piPrefix" readonly /></div>
           <div class="row"><label>Gateway</label><input id="piGateway" readonly /></div>
           <div class="row">
-            <button id="savePiLan">Save Pi LAN</button>
+            <button id="savePiLan">Set Console LAN IP</button>
             <button id="applyNetwork">Apply Network</button>
             <button id="factoryResetNetwork">Factory Default</button>
           </div>
           <div id="networkInfo" class="info">Network: -</div>
           <div id="networkDefaultHint" class="info">Derived defaults: -</div>
+          <div class="cmd-window" style="margin-top:8px;">
+            <div class="cmd-title">$ ifconfig eth0</div>
+            <pre id="ifconfigEth" class="cmd-body">-</pre>
+          </div>
         </div>
         <div class="card">
+          <h3 class="card-title">WiFi</h3>
+          <p class="card-desc">Wireless (wlan0): SSID, password, scan and connect.</p>
           <div class="row"><label>SSID</label><input id="wifiSsid" readonly /></div>
           <div class="row"><label>Password</label><input id="wifiPassword" readonly /></div>
           <div class="row">
@@ -503,31 +592,23 @@
             <button id="wifiDisconnect">Disconnect</button>
           </div>
           <div id="wifiStatus" class="info">WiFi: -</div>
-        </div>
-        <div class="card">
-          <div class="row">
-            <button id="openHeadConfigEditor" type="button">Edit Head IDs (Full Screen)</button>
-          </div>
-          <div class="info">Open full-screen editor for Head ID table data entry.</div>
-        </div>
-        <div class="card">
-          <div class="table-wrap">
+          <div class="table-wrap" style="margin-top:8px;">
             <table>
               <thead><tr><th>SSID</th><th>Signal</th><th>Security</th><th>Use</th></tr></thead>
               <tbody id="wifiTableBody"></tbody>
             </table>
           </div>
-        </div>
-        <div class="card" style="grid-column:1 / -1;">
-          <div class="cmd-window">
-            <div class="cmd-title">$ ifconfig eth0</div>
-            <pre id="ifconfigEth" class="cmd-body">-</pre>
-          </div>
-          <div class="cmd-window">
+          <div class="cmd-window" style="margin-top:8px;">
             <div class="cmd-title">$ ifconfig wlan0</div>
             <pre id="ifconfigWifi" class="cmd-body">-</pre>
           </div>
           <div id="ifconfigDump" class="info" style="display:none;">ifconfig: -</div>
+        </div>
+        <div class="card head-config-full-width">
+          <div class="row">
+            <button id="openHeadConfigEditor" type="button">Edit Head IDs (Full Screen)</button>
+          </div>
+          <div class="info">Open full-screen editor for Head ID table data entry.</div>
         </div>
       </div>
       <div id="page-inputtests" class="page">
@@ -539,6 +620,8 @@
               <select id="themeSelect" style="max-width:220px;">
                 <option value="starship">Starship</option>
                 <option value="blackwhite">Black and White</option>
+                <option value="highcontrast">High contrast (bright)</option>
+                <option value="highcontrastgreen">High contrast (dark green)</option>
                 <option value="neon">Neon</option>
                 <option value="acidtrip">Dayglow</option>
               </select>
@@ -559,14 +642,6 @@
               </select>
             </div>
             <div class="command-row">
-              <div class="command-row-name">Network / WiFi / Head Config</div>
-              <button id="openNetworkFromEngineering">Open</button>
-            </div>
-            <div class="command-row">
-              <div class="command-row-name">User Profiles</div>
-              <button id="openProfileEditor">Open</button>
-            </div>
-            <div class="command-row">
               <div class="command-row-name">Calibrate Inputs</div>
               <button id="touchCalibrateInputs">Run</button>
             </div>
@@ -575,20 +650,6 @@
         <div class="card stack-row-card"><div id="connectionState" class="info">Connection: -</div></div>
         <div class="card stack-row-card"><div id="calibrationState" class="info">Calibration: -</div></div>
         <div class="card stack-row-card"><div id="screenBrightnessState" class="info">Screen Brightness: -</div></div>
-        <div class="card stack-row-card">
-          <div class="command-row">
-            <div class="command-row-name">Edit Bank</div>
-            <select id="assignmentBankSelect" style="max-width:180px;">
-              <option value="control">Control 1</option>
-              <option value="control2">Control 2</option>
-            </select>
-          </div>
-        </div>
-        <div class="card stack-row-card">
-          <div id="sliderAssignGrid" class="slider-assign-grid"></div>
-          <div id="quickButtonAssignGrid" class="slider-assign-grid"></div>
-          <div id="quickButtonAssignNote" class="info">Quick buttons: current assignable fast/slow command list is provisional and must be finalized.</div>
-        </div>
       </div>
     </div>
     <div id="dockMain" class="dock">
@@ -643,30 +704,6 @@
     </div>
   </div>
 
-  <div id="profileEditor" class="profile-editor">
-    <div class="profile-card">
-      <div class="head-config-head">
-        <h3 class="head-config-title">User Profiles</h3>
-        <button id="profileClose" type="button">Close</button>
-      </div>
-      <div class="profile-row">
-        <label for="profileNameInput">Username</label>
-        <input id="profileNameInput" style="max-width:260px;" />
-        <button id="profileNameEdit" type="button">Edit</button>
-        <button id="profileSave" type="button">Save Profile</button>
-      </div>
-      <div id="profileEventLog" class="profile-event-log" aria-live="polite"></div>
-      <div id="profileList" class="profile-list"></div>
-      <div class="profile-row" style="justify-content:space-between;">
-        <button id="profileFactoryRestore" type="button">Restore Factory Defaults</button>
-        <div class="profile-row">
-          <button id="profileRefresh" type="button">Refresh List</button>
-          <button id="profileDone" type="button">Done</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
 <script>
 const LAYOUT = window.MVP_UI3_LAYOUT || { columns: [], encoders: [], wsDefaultUrl: "ws://127.0.0.1:8766" };
 const WS_DEFAULT = LAYOUT.wsDefaultUrl || "ws://127.0.0.1:8766";
@@ -683,7 +720,7 @@ let state = {
     expo: 5,
     expo_zoom: 5,
     top_speed: { yaw: 5, pitch: 5, roll: 5, zoom: 5 },
-    invert: { yaw:false, pitch:false, roll:false },
+    invert: { yaw:false, pitch:false, roll:false, zoom:false },
     deadband: { yaw:0, pitch:0, roll:0, zoom:0 },
     zoom_feedback: 1,
   },
@@ -714,8 +751,6 @@ const LOCAL_AUTO_APPLY_INTERVAL_MS = 60;
 let localAutoApplyTimer = null;
 let wsDiag = { state: "offline", lastError: "" };
 let pendingHeadSelectIndex = null;
-let homeHoldTimer = null;
-let homeHoldTriggered = false;
 let liveSliderLoopStarted = false;
 let currentPage = "control";
 const encoderPageState = {
@@ -726,9 +761,18 @@ const encoderPageState = {
   inputtests: { index: 0, edit: false },
 };
 const THEME_STORAGE_KEY = "mvp_ui3_theme";
-const VALID_THEMES = ["starship", "blackwhite", "neon", "acidtrip"];
+const VALID_THEMES = ["starship", "blackwhite", "highcontrast", "highcontrastgreen", "neon", "acidtrip"];
 const CONTROL_SLIDER_COUNT = 6;
 const CONTROL_QUICK_BUTTON_COUNT = 5;
+/** Fixed quick row on Control page: Tilt, Roll Invert, Zoom Invert, Wipe Once, Wiper On/Off */
+const CONTROL_QUICK_FIXED = [
+  { label: "Tilt", mode: "fast", key: "shape_invert_pitch", type: "toggle" },
+  { label: "Roll Invert", mode: "fast", key: "shape_invert_roll", type: "toggle" },
+  { label: "Zoom Invert", mode: "fast", key: "shape_invert_zoom", type: "toggle" },
+  { label: "Wipe Once", mode: "slow", key: "wash_wipe", type: "wipe_once" },
+  { label: "Wiper", mode: "slow", key: "wash_wipe", type: "wiper_toggle" },
+];
+const WIPE_ONCE_DURATION_MS = 800;
 const SLIDER_ASSIGN_STORAGE_KEY_CONTROL1 = "mvp_ui3_slider_assignments_control1_v2";
 const SLIDER_ASSIGN_STORAGE_KEY_CONTROL2 = "mvp_ui3_slider_assignments_control2_v2";
 const QUICK_BUTTON_ASSIGN_STORAGE_KEY_CONTROL1 = "mvp_ui3_quick_button_assignments_control1_v2";
@@ -748,13 +792,30 @@ const SLOW_SLIDER_COMMANDS = [
   "pan_accel", "tilt_accel", "roll_accel", "pan_gain", "tilt_gain", "roll_gain",
   "da_enabled", "da_yaw_range", "da_pitch_range", "da_roll_range", "da_deadband", "da_speed",
 ];
-const FAST_QUICK_COMMANDS = ["shape_invert_yaw", "shape_invert_pitch", "shape_invert_roll"];
+const FAST_QUICK_COMMANDS = ["shape_invert_yaw", "shape_invert_pitch", "shape_invert_roll", "shape_invert_zoom"];
 const SLOW_QUICK_COMMANDS = [
   "motors_on", "control_mode", "source_zoom", "source_focus", "source_iris",
   "filter_enable_focus", "filter_enable_iris", "wash_wipe",
 ];
 const SLOW_ROW_COMMANDS = SLOW_SLIDER_COMMANDS.slice();
 const FAST_ROW_COMMANDS = FAST_SLIDER_COMMANDS.slice();
+/** Settings 2 (Fast) page: definitive list of 13 rows. Each entry is "mode:key". */
+const FAST_PAGE_FIXED_ROWS = [
+  "slow:source_iris",           // 0 Iris Source
+  "fast:shape_zoom_feedback",   // 1 Zoom Feedback Dampening
+  "fast:shape_expo_zoom",      // 2 Zoom Expo
+  "fast:shape_deadband_yaw",   // 3 Dead Band Pan
+  "fast:shape_deadband_pitch", // 4 Dead Band Tilt
+  "fast:shape_deadband_roll",  // 5 Dead Band Roll
+  "fast:shape_deadband_zoom",  // 6 Dead Band Zoom
+  "fast:shape_invert_yaw",     // 7 Pan Invert
+  "slow:da_yaw_range",         // 8 Pan Lock Off Range
+  "slow:da_pitch_range",       // 9 Tilt Lock off Range
+  "slow:da_roll_range",        // 10 Roll Lock off Range
+  "slow:da_deadband",          // 11 Lock Off Dead Band
+  "slow:da_speed",             // 12 Lock off Response Speed
+];
+function getFastPageRowBindings(){ return FAST_PAGE_FIXED_ROWS.slice(); }
 const DEFAULT_SLIDER_ASSIGNMENTS = [
   "fast:shape_top_speed_yaw",
   "fast:shape_top_speed_pitch",
@@ -763,6 +824,24 @@ const DEFAULT_SLIDER_ASSIGNMENTS = [
   "slow:gyro_heading_correction",
   "slow:filter_num",
 ];
+/** Control page slider grid: row1 = Pan Speed, Tilt Speed, Roll Speed; row2 = Pan Trim, Joystick Expo, Zoom Speed. Used instead of assignments on Control page. */
+const CONTROL_SLIDER_FIXED = [
+  "fast:shape_top_speed_yaw",   // 0 Pan Speed
+  "fast:shape_top_speed_pitch",  // 1 Tilt Speed
+  "fast:shape_top_speed_roll",   // 2 Roll Speed
+  "slow:gyro_heading_correction", // 3 Pan Trim
+  "fast:shape_expo",             // 4 Joystick Expo
+  "fast:shape_top_speed_zoom",   // 5 Zoom Speed
+];
+function getControlSliderAssignments(){ return CONTROL_SLIDER_FIXED.slice(); }
+
+const SLOW_SLIDER_COUNT = 6;
+/** Slow page slider grid: row1 = Pan Gain, Tilt Gain, Roll Gain; row2 = Pan Accel, Tilt Accel, Roll Accel */
+const SLOW_SLIDER_FIXED = [
+  "slow:pan_gain", "slow:tilt_gain", "slow:roll_gain",
+  "slow:pan_accel", "slow:tilt_accel", "slow:roll_accel",
+];
+function getSlowSliderAssignments(){ return SLOW_SLIDER_FIXED.slice(); }
 const DEFAULT_QUICK_BUTTON_ASSIGNMENTS = [
   "none:none",
   "none:none",
@@ -1025,19 +1104,17 @@ function applyProfileUiPreferences(raw){
     saveSliderAssignments(bankName);
     saveQuickButtonAssignments(bankName);
   }
-  buildSliderAssignControls();
-  buildQuickButtonAssignControls();
   renderControlSliders(true);
   renderControlQuickButtons();
 }
 
 function sliderCommandMeta(mode, key){
   if (mode === "fast"){
-    if (key === "shape_invert_yaw" || key === "shape_invert_pitch" || key === "shape_invert_roll"){
+    if (key === "shape_invert_yaw" || key === "shape_invert_pitch" || key === "shape_invert_roll" || key === "shape_invert_zoom"){
       return { type:"enum", values:[0,1], labels:["OFF","ON"] };
     }
-    if (key === "shape_expo" || key === "shape_expo_zoom" || key === "shape_zoom_feedback") return { min:1, max:10, step:1 };
-    return { min:0, max:10, step:1 };
+    if (key === "shape_expo" || key === "shape_expo_zoom" || key === "shape_zoom_feedback") return { min:1, max:10, step:0.5 };
+    return { min:0, max:10, step:0.5 };
   }
   if (mode === "slow"){
     if (key === "motors_on" || key === "filter_enable_focus" || key === "filter_enable_iris") return { type:"enum", values:[0,1], labels:["OFF","ON"] };
@@ -1045,7 +1122,7 @@ function sliderCommandMeta(mode, key){
     if (key === "lens_select") return { type:"enum", values:["fuji","canon"], labels:["Fuji","Canon"] };
     if (key === "source_zoom" || key === "source_focus" || key === "source_iris") return { type:"enum", values:["pc","camera","off"], labels:["PC","Camera","Off"] };
     if (key === "filter_num" || key === "filter_den") return { type:"enum", values:[1,2,4,8,16], labels:["1","2","4","8","16"] };
-    if (key === "gyro_heading_correction") return { min:-8192, max:8192, step:1024 };
+    if (key === "gyro_heading_correction") return { min:-8192, max:8192, step:256 };
     if (key === "wash_wipe") return { type:"enum", values:["parked","wiping"], labels:["WASH PARK","WASH WIPE"] };
     if (key === "pan_accel" || key === "tilt_accel" || key === "roll_accel") return { min:0, max:255, step:1 };
     if (key === "pan_gain" || key === "tilt_gain" || key === "roll_gain") return { min:0, max:255, step:1 };
@@ -1115,13 +1192,13 @@ function sliderDisplayLabel(key){
     shape_top_speed_pitch: "TILT SPEED",
     shape_top_speed_roll: "ROLL SPEED",
     shape_top_speed_zoom: "ZOOM SPEED",
-    shape_expo: "PAN/TILT EXPO",
+    shape_expo: "JOYSTICK EXPO",
     shape_expo_zoom: "ZOOM EXPO",
-    shape_deadband_yaw: "PAN DEAD-BAND",
-    shape_deadband_pitch: "TILT DEAD-BAND",
-    shape_deadband_roll: "ROLL DEAD-BAND",
-    shape_deadband_zoom: "ZOOM DEAD-BAND",
-    shape_zoom_feedback: "ZOOM FEEDBACK",
+    shape_deadband_yaw: "DEAD BAND PAN",
+    shape_deadband_pitch: "DEAD BAND TILT",
+    shape_deadband_roll: "DEAD BAND ROLL",
+    shape_deadband_zoom: "DEAD BAND ZOOM",
+    shape_zoom_feedback: "ZOOM FEEDBACK DAMPENING",
     motors_on: "MOTORS",
     control_mode: "CONTROL MODE",
     lens_select: "LENS SELECT",
@@ -1141,14 +1218,15 @@ function sliderDisplayLabel(key){
     tilt_gain: "TILT GAIN",
     roll_gain: "ROLL GAIN",
     da_enabled: "DA MODE",
-    da_yaw_range: "DA YAW RANGE",
-    da_pitch_range: "DA PITCH RANGE",
-    da_roll_range: "DA ROLL RANGE",
-    da_deadband: "DA DEAD-BAND",
-    da_speed: "DA SPEED",
+    da_yaw_range: "PAN LOCK OFF RANGE",
+    da_pitch_range: "TILT LOCK OFF RANGE",
+    da_roll_range: "ROLL LOCK OFF RANGE",
+    da_deadband: "LOCK OFF DEAD BAND",
+    da_speed: "LOCK OFF RESPONSE SPEED",
     shape_invert_yaw: "PAN INVERT",
     shape_invert_pitch: "TILT INVERT",
     shape_invert_roll: "ROLL INVERT",
+    shape_invert_zoom: "ZOOM INVERT",
   };
   return map[k] || sliderLabelKey(k);
 }
@@ -1303,7 +1381,38 @@ function buildControlQuickButtons(){
 }
 
 function triggerQuickButton(i){
-  return applyQuickButtonStep(i, +1);
+  return triggerControlQuickFixed(i);
+}
+
+function triggerControlQuickFixed(i){
+  const spec = CONTROL_QUICK_FIXED[i];
+  if (!spec) return false;
+  if (spec.type === "toggle"){
+    const current = getSliderReadbackValue(spec.mode, spec.key);
+    const next = (current === 1 || current === "1") ? 0 : 1;
+    if (spec.mode === "fast") applyFastSliderValue(spec.key, next);
+    else applySlowSliderValue(spec.key, next);
+    setEvent(`${spec.label}: ${next ? "ON" : "OFF"}`);
+  } else if (spec.type === "wipe_once"){
+    applySlowSliderValue("wash_wipe", "wiping");
+    setEvent("Wipe Once");
+    setTimeout(function(){
+      applySlowSliderValue("wash_wipe", "parked");
+      renderControlQuickButtons();
+    }, WIPE_ONCE_DURATION_MS);
+  } else if (spec.type === "wiper_toggle"){
+    const current = getSliderReadbackValue("slow", "wash_wipe");
+    const isOn = current === "wiping" || current === 1 || current === "1";
+    const next = isOn ? "parked" : "wiping";
+    applySlowSliderValue("wash_wipe", next);
+    setEvent(`Wiper: ${next === "wiping" ? "ON" : "OFF"}`);
+  } else {
+    if (spec.mode === "slow" && spec.value != null) applySlowSliderValue(spec.key, spec.value);
+    setEvent(spec.label);
+  }
+  renderControlQuickButtons();
+  if (currentPage === "slow") renderSlowQuickButtons();
+  return true;
 }
 
 function applyQuickButtonStep(i, dir){
@@ -1334,7 +1443,6 @@ function applyQuickButtonStep(i, dir){
 }
 
 function renderControlQuickButtons(){
-  const quick = activeQuickAssignments();
   const isControlPage = currentPage === "control" || currentPage === "control2";
   const encState = activeControlEncoderState();
   const encQuickIndex = clamp((Number(encState.index) || 0) - CONTROL_SLIDER_COUNT, 0, CONTROL_QUICK_BUTTON_COUNT - 1);
@@ -1346,17 +1454,23 @@ function renderControlQuickButtons(){
       b.classList.add("encoder-active");
       if (encState.edit) b.classList.add("encoder-editing");
     }
-    const binding = String(quick[i] || "none:none");
-    const [mode, key] = binding.split(":");
-    if (!mode || mode === "none" || !key || key === "none"){
-      b.textContent = `B${i + 1}: Unassigned`;
+    const spec = CONTROL_QUICK_FIXED[i];
+    if (!spec){
+      b.textContent = `B${i + 1}`;
       b.disabled = true;
       continue;
     }
-    const meta = sliderCommandMeta(mode, key);
-    const current = getSliderReadbackValue(mode, key);
-    const valText = meta.type === "enum" ? formatSliderValue(mode, key, current) : "N/A";
-    b.textContent = `${sliderDisplayLabel(key)}: ${valText}`;
+    if (spec.type === "toggle"){
+      const current = getSliderReadbackValue(spec.mode, spec.key);
+      const on = current === 1 || current === "1";
+      b.textContent = `${spec.label}: ${on ? "ON" : "OFF"}`;
+    } else if (spec.type === "wiper_toggle"){
+      const current = getSliderReadbackValue("slow", "wash_wipe");
+      const on = current === "wiping" || current === 1 || current === "1";
+      b.textContent = `${spec.label}: ${on ? "ON" : "OFF"}`;
+    } else {
+      b.textContent = spec.label;
+    }
     b.disabled = false;
   }
 }
@@ -1401,8 +1515,9 @@ function buildControlSliders(){
     card.appendChild(wrap);
     card.appendChild(val);
     host.appendChild(card);
-    input.onchange = () => commitControlSlider(i);
-    input.onpointerup = () => commitControlSlider(i);
+    input.oninput = () => throttleControlSliderCommit(i);
+    input.onchange = () => { clearControlSliderThrottle(); commitControlSlider(i); };
+    input.onpointerup = () => { clearControlSliderThrottle(); commitControlSlider(i); };
     input.onpointerdown = () => {
       const key = currentPage === "control2" ? "control2" : "control";
       const st = encoderPageState[key] || { index: 0, edit: false };
@@ -1412,6 +1527,183 @@ function buildControlSliders(){
       renderControlQuickButtons();
       centerActiveControlItem(key, true);
     };
+  }
+}
+
+const slowSliderUiState = Array.from({ length: SLOW_SLIDER_COUNT }, () => ({ pending: null, appliedUntil: 0 }));
+let slowSliderThrottle = { lastCommit: 0 };
+function clearSlowSliderThrottle(){ slowSliderThrottle.lastCommit = 0; }
+function throttleSlowSliderCommit(i){
+  const now = Date.now();
+  if (now - slowSliderThrottle.lastCommit >= CONTROL_SLIDER_THROTTLE_MS || !slowSliderThrottle.lastCommit){
+    slowSliderThrottle.lastCommit = now;
+    commitSlowSlider(i);
+    renderSlowSliders();
+  }
+}
+
+function buildSlowSliders(){
+  const host = $("slowSliderGrid");
+  if (!host) return;
+  host.innerHTML = "";
+  for (let i = 0; i < SLOW_SLIDER_COUNT; i++){
+    const card = document.createElement("div");
+    card.id = `slowSliderCard_${i}`;
+    card.className = "control-slider-card";
+    const name = document.createElement("div");
+    name.id = `slowSliderName_${i}`;
+    name.className = "control-slider-name";
+    const wrap = document.createElement("div");
+    wrap.className = "control-slider-track-wrap";
+    const input = document.createElement("input");
+    input.id = `slowSlider_${i}`;
+    input.className = "control-slider";
+    input.type = "range";
+    input.min = "0";
+    input.max = "100";
+    input.step = "1";
+    input.value = "0";
+    const val = document.createElement("div");
+    val.id = `slowSliderValue_${i}`;
+    val.className = "control-slider-value";
+    wrap.appendChild(input);
+    card.appendChild(name);
+    card.appendChild(wrap);
+    card.appendChild(val);
+    host.appendChild(card);
+    input.oninput = () => throttleSlowSliderCommit(i);
+    input.onchange = () => { clearSlowSliderThrottle(); commitSlowSlider(i); };
+    input.onpointerup = () => { clearSlowSliderThrottle(); commitSlowSlider(i); };
+    input.onpointerdown = () => {
+      const st = encoderPageState.slow || { index: 0, edit: false };
+      st.index = i;
+      encoderPageState.slow = st;
+      renderSlowSliders();
+      renderSlowQuickButtons();
+      centerActiveCommandRow("slow", true);
+    };
+  }
+}
+
+function commitSlowSlider(i){
+  const sliders = getSlowSliderAssignments();
+  const binding = String(sliders[i] || "none:none");
+  const [mode, key] = binding.split(":");
+  if (!mode || key === "none") return;
+  const slider = $(`slowSlider_${i}`);
+  if (!slider) return;
+  const targetPercent = Number(slider.value) || 0;
+  const targetValue = percentToCommandValue("slow", key, targetPercent);
+  slowSliderUiState[i].pending = { key, targetValue, targetPercent };
+  applySlowSliderValue(key, targetValue);
+  renderSlowSliders();
+}
+
+function renderSlowSliders(forceBuild){
+  const host = $("slowSliderGrid");
+  if (!host) return;
+  if (forceBuild || !$("slowSlider_0")) buildSlowSliders();
+  const sliders = getSlowSliderAssignments();
+  const st = encoderPageState.slow || { index: 0, edit: false };
+  const encIndex = clamp(Number(st.index) || 0, 0, SLOW_SLIDER_COUNT + CONTROL_QUICK_BUTTON_COUNT - 1);
+  for (let i = 0; i < SLOW_SLIDER_COUNT; i++){
+    const binding = String(sliders[i] || "none:none");
+    const [, key] = binding.split(":");
+    const card = $(`slowSliderCard_${i}`);
+    const slider = $(`slowSlider_${i}`);
+    const name = $(`slowSliderName_${i}`);
+    const val = $(`slowSliderValue_${i}`);
+    if (!card || !slider || !name || !val) continue;
+    card.className = "control-slider-card";
+    card.classList.toggle("encoder-active", currentPage === "slow" && i === encIndex && encIndex < SLOW_SLIDER_COUNT);
+    card.classList.toggle("encoder-editing", currentPage === "slow" && i === encIndex && encIndex < SLOW_SLIDER_COUNT && !!st.edit);
+    if (!key || key === "none"){
+      name.textContent = "(unassigned)";
+      slider.value = "0";
+      slider.disabled = true;
+      val.textContent = "-";
+      continue;
+    }
+    slider.disabled = false;
+    const readback = getSliderReadbackValue("slow", key);
+    const valueText = formatSliderValue("slow", key, readback);
+    name.textContent = sliderDisplayLabel(key) + "  " + valueText;
+    val.textContent = valueText;
+    const ui = slowSliderUiState[i];
+    if (ui.pending && ui.pending.key === key){
+      const st = ((((state.slow_apply_status || {})[key]) || {}).state || "").toLowerCase();
+      const readbackPct = commandValueToPercent("slow", key, readback);
+      const readbackClose = Number.isFinite(readbackPct) && Math.abs(readbackPct - ui.pending.targetPercent) < 1.5;
+      if (st === "confirmed" || readbackClose){
+        ui.pending = null;
+        ui.appliedUntil = Date.now() + 900;
+      } else {
+        card.classList.add("pending");
+        slider.value = String(Math.round(ui.pending.targetPercent));
+        val.textContent = `${formatSliderValue("slow", key, ui.pending.targetValue)} (pending)`;
+        name.textContent = sliderDisplayLabel(key) + "  " + val.textContent;
+        continue;
+      }
+    }
+    const pct = commandValueToPercent("slow", key, readback);
+    slider.value = String(Math.round(pct));
+    val.textContent = formatSliderValue("slow", key, readback);
+    name.textContent = sliderDisplayLabel(key) + "  " + val.textContent;
+    if (ui.appliedUntil > Date.now()) card.classList.add("applied");
+  }
+}
+
+function renderSlowQuickButtons(){
+  const st = encoderPageState.slow || { index: 0, edit: false };
+  const encIndex = clamp(Number(st.index) || 0, 0, SLOW_SLIDER_COUNT + CONTROL_QUICK_BUTTON_COUNT - 1);
+  for (let i = 0; i < CONTROL_QUICK_BUTTON_COUNT; i++){
+    const b = $(`slowQuickBtn_${i}`);
+    if (!b) continue;
+    b.classList.remove("encoder-active", "encoder-editing");
+    if (currentPage === "slow" && i === encIndex - SLOW_SLIDER_COUNT && encIndex >= SLOW_SLIDER_COUNT){
+      b.classList.add("encoder-active");
+      if (st.edit) b.classList.add("encoder-editing");
+    }
+    const spec = CONTROL_QUICK_FIXED[i];
+    if (!spec){
+      b.textContent = `B${i + 1}`;
+      b.disabled = true;
+      continue;
+    }
+    if (spec.type === "toggle"){
+      const current = getSliderReadbackValue(spec.mode, spec.key);
+      const on = current === 1 || current === "1";
+      b.textContent = `${spec.label}: ${on ? "ON" : "OFF"}`;
+    } else if (spec.type === "wiper_toggle"){
+      const current = getSliderReadbackValue("slow", "wash_wipe");
+      const on = current === "wiping" || current === 1 || current === "1";
+      b.textContent = `${spec.label}: ${on ? "ON" : "OFF"}`;
+    } else {
+      b.textContent = spec.label;
+    }
+    b.disabled = false;
+  }
+}
+
+function buildSlowQuickButtons(){
+  const host = $("slowQuickButtonRow");
+  if (!host) return;
+  host.innerHTML = "";
+  for (let i = 0; i < CONTROL_QUICK_BUTTON_COUNT; i++){
+    const b = document.createElement("button");
+    b.id = `slowQuickBtn_${i}`;
+    b.type = "button";
+    b.className = "control-quick-btn";
+    b.onclick = () => triggerControlQuickFixed(i);
+    b.onpointerdown = () => {
+      const st = encoderPageState.slow || { index: 0, edit: false };
+      st.index = SLOW_SLIDER_COUNT + i;
+      encoderPageState.slow = st;
+      renderSlowSliders();
+      renderSlowQuickButtons();
+      centerActiveCommandRow("slow", true);
+    };
+    host.appendChild(b);
   }
 }
 
@@ -1502,7 +1794,7 @@ function startLiveSliderLoop(){
     if (ts - lastMs >= 50){
       lastMs = ts;
       for (let i = 0; i < CONTROL_SLIDER_COUNT; i++){
-        const sliders = activeSliderAssignments();
+        const sliders = getControlSliderAssignments();
         const binding = String(sliders[i] || "none:none");
         const [mode, key] = binding.split(":");
         if (mode && mode !== "none" && key && key !== "none"){
@@ -1517,8 +1809,22 @@ function startLiveSliderLoop(){
   requestAnimationFrame(step);
 }
 
+let controlSliderThrottle = { lastCommit: 0 };
+const CONTROL_SLIDER_THROTTLE_MS = 55;
+function clearControlSliderThrottle(){
+  controlSliderThrottle.lastCommit = 0;
+}
+function throttleControlSliderCommit(i){
+  const now = Date.now();
+  if (now - controlSliderThrottle.lastCommit >= CONTROL_SLIDER_THROTTLE_MS || !controlSliderThrottle.lastCommit){
+    controlSliderThrottle.lastCommit = now;
+    commitControlSlider(i);
+    renderControlSliders();
+  }
+}
+
 function commitControlSlider(i){
-  const sliders = activeSliderAssignments();
+  const sliders = getControlSliderAssignments();
   const binding = String(sliders[i] || "none:none");
   const [mode, key] = binding.split(":");
   if (!mode || mode === "none" || !key || key === "none") return;
@@ -1562,7 +1868,7 @@ function adjustActiveControlSlider(page, dir){
     return;
   }
   const i = idx;
-  const sliders = activeSliderAssignments();
+  const sliders = getControlSliderAssignments();
   const binding = String(sliders[i] || "none:none");
   const [mode, key] = binding.split(":");
   if (!mode || mode === "none" || !key || key === "none") return;
@@ -1585,7 +1891,7 @@ function renderControlSliders(forceBuild=false){
   const host = $("controlSliderGrid");
   if (!host) return;
   if (forceBuild || !$("controlSlider_0")) buildControlSliders();
-  const sliders = activeSliderAssignments();
+  const sliders = getControlSliderAssignments();
   const pageKey = currentPage === "control2" ? "control2" : "control";
   const encState = encoderPageState[pageKey] || { index: 0, edit: false };
   const encIndex = clamp(Number(encState.index) || 0, 0, CONTROL_SLIDER_COUNT - 1);
@@ -1611,10 +1917,13 @@ function renderControlSliders(forceBuild=false){
       continue;
     }
     slider.disabled = false;
-    name.textContent = sliderDisplayLabel(key);
+    const readbackVal = getSliderReadbackValue(mode, key);
+    const valueText = formatSliderValue(mode, key, readbackVal);
+    name.textContent = sliderDisplayLabel(key) + "  " + valueText;
     safeRenderSliderLiveBar(i, key);
     const readback = getSliderReadbackValue(mode, key);
     const ui = sliderUiState[i];
+    val.textContent = valueText;
     if (mode === "slow" && ui.pending && ui.pending.key === key){
       const st = ((((state.slow_apply_status || {})[key]) || {}).state || "").toLowerCase();
       const readbackPct = commandValueToPercent(mode, key, readback);
@@ -1627,12 +1936,14 @@ function renderControlSliders(forceBuild=false){
         card.classList.add("pending");
         slider.value = String(Math.round(targetPct));
         val.textContent = `${formatSliderValue(mode, key, ui.pending.targetValue)} (pending)`;
+        name.textContent = sliderDisplayLabel(key) + "  " + val.textContent;
         continue;
       }
     }
     const pct = commandValueToPercent(mode, key, readback);
     slider.value = String(Math.round(pct));
     val.textContent = formatSliderValue(mode, key, readback);
+    name.textContent = sliderDisplayLabel(key) + "  " + val.textContent;
     if (ui.appliedUntil > Date.now()) card.classList.add("applied");
   }
 }
@@ -1674,18 +1985,21 @@ function normalized10ToCommandValue(mode, key, norm){
 
 function renderCommandRows(page){
   const isSlow = String(page || "") === "slow";
-  const host = $(isSlow ? "slowControlRows" : "fastControlRows");
+  if (isSlow) return;
+  const host = $("fastControlRows");
   if (!host) return;
-  const mode = isSlow ? "slow" : "fast";
-  const keys = isSlow ? SLOW_ROW_COMMANDS : FAST_ROW_COMMANDS;
-  const st = encoderPageState[isSlow ? "slow" : "fast"] || { index: 0, edit: false };
-  const activeIdx = Math.max(0, Math.min(keys.length - 1, Number(st.index) || 0));
+  const bindings = getFastPageRowBindings();
+  const st = encoderPageState.fast || { index: 0, edit: false };
+  const activeIdx = Math.max(0, Math.min(bindings.length - 1, Number(st.index) || 0));
   st.index = activeIdx;
   host.innerHTML = "";
-  for (let i = 0; i < keys.length; i++){
-    const key = keys[i];
-    const readback = getSliderReadbackValue(mode, key);
-    const norm = commandValueToNormalized10(mode, key, readback);
+  for (let i = 0; i < bindings.length; i++){
+    const binding = String(bindings[i] || "").trim();
+    const parts = binding.split(":");
+    const mode = (parts[0] || "fast").toLowerCase();
+    const key = parts[1] || "";
+    const readback = key ? getSliderReadbackValue(mode, key) : null;
+    const valueText = key ? formatSliderValue(mode, key, readback) : "-";
     const row = document.createElement("div");
     row.className = "command-row" + (i === activeIdx ? " active" : "") + ((i === activeIdx && st.edit) ? " editing" : "");
     row.onclick = () => {
@@ -1694,23 +2008,57 @@ function renderCommandRows(page){
     };
     const name = document.createElement("div");
     name.className = "command-row-name";
-    name.textContent = sliderDisplayLabel(key);
+    name.textContent = key ? sliderDisplayLabel(key) : "(unassigned)";
     const value = document.createElement("div");
     value.className = "command-row-value";
-    value.textContent = String(Math.round(norm));
+    value.textContent = valueText;
     row.appendChild(name);
     row.appendChild(value);
     host.appendChild(row);
   }
 }
 
+function moveActiveSlowItem(dir){
+  const total = SLOW_SLIDER_COUNT + CONTROL_QUICK_BUTTON_COUNT;
+  const st = encoderPageState.slow || { index: 0, edit: false };
+  st.index = clamp((Number(st.index) || 0) + (dir > 0 ? 1 : -1), 0, total - 1);
+  encoderPageState.slow = st;
+  renderSlowSliders();
+  renderSlowQuickButtons();
+  centerActiveCommandRow("slow", true);
+}
+
+function adjustActiveSlowItem(dir){
+  const st = encoderPageState.slow || { index: 0, edit: false };
+  const idx = Number(st.index) || 0;
+  if (idx < SLOW_SLIDER_COUNT){
+    const sliders = getSlowSliderAssignments();
+    const binding = String(sliders[idx] || "none:none");
+    const [, key] = binding.split(":");
+    if (!key || key === "none") return;
+    const readback = getSliderReadbackValue("slow", key);
+    const currentNorm = commandValueToNormalized10("slow", key, readback);
+    const nextNorm = clamp(Math.round(currentNorm) + (dir > 0 ? 1 : -1), 0, 10);
+    const cmdValue = normalized10ToCommandValue("slow", key, nextNorm);
+    applySlowSliderValue(key, cmdValue);
+  } else {
+    triggerControlQuickFixed(idx - SLOW_SLIDER_COUNT);
+  }
+  renderSlowSliders();
+  renderSlowQuickButtons();
+}
+
 function moveActiveCommandRow(page, dir){
   const isSlow = String(page || "") === "slow";
-  const key = isSlow ? "slow" : "fast";
-  const keys = isSlow ? SLOW_ROW_COMMANDS : FAST_ROW_COMMANDS;
-  if (!keys.length) return;
+  if (isSlow){
+    moveActiveSlowItem(dir);
+    return;
+  }
+  const key = "fast";
+  const bindings = getFastPageRowBindings();
+  if (!bindings.length) return;
   const st = encoderPageState[key] || { index: 0, edit: false };
-  st.index = clamp((Number(st.index) || 0) + (dir > 0 ? 1 : -1), 0, keys.length - 1);
+  st.index = clamp((Number(st.index) || 0) + (dir > 0 ? 1 : -1), 0, bindings.length - 1);
   encoderPageState[key] = st;
   renderCommandRows(page);
   centerActiveCommandRow(page);
@@ -1718,19 +2066,25 @@ function moveActiveCommandRow(page, dir){
 
 function adjustActiveCommandRow(page, dir){
   const isSlow = String(page || "") === "slow";
-  const mode = isSlow ? "slow" : "fast";
-  const keys = isSlow ? SLOW_ROW_COMMANDS : FAST_ROW_COMMANDS;
-  if (!keys.length) return;
-  const st = encoderPageState[isSlow ? "slow" : "fast"] || { index: 0, edit: false };
-  const idx = Number(st.index) || 0;
-  const key = keys[Math.max(0, Math.min(keys.length - 1, idx))];
-  const readback = getSliderReadbackValue(mode, key);
-  const currentNorm = commandValueToNormalized10(mode, key, readback);
-  // UI_INPUT_SCALING_RULE.md default: coarse normalized 0..10, step=1, no wrap.
+  if (isSlow){
+    adjustActiveSlowItem(dir);
+    return;
+  }
+  const bindings = getFastPageRowBindings();
+  if (!bindings.length) return;
+  const st = encoderPageState.fast || { index: 0, edit: false };
+  const idx = clamp(Number(st.index) || 0, 0, bindings.length - 1);
+  const binding = String(bindings[idx] || "").trim();
+  const parts = binding.split(":");
+  const mode = (parts[0] || "fast").toLowerCase();
+  const cmdKey = parts[1] || "";
+  if (!cmdKey) return;
+  const readback = getSliderReadbackValue(mode, cmdKey);
+  const currentNorm = commandValueToNormalized10(mode, cmdKey, readback);
   const nextNorm = clamp(Math.round(currentNorm) + (dir > 0 ? 1 : -1), 0, 10);
-  const cmdValue = normalized10ToCommandValue(mode, key, nextNorm);
-  if (mode === "fast") applyFastSliderValue(key, cmdValue);
-  else applySlowSliderValue(key, cmdValue);
+  const cmdValue = normalized10ToCommandValue(mode, cmdKey, nextNorm);
+  if (mode === "fast") applyFastSliderValue(cmdKey, cmdValue);
+  else applySlowSliderValue(cmdKey, cmdValue);
   renderCommandRows(page);
 }
 
@@ -1767,16 +2121,37 @@ function centerElementInPage(el, pageId, smooth=false){
   }
 }
 
+function getSlowEncoderElements(){
+  const els = [];
+  for (let i = 0; i < SLOW_SLIDER_COUNT; i++){
+    const el = $(`slowSliderCard_${i}`);
+    if (el) els.push(el);
+  }
+  for (let i = 0; i < CONTROL_QUICK_BUTTON_COUNT; i++){
+    const el = $(`slowQuickBtn_${i}`);
+    if (el) els.push(el);
+  }
+  return els;
+}
+
 function centerActiveCommandRow(page, smooth=false){
   const isSlow = String(page || "") === "slow";
   const key = isSlow ? "slow" : "fast";
-  const host = $(isSlow ? "slowControlRows" : "fastControlRows");
+  if (isSlow){
+    const items = getSlowEncoderElements();
+    if (!items.length) return;
+    const st = encoderPageState[key] || { index: 0, edit: false };
+    const idx = clamp(Number(st.index) || 0, 0, items.length - 1);
+    centerElementInPage(items[idx], "page-slow", smooth);
+    return;
+  }
+  const host = $("fastControlRows");
   if (!host) return;
   const st = encoderPageState[key] || { index: 0, edit: false };
   const idx = clamp(Number(st.index) || 0, 0, Math.max(0, host.children.length - 1));
   const row = host.children[idx];
   if (!row) return;
-  centerElementInPage(row, isSlow ? "page-slow" : "page-fast", smooth);
+  centerElementInPage(row, "page-fast", smooth);
 }
 
 function getControlEncoderElements(){
@@ -1850,8 +2225,8 @@ function adjustEngineeringItem(dir){
 }
 
 function updateHeadIdStatus(connectionStatus){
-  const box = $("headIdBox");
-  if (!box) return;
+  const pill = $("connectionPill");
+  if (!pill) return;
   const cs = connectionStatus || {};
   const phys = !!(((cs.physical_link || {}).eth0_up));
   const headState = String(((cs.head || {}).state || "disconnected")).toLowerCase();
@@ -1861,13 +2236,14 @@ function updateHeadIdStatus(connectionStatus){
   } else if (phys){
     cls = "status-warn";
   }
-  box.className = `head-id-box ${cls}`;
+  pill.className = `connection-pill ${cls}`;
+  updateConnectionPillContent();
 }
 
 function applyTheme(themeName){
   const requested = String(themeName || "").toLowerCase();
   const theme = VALID_THEMES.includes(requested) ? requested : "starship";
-  document.body.classList.remove("theme-starship", "theme-blackwhite", "theme-neon", "theme-acidtrip");
+  document.body.classList.remove("theme-starship", "theme-blackwhite", "theme-highcontrast", "theme-highcontrastgreen", "theme-neon", "theme-acidtrip");
   document.body.classList.add(`theme-${theme}`);
   const sel = $("themeSelect");
   if (sel) sel.value = theme;
@@ -1880,18 +2256,21 @@ function initTheme(){
   applyTheme(saved);
 }
 
-function updateHeadIdBox(){
-  const box = $("headIdBox");
-  if (!box) return;
+function updateConnectionPillContent(){
+  const pill = $("connectionPill");
+  if (!pill) return;
   const cs = state.connection_status || {};
   const connected = String(((cs.head || {}).state || "")).toLowerCase() === "connected";
-  if (!connected){
-    box.value = "No Head";
-    return;
-  }
-  const idx = Number(state.selected) || 0;
-  const label = (state.heads && state.heads[idx]) ? getHeadLabel(idx) : "";
-  box.value = label || "No Head";
+  const headName = connected ? (getHeadLabel(Number(state.selected) || 0) || "none") : "none";
+  const lens = (state.head_feedback || {}).lens || {};
+  const lensId = lens.lens_id || "-";
+  const lensFull = lens.lens_full_name || "(unknown)";
+  const lensName = (lensFull && lensFull !== "(unknown)") ? lensFull : (lensId !== "-" ? lensId : "none");
+  pill.textContent = `Head: ${headName} Lens: ${lensName}`;
+}
+
+function updateHeadIdBox(){
+  updateConnectionPillContent();
 }
 
 function getColumn(i){ return LAYOUT.columns[i] || { id:`C${i+1}`, title:`Column ${i+1}`, positions:[] }; }
@@ -1910,7 +2289,7 @@ function setCommandValue(commandKey, value){
     if (commandKey.startsWith("shape_")) {
     state.shaping = state.shaping || {};
     state.shaping.top_speed = state.shaping.top_speed || { yaw:5, pitch:5, roll:5, zoom:5 };
-    state.shaping.invert = state.shaping.invert || { yaw:false, pitch:false, roll:false };
+    state.shaping.invert = state.shaping.invert || { yaw:false, pitch:false, roll:false, zoom:false };
     state.shaping.deadband = state.shaping.deadband || { yaw:0, pitch:0, roll:0, zoom:0 };
     if (commandKey === "shape_expo") state.shaping.expo = value;
     else if (commandKey === "shape_expo_zoom") state.shaping.expo_zoom = value;
@@ -1923,6 +2302,7 @@ function setCommandValue(commandKey, value){
     else if (commandKey === "shape_invert_yaw") state.shaping.invert.yaw = !!value;
     else if (commandKey === "shape_invert_pitch") state.shaping.invert.pitch = !!value;
     else if (commandKey === "shape_invert_roll") state.shaping.invert.roll = !!value;
+    else if (commandKey === "shape_invert_zoom") state.shaping.invert.zoom = !!value;
     else if (commandKey === "shape_deadband_yaw") state.shaping.deadband.yaw = Number(value) || 0;
     else if (commandKey === "shape_deadband_pitch") state.shaping.deadband.pitch = Number(value) || 0;
     else if (commandKey === "shape_deadband_roll") state.shaping.deadband.roll = Number(value) || 0;
@@ -2001,6 +2381,7 @@ function getSlotValue(pos){
     if (pos.commandKey === "shape_invert_yaw") return state.shaping.invert.yaw ? 1 : 0;
     if (pos.commandKey === "shape_invert_pitch") return state.shaping.invert.pitch ? 1 : 0;
     if (pos.commandKey === "shape_invert_roll") return state.shaping.invert.roll ? 1 : 0;
+    if (pos.commandKey === "shape_invert_zoom") return state.shaping.invert.zoom ? 1 : 0;
     if (pos.commandKey === "shape_deadband_yaw") return state.shaping.deadband?.yaw ?? 0;
     if (pos.commandKey === "shape_deadband_pitch") return state.shaping.deadband?.pitch ?? 0;
     if (pos.commandKey === "shape_deadband_roll") return state.shaping.deadband?.roll ?? 0;
@@ -2042,7 +2423,7 @@ function openHeadConfigEditor(){
   $("headConfigEditor").classList.add("open");
 }
 
-function closeProfileEditor(){ $("profileEditor").classList.remove("open"); }
+function closeProfileEditor(){ const el = $("profileEditor"); if (el) el.classList.remove("open"); }
 
 function renderProfileList(){
   const host = $("profileList");
@@ -2130,13 +2511,13 @@ function buildHeads(){
   renderHeadPickerList();
 }
 
-const DOCK_PAGE_BY_INDEX = ["control", "control2", "slow", "fast", "inputtests"];
+const DOCK_PAGE_BY_INDEX = ["control", "slow", "fast", "control2", "inputtests"];
 const DOCK_LABEL_BY_PAGE = {
-  control: "Control 1",
-  control2: "Control 2",
-  slow: "Settings 1",
-  fast: "Settings 2",
-  inputtests: "Engineering",
+  control: "Joystick",
+  control2: "Network",
+  slow: "Gyro",
+  fast: "Settings",
+  inputtests: "Panel",
 };
 function updateNavVisualLink(page){
   const p = String(page || "control");
@@ -2155,27 +2536,25 @@ function activatePage(page){
   currentPage = p;
   const pKey = getPageEncoderKey(p);
   if (encoderPageState[pKey]) encoderPageState[pKey].edit = false;
-  if (p === "control" || p === "control2"){
-    assignmentEditBank = p;
-  }
-  const bankSel = $("assignmentBankSelect");
-  if (bankSel) bankSel.value = assignmentEditBank;
   updateNavVisualLink(p);
   document.querySelectorAll(".tab").forEach(x => x.classList.toggle("active", x.getAttribute("data-page") === p));
   document.querySelectorAll(".page").forEach(x => x.classList.remove("active"));
-  const pageDomKey = (p === "control2") ? "control" : p;
+  const pageDomKey = p === "control2" ? "ipconfig" : (p === "control" ? "control" : p);
   const pageEl = $(`page-${pageDomKey}`);
   if (pageEl) pageEl.classList.add("active");
   // Page navigation should show page content directly; keep encoder popup closed.
   activeColumn = null;
   mode = "position";
   clearActiveValueFreeze();
-  buildSliderAssignControls();
-  buildQuickButtonAssignControls();
-  renderCommandRows("slow");
+  if (pKey === "slow"){
+    buildSlowSliders();
+    buildSlowQuickButtons();
+    renderSlowSliders();
+    renderSlowQuickButtons();
+  }
   renderCommandRows("fast");
   if (pKey === "slow" || pKey === "fast") centerActiveCommandRow(pKey, true);
-  if (pKey === "control" || pKey === "control2") centerActiveControlItem(pKey, true);
+  if (pKey === "control") centerActiveControlItem(pKey, true);
   renderEngineeringEncoderFocus(pKey === "inputtests", true);
   renderPopup();
 }
@@ -2244,7 +2623,11 @@ function onEncoderSwitch(colIdx){
   const st = encoderPageState[currentKey];
   if (!st) return;
   st.edit = !st.edit;
-  if (currentKey === "slow" || currentKey === "fast"){
+  if (currentKey === "slow"){
+    renderSlowSliders();
+    renderSlowQuickButtons();
+    centerActiveCommandRow(currentKey, true);
+  } else if (currentKey === "fast"){
     renderCommandRows(currentKey);
     centerActiveCommandRow(currentKey, true);
   } else if (currentKey === "inputtests"){
@@ -2328,7 +2711,7 @@ function renderState(){
   if (state.shaping.expo_zoom === undefined || state.shaping.expo_zoom === null){
     state.shaping.expo_zoom = state.shaping.expo;
   }
-  state.shaping.invert = state.shaping.invert || { yaw:false, pitch:false, roll:false };
+  state.shaping.invert = state.shaping.invert || { yaw:false, pitch:false, roll:false, zoom:false };
   state.shaping.deadband = state.shaping.deadband || { yaw:0, pitch:0, roll:0, zoom:0 };
   if (state.shaping.zoom_feedback === undefined || state.shaping.zoom_feedback === null) state.shaping.zoom_feedback = 1;
   syncNetworkDraftFromState();
@@ -2361,10 +2744,7 @@ function renderState(){
   }
   const lens = (state.head_feedback || {}).lens || {};
   const pos = lens.positions || {};
-  const lensId = lens.lens_id || "-";
-  const lensName = lens.lens_full_name || "(unknown)";
-  const lensDisplay = (lensName && lensName !== "(unknown)") ? lensName : (lensId !== "-" ? lensId : "—");
-  if ($("lensNameBox")) $("lensNameBox").textContent = lensDisplay;
+  updateConnectionPillContent();
   const zoomMode = lens.zoom_control_mode || "position";
   const zoomCmd = lens.zoom_velocity_cmd ?? 0;
   const zoomRaw = lens.zoom_speed_raw ?? 0;
@@ -2402,13 +2782,10 @@ function renderState(){
   if ($("ifconfigDump")) $("ifconfigDump").textContent = dumpText;
   if ($("ifconfigEth")) $("ifconfigEth").textContent = `${ic.lan || "-"}\n\n# updated: ${updatedAt}`;
   if ($("ifconfigWifi")) $("ifconfigWifi").textContent = `${ic.wifi || "-"}\n\n# updated: ${updatedAt}`;
-  const activeProfile = String(((((state.ui_config || {}).profiles) || {}).active) || "");
-  const profileEditorOpen = $("profileEditor") && $("profileEditor").classList.contains("open");
-  if ($("profileNameInput") && !profileEditorOpen) $("profileNameInput").value = activeProfile;
-  renderProfileList();
   renderControlQuickButtons();
   renderControlSliders();
-  renderCommandRows("slow");
+  renderSlowSliders();
+  renderSlowQuickButtons();
   renderCommandRows("fast");
   renderEngineeringEncoderFocus();
   renderPopup();
@@ -2692,30 +3069,6 @@ function bindUI(){
     updateLockoffButton();
     sendDeadAheadMode();
   };
-  const homeBtn = $("homeBtn");
-  const clearHomeHold = () => {
-    if (homeHoldTimer){
-      clearTimeout(homeHoldTimer);
-      homeHoldTimer = null;
-    }
-  };
-  homeBtn.onpointerdown = () => {
-    clearHomeHold();
-    homeHoldTriggered = false;
-    homeHoldTimer = setTimeout(() => {
-      homeHoldTriggered = true;
-      sendHomeSet();
-      homeHoldTimer = null;
-    }, 3000);
-  };
-  homeBtn.onpointerup = () => {
-    if (homeHoldTimer){
-      clearHomeHold();
-      if (!homeHoldTriggered) sendHomeGoto();
-    }
-  };
-  homeBtn.onpointerleave = clearHomeHold;
-  homeBtn.onpointercancel = clearHomeHold;
   $("headPickerClose").onclick = closeHeadPicker;
   $("headPickerCancel").onclick = closeHeadPicker;
   $("headPicker").onclick = (e) => { if (e.target === $("headPicker")) closeHeadPicker(); };
@@ -2723,32 +3076,12 @@ function bindUI(){
   $("headConfigClose").onclick = closeHeadConfigEditor;
   $("headConfigDone").onclick = closeHeadConfigEditor;
   $("headConfigEditor").onclick = (e) => { if (e.target === $("headConfigEditor")) closeHeadConfigEditor(); };
-  $("openProfileEditor").onclick = openProfileEditor;
-  $("profileClose").onclick = closeProfileEditor;
-  $("profileDone").onclick = closeProfileEditor;
-  $("profileEditor").onclick = (e) => { if (e.target === $("profileEditor")) closeProfileEditor(); };
-  $("profileNameEdit").onclick = () => openKeyboard($("profileNameInput"));
-  const profileNameInputEl = $("profileNameInput");
-  if (profileNameInputEl) {
-    profileNameInputEl.onclick = () => openKeyboard(profileNameInputEl);
-    profileNameInputEl.onfocus = () => openKeyboard(profileNameInputEl);
-  }
-  $("profileSave").onclick = () => send({ type: "SAVE_USER_PROFILE", name: $("profileNameInput").value, ui_preferences: getProfileUiPreferencesSnapshot() });
-  $("profileRefresh").onclick = () => send({ type: "LIST_USER_PROFILES" });
-  $("profileFactoryRestore").onclick = () => send({ type: "RESTORE_FACTORY_DEFAULTS" });
   $("touchMotorsOn").onclick = () => send({ type: "SET_SLOW_CONTROL", key: "motors_on", value: 1 });
   $("touchMotorsOff").onclick = () => send({ type: "SET_SLOW_CONTROL", key: "motors_on", value: 0 });
   if ($("touchGyroSend")) $("touchGyroSend").onclick = () => send({ type: "SET_SLOW_CONTROL", key: "gyro_heading_correction", value: parseInt($("touchGyroValue").value, 10) || 0 });
   if ($("touchSaveDefaults")) $("touchSaveDefaults").onclick = () => send({ type: "SAVE_USER_DEFAULTS" });
   if ($("touchResetDefaults")) $("touchResetDefaults").onclick = () => send({ type: "RESET_USER_DEFAULTS" });
   $("touchCalibrateInputs").onclick = () => send({ type: "CALIBRATE_INPUTS", duration_s: 2.5 });
-  $("openNetworkFromEngineering").onclick = () => activatePage("ipconfig");
-  $("closeNetworkToEngineering").onclick = () => activatePage("inputtests");
-  $("assignmentBankSelect").onchange = (e) => {
-    assignmentEditBank = String(e.target.value || "control");
-    buildSliderAssignControls();
-    buildQuickButtonAssignControls();
-  };
   $("themeSelect").onchange = (e) => applyTheme(e.target.value);
   $("screenBrightnessSelect").onchange = (e) => {
     const pct = clamp(parseInt(e.target.value, 10) || 50, 10, 100);
@@ -2813,8 +3146,6 @@ function init(){
   renderKeyboard();
   bindUI();
   initDeadAheadControls();
-  buildSliderAssignControls();
-  buildQuickButtonAssignControls();
   buildControlQuickButtons();
   renderControlQuickButtons();
   buildControlSliders();

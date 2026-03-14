@@ -185,6 +185,9 @@ def build_udp_packet(axes: Dict[str, Any], control_state: Dict[str, Any]) -> byt
     iris = clamp1(iris)
     zoom = clamp1(zoom)
 
+    if invert.get("zoom"):
+        zoom = -zoom
+
     # === ORIGINAL INTERNAL RANGE: -512..+512 ===
     pan_i = int(pan * 512)
     tilt_i = int(tilt * 512)
@@ -317,6 +320,8 @@ def build_fast_packet_v2(axes: Dict[str, Any], control_state: Dict[str, Any], se
         tilt = -tilt
     if invert.get("roll"):
         roll = -roll
+    if invert.get("zoom"):
+        zoom = -zoom
 
     sp = float(control_state.get("speed", 1.0))
     pan = max(-1.0, min(1.0, pan * sp))

@@ -1,4 +1,40 @@
 {
+  "control_banks": {
+    "control": {
+      "sliders": [
+        "fast:shape_top_speed_yaw",
+        "fast:shape_top_speed_pitch",
+        "fast:shape_top_speed_roll",
+        "fast:shape_top_speed_zoom",
+        "slow:gyro_heading_correction",
+        "slow:filter_num"
+      ],
+      "quick": [
+        "none:none",
+        "none:none",
+        "none:none",
+        "none:none",
+        "none:none"
+      ]
+    },
+    "control2": {
+      "sliders": [
+        "fast:shape_top_speed_yaw",
+        "fast:shape_top_speed_pitch",
+        "fast:shape_top_speed_roll",
+        "fast:shape_top_speed_zoom",
+        "slow:gyro_heading_correction",
+        "slow:filter_num"
+      ],
+      "quick": [
+        "none:none",
+        "none:none",
+        "none:none",
+        "none:none",
+        "none:none"
+      ]
+    }
+  },
   "slow": {
     "motors_on": 1,
     "control_mode": "speed",

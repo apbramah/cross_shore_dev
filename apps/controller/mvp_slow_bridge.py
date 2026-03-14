@@ -135,7 +135,7 @@ def _default_shaping_profile() -> dict[str, Any]:
         "expo": 5.0,
         "expo_zoom": 5.0,
         "top_speed": {"yaw": 5.0, "pitch": 5.0, "roll": 5.0, "zoom": 5.0},
-        "invert": {"yaw": False, "pitch": False, "roll": False},
+        "invert": {"yaw": False, "pitch": False, "roll": False, "zoom": False},
         "deadband": {"yaw": 0.0, "pitch": 0.0, "roll": 0.0, "zoom": 0.0},
         "zoom_feedback": 1.0,
     }
@@ -271,7 +271,7 @@ def _normalized_shaping_profile(raw: Any) -> dict[str, Any]:
                     pass
     inv = raw.get("invert", {})
     if isinstance(inv, dict):
-        for k in ("yaw", "pitch", "roll"):
+        for k in ("yaw", "pitch", "roll", "zoom"):
             if k in inv:
                 base["invert"][k] = bool(inv[k])
     db = raw.get("deadband", {})
@@ -745,8 +745,7 @@ def _apply_shaping_to_adc_profile() -> tuple[bool, str]:
         except Exception:
             ui_gain = 5.0
         t["gain"] = _map_0_10_to_range(_clamp(ui_gain, 0.0, 10.0), 0.0, 2.0)
-        if axis != "Zrotate":
-            t["invert"] = bool(invert.get(inv_key, False))
+        t["invert"] = bool(invert.get(inv_key, False))
         try:
             db_ui = float(deadband.get(inv_key, 0.0))
         except Exception:
@@ -1346,7 +1345,7 @@ async def handler(websocket: Any) -> None:
                             shaping_state["top_speed"][k] = v
                 inv = payload.get("invert", {})
                 if isinstance(inv, dict):
-                    for k in ("yaw", "pitch", "roll"):
+                    for k in ("yaw", "pitch", "roll", "zoom"):
                         if k in inv:
                             shaping_state["invert"][k] = bool(inv[k])
                 db = payload.get("deadband", {})
