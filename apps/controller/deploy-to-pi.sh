@@ -18,6 +18,12 @@ sudo install -m 644 apps/controller/mvp_slow_bridge.py /opt/wsbridge/
 # Restart so running processes use new files
 sudo systemctl restart wsbridge.service
 sudo systemctl restart kiosk.service
+# If ADC bridge runs as a service (controller or mvp_bridge_adc), restart so it uses new code from repo
+for svc in controller.service mvp_bridge_adc.service; do
+  if systemctl is-enabled "$svc" &>/dev/null || systemctl list-unit-files --full "$svc" &>/dev/null; then
+    sudo systemctl restart "$svc" 2>/dev/null && echo "Restarted $svc" || true
+  fi
+done
 
 echo "Done. Verify hashes match:"
 sha256sum apps/controller/mvp_ui_3.html /opt/ui/mvp_ui_3.html

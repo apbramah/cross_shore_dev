@@ -6,6 +6,58 @@ Use this after you've pushed from your PC. Run each block on the Pi in order.
 
 ---
 
+## Full refresh: get the Pi running with latest (kiosk, UI, bridges)
+
+Do this once after a push (or anytime you want the Pi to match the repo). Assumes the Pi already has the repo, `/opt/ui/`, `/opt/wsbridge/`, and systemd units installed (see “First-time Pi setup” below if not).
+
+**On the Pi (SSH or console):**
+
+```bash
+# 1. Go to repo and pull latest
+cd ~/Dev/cross_shore_dev
+git fetch origin
+git checkout mvp-lite-devzone
+git pull --ff-only origin mvp-lite-devzone
+
+# 2. Deploy UI and bridge into runtime, restart services
+bash apps/controller/deploy-to-pi.sh
+```
+
+**What the script does:** Copies `mvp_ui_3.html` and `mvp_ui_3_layout.js` to `/opt/ui/`, copies `mvp_slow_bridge.py` to `/opt/wsbridge/`, then restarts `wsbridge.service`, `kiosk.service`, and (if present) `controller.service` or `mvp_bridge_adc.service`. After that, the kiosk shows the latest UI and the WebSocket bridge (and ADC bridge, if run from repo) use the latest code.
+
+**3. Ensure services start on boot (if not already):**
+
+```bash
+sudo systemctl enable wsbridge.service
+sudo systemctl enable kiosk.service
+# If you use a controller/ADC bridge service:
+sudo systemctl enable controller.service
+# or: sudo systemctl enable mvp_bridge_adc.service
+```
+
+**4. Verify:**
+
+```bash
+systemctl is-active wsbridge.service kiosk.service
+sha256sum ~/Dev/cross_shore_dev/apps/controller/mvp_ui_3.html /opt/ui/mvp_ui_3.html
+```
+
+Both hashes should match; both services should print `active`.
+
+---
+
+## First-time Pi setup (if the Pi is not yet configured)
+
+- **Repo:** Clone into `~/Dev/cross_shore_dev` (e.g. `git clone <url> ~/Dev/cross_shore_dev`).
+- **Runtime dirs:** Create and own `/opt/ui` and `/opt/wsbridge` (e.g. `sudo mkdir -p /opt/ui /opt/wsbridge`, `sudo chown admin:admin /opt/ui /opt/wsbridge` or keep root-owned and install with `sudo install`).
+- **Kiosk entry point:** Put `boot.html` in `/opt/ui/` that redirects to `mvp_ui_3.html` (see Step 3b below). Never delete `boot.html` (e.g. avoid `rsync --delete` into `/opt/ui/`).
+- **Systemd units:** Install the service files for kiosk, wsbridge, and (if used) controller/ADC bridge from `Pi5 Setup/` (e.g. into `/etc/systemd/system/`), then `sudo systemctl daemon-reload`, `enable` and `start` the services.
+- **Daemon wrappers (if used):** `/usr/local/bin/wsbridge_daemon` and `/usr/local/bin/controller_daemon` (and `/usr/local/bin/kiosk-browser`) must point at the correct Python/script paths and profile dirs (e.g. controller runs `mvp_bridge_adc.py` from repo with `--profile-dir /opt/wsbridge`).
+
+After that, use the “Full refresh” steps above for every update.
+
+---
+
 ## One-command deploy (after pull)
 
 From the repo root on the Pi:
