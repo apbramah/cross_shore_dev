@@ -16,6 +16,7 @@ PKT_FAST_CTRL = 0x10
 PKT_SLOW_CMD = 0x20
 PKT_SLOW_ACK = 0x21
 PKT_SLOW_TELEM = 0x30
+PKT_SCHEMA_VERSION = 2
 
 SLOW_KEY_MOTORS_ON = 1
 SLOW_KEY_CONTROL_MODE = 2
@@ -28,6 +29,13 @@ SLOW_KEY_FILTER_ENABLE_IRIS = 8
 SLOW_KEY_FILTER_NUM = 9
 SLOW_KEY_FILTER_DEN = 10
 SLOW_KEY_GYRO_HEADING_CORRECTION = 11
+SLOW_KEY_WASH_WIPE = 12
+SLOW_KEY_PAN_ACCEL = 13
+SLOW_KEY_TILT_ACCEL = 14
+SLOW_KEY_ROLL_ACCEL = 15
+SLOW_KEY_PAN_GAIN = 16
+SLOW_KEY_TILT_GAIN = 17
+SLOW_KEY_ROLL_GAIN = 18
 
 SLOW_KEY_IDS = {
     "motors_on": SLOW_KEY_MOTORS_ON,
@@ -41,6 +49,13 @@ SLOW_KEY_IDS = {
     "filter_num": SLOW_KEY_FILTER_NUM,
     "filter_den": SLOW_KEY_FILTER_DEN,
     "gyro_heading_correction": SLOW_KEY_GYRO_HEADING_CORRECTION,
+    "wash_wipe": SLOW_KEY_WASH_WIPE,
+    "pan_accel": SLOW_KEY_PAN_ACCEL,
+    "tilt_accel": SLOW_KEY_TILT_ACCEL,
+    "roll_accel": SLOW_KEY_ROLL_ACCEL,
+    "pan_gain": SLOW_KEY_PAN_GAIN,
+    "tilt_gain": SLOW_KEY_TILT_GAIN,
+    "roll_gain": SLOW_KEY_ROLL_GAIN,
 }
 
 # Resolve heads.json relative to this file so it works from any CWD
@@ -368,6 +383,39 @@ def decode_slow_ack_packet(packet: bytes) -> Optional[Dict[str, Any]]:
     return {"seq": seq, "apply_id": apply_id, "key_id": key_id, "status": status}
 
 
+def build_slow_telem_packet(payload: Dict[str, Any]) -> bytes:
+    """
+    Build a slow telemetry packet as:
+      <BBBH payload_json_utf8>
+    where H is payload length in bytes.
+    """
+    body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    if len(body) > 65535:
+        body = body[:65535]
+    return struct.pack("<BBBH", PKT_MAGIC, PKT_VER, PKT_SLOW_TELEM, len(body)) + body
+
+
+def decode_slow_telem_packet(packet: bytes) -> Optional[Dict[str, Any]]:
+    if len(packet) < 5:
+        return None
+    try:
+        magic, ver, pkt_type, body_len = struct.unpack("<BBBH", packet[:5])
+    except Exception:
+        return None
+    if magic != PKT_MAGIC or ver != PKT_VER or pkt_type != PKT_SLOW_TELEM:
+        return None
+    if len(packet) < 5 + body_len:
+        return None
+    try:
+        body = packet[5 : 5 + body_len].decode("utf-8")
+        data = json.loads(body)
+    except Exception:
+        return None
+    if not isinstance(data, dict):
+        return None
+    return data
+
+
 def decode_legacy_fast_fields(packet: bytes) -> Optional[Dict[str, Any]]:
     """Decode existing 16-byte MVP packet for compatibility helpers."""
     if len(packet) != 16 or packet[0] != 0xDE or packet[1] != 0xFD:
@@ -409,6 +457,19 @@ def encode_slow_value(key: str, value: Any) -> Optional[int]:
             return int(value)
         except Exception:
             return None
+    if key == "wash_wipe":
+        s = str(value).lower().strip()
+        return 1 if s in ("1", "wipe", "wiping", "on", "true") else 0
+    if key in ("pan_accel", "tilt_accel", "roll_accel", "pan_gain", "tilt_gain", "roll_gain"):
+        try:
+            n = int(value)
+        except Exception:
+            return None
+        if n < 0:
+            return 0
+        if n > 255:
+            return 255
+        return n
     try:
         return int(value)
     except Exception:

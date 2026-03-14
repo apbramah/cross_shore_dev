@@ -2,6 +2,10 @@
 Shaping/tuning layer for the ADC bridge: deadband, center offset, low-pass,
 expo, slew, invert/gain/clamp. Produces protocol-ready axes keyed as
 X/Y/Z/Xrotate/Yrotate/Zrotate. See ADC_BRIDGE_INTERFACE.md.
+
+Zoom feedback PTR damping: when zoom_feedback_runtime is provided, applies
+a log-scale multiplier to X/Y/Z (pan/tilt/roll) based on zoom_norm and
+zoom_feedback strength (1..10). Zrotate (zoom axis) is unchanged.
 """
 
 from __future__ import annotations
@@ -15,6 +19,9 @@ from mvp_bridge_adc_state import AXIS_KEYS, ADCBridgeState
 ADC_MAX = 4095
 ADC_MIN = 0
 ADC_CENTER = (ADC_MIN + ADC_MAX) / 2.0
+
+# Log blend factor for zoom-based PTR damping (plan: k fixed, e.g. 9)
+ZOOM_FEEDBACK_LOG_K = 9.0
 
 
 def _norm(raw: int) -> float:
@@ -74,17 +81,37 @@ def _is_passthrough_tuning(t: dict[str, Any]) -> bool:
     )
 
 
+def _ptr_damping_multiplier(zoom_feedback: float, zoom_norm: float) -> float:
+    """
+    Compute PTR gain multiplier from zoom feedback (1..10) and normalized zoom (0..1).
+    mult_end = 1.0 / zoom_feedback; blend = log1p(k*zoom_norm)/log1p(k);
+    mult = 1.0 - (1.0 - mult_end) * blend.
+    """
+    if zoom_feedback <= 0:
+        return 1.0
+    mult_end = 1.0 / max(1.0, float(zoom_feedback))
+    z = _clamp(float(zoom_norm), 0.0, 1.0)
+    k = ZOOM_FEEDBACK_LOG_K
+    if z <= 0:
+        return 1.0
+    blend = math.log1p(k * z) / math.log1p(k)
+    blend = _clamp(blend, 0.0, 1.0)
+    return 1.0 - (1.0 - mult_end) * blend
+
+
 def shape_sample(
     raw_sample: dict[str, Any],
     state: ADCBridgeState,
     filter_state: dict[str, float],
     last_time: float,
+    zoom_feedback_runtime: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], float]:
     """
     Take raw axis sample and state, return protocol-ready axes dict
     (X, Y, Z, Xrotate, Yrotate, Zrotate) and new last_time.
     filter_state holds per-axis LPF and slew state; mutated in place.
     When all axes use passthrough tuning, only norm + invert + clamp are applied (no LPF/slew).
+    If zoom_feedback_runtime is provided (zoom_feedback, zoom_norm), applies PTR damping to X,Y,Z only.
     """
     now = time.monotonic()
     dt = now - last_time if last_time else 0.0
@@ -112,6 +139,17 @@ def shape_sample(
         v = _clamp(v, tuning["clamp_min"], tuning["clamp_max"])
         filter_state[f"{k}_out"] = v
         out[k] = v
+    # Apply zoom-feedback PTR damping to X, Y, Z only (not Zrotate).
+    if zoom_feedback_runtime:
+        try:
+            zf = float(zoom_feedback_runtime.get("zoom_feedback", 1.0) or 1.0)
+            zn = float(zoom_feedback_runtime.get("zoom_norm", 0.0) or 0.0)
+            mult = _ptr_damping_multiplier(zf, zn)
+            for axis in ("X", "Y", "Z"):
+                if axis in out:
+                    out[axis] = out[axis] * mult
+        except (TypeError, ValueError):
+            pass
     return out, now
 
 

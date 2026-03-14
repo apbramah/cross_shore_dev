@@ -1,0 +1,45 @@
+{
+  "slow": {
+    "motors_on": 1,
+    "control_mode": "speed",
+    "lens_select": "fuji",
+    "source_zoom": "pc",
+    "source_focus": "pc",
+    "source_iris": "pc",
+    "filter_enable_focus": 0,
+    "filter_enable_iris": 0,
+    "filter_num": 1,
+    "filter_den": 1,
+    "gyro_heading_correction": 5376,
+    "wash_wipe": "parked",
+    "pan_accel": 50,
+    "tilt_accel": 50,
+    "roll_accel": 50,
+    "pan_gain": 100,
+    "tilt_gain": 100,
+    "roll_gain": 100
+  },
+  "shaping": {
+    "ui_scale": true,
+    "expo": 5.0,
+    "expo_zoom": 5.0,
+    "top_speed": {
+      "yaw": 5.0,
+      "pitch": 5.0,
+      "roll": 5.0,
+      "zoom": 5.0
+    },
+    "invert": {
+      "yaw": false,
+      "pitch": false,
+      "roll": false
+    },
+    "deadband": {
+      "yaw": 0.0,
+      "pitch": 0.0,
+      "roll": 0.0,
+      "zoom": 0.0
+    },
+    "zoom_feedback": 1.0
+  }
+}

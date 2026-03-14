@@ -21,6 +21,22 @@ class LensController:
     def get_lens_type(self):
         return self.active_lens_type
 
+    def get_lens_full_name(self):
+        if self.active_lens is None:
+            return None
+        cached = getattr(self.active_lens, "lens_name_cached", None)
+        if cached:
+            return cached
+        fn = getattr(self.active_lens, "read_lens_name", None)
+        if callable(fn):
+            try:
+                name = fn()
+                if name:
+                    return name
+            except Exception:
+                pass
+        return None
+
     def get_axis_sources(self):
         if self.active_lens is None:
             return {"zoom": "pc", "focus": "pc", "iris": "pc"}

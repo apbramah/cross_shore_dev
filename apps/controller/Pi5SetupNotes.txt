@@ -1,6 +1,0 @@
-Inverted screen to ease wire routing in console.
-
-Changing Pi resolution so can access IP config gui:
-wlr-randr --output DSI-2 --scale 0.8
-
-
