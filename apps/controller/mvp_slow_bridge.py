@@ -1255,9 +1255,11 @@ async def telemetry_receiver_task() -> None:
             apply_id = int(ack.get("apply_id", -1))
             if key_id in mvp_protocol.NETWORK_SLOW_KEY_IDS.values():
                 if key_id == mvp_protocol.SLOW_KEY_NETCFG_APPLY:
-                    idx = -1
-                    pending = None
                     pending = head_network_push_pending.get(apply_id)
+                    # Ignore duplicate/late APPLY ACKs after transaction already finalized.
+                    if not isinstance(pending, dict):
+                        continue
+                    idx = -1
                     if isinstance(pending, dict):
                         idx = int(pending.get("index", -1))
                     if idx < 0:
