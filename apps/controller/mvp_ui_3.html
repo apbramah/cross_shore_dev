@@ -6,7 +6,7 @@
   <title>Hydravision MVP UI 3</title>
   <script src="./mvp_ui_3_layout.js"></script>
   <style>
-    :root { --bg:#070b11; --card:#0d131d; --card2:#101722; --border:#1b2433; --text:#d2d8e3; --muted:#8791a1; --accent:#9bd85a; --warn:#9bd85a; --ok:#9bd85a; --danger:#9bd85a; --nav-link-x:10%; --nav-link-color:#9bd85a; }
+    :root { --bg:#070b11; --card:#0d131d; --card2:#101722; --border:#1b2433; --text:#d2d8e3; --muted:#8791a1; --accent:#9bd85a; --warn:#9bd85a; --ok:#9bd85a; --danger:#9bd85a; --nav-link-x:10%; --nav-link-x2:10%; --nav-link-color:#9bd85a; }
     *{ box-sizing:border-box; }
     html, body { width:100vw; height:100vh; margin:0; overflow:hidden; background:#060a10; color:var(--text); font-family:Inter, "Segoe UI", system-ui, -apple-system, sans-serif; letter-spacing:.005em; line-height:1.35; text-rendering:optimizeLegibility; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
     .app { width:100vw; height:100vh; padding:12px; display:grid; grid-template-rows:124px 1fr 76px; gap:10px; background:linear-gradient(180deg,#0a111a 0%,#060a10 100%); }
@@ -14,7 +14,7 @@
     .topbar { display:grid; grid-template-columns:minmax(0,1.35fr) minmax(0,1fr); grid-template-rows:auto auto; align-items:center; gap:8px; padding:8px; }
     .topbar > .row:nth-of-type(1) { grid-column:1; grid-row:1; min-width:0; }
     .topbar > .row:nth-of-type(2) { grid-column:2; grid-row:1; min-width:0; }
-    .topbar > .row.actions { grid-column:1 / -1; grid-row:2; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; align-items:center; }
+    .topbar > .row.actions { grid-column:1 / -1; grid-row:2; display:grid; grid-template-columns:0.8fr 1fr 1fr 1fr; gap:6px; align-items:center; }
     .top-title { font-size:18px; font-weight:600; letter-spacing:.01em; text-transform:none; color:#d7e0ed; }
     .logo-pill {
       height:46px;
@@ -57,6 +57,11 @@
       background:#2a2218;
       color:#ffe6bf;
       box-shadow:0 0 0 1px rgba(214,160,79,.55) inset, 0 0 16px rgba(214,160,79,.28);
+    }
+    #posDisplayBtn.active {
+      box-shadow:0 0 0 1px rgba(155,216,90,.45) inset, 0 0 14px rgba(155,216,90,.2);
+      background:#192430;
+      color:#edf5e4;
     }
     button { cursor:pointer; background:#1a2433; border-color:#212d40; font-weight:500; color:#d7dfea; text-transform:none; letter-spacing:.008em; text-shadow:none; box-shadow:none; }
     button:hover { filter:brightness(1.07); }
@@ -104,6 +109,144 @@
     #page-slow .control-slider { height:100%; min-height:42px; }
     #page-ipconfig .head-config-full-width { grid-column:1 / -1; width:100%; }
     #page-ipconfig input, #page-ipconfig select { border-color: var(--border); }
+    #posDisplayPanel {
+      grid-row:2 / 4;
+      display:none;
+      grid-template-columns:minmax(240px,1fr) minmax(0,2fr);
+      gap:8px;
+      padding:10px;
+      border-radius:12px;
+      background:#0d141f;
+      overflow:hidden;
+    }
+    .app.pos-display #surfaceMain,
+    .app.pos-display #dockMain { display:none; }
+    .app.pos-display #posDisplayPanel { display:grid; }
+    .pos-display-left {
+      border:1px solid transparent;
+      border-radius:10px;
+      background:#121a27;
+      padding:10px;
+      display:grid;
+      align-content:start;
+      gap:8px;
+    }
+    .pos-display-left h3 {
+      margin:0;
+      font-size:13px;
+      color:#d6e4fa;
+      font-weight:600;
+      letter-spacing:.008em;
+    }
+    .pos-display-grid {
+      display:grid;
+      grid-template-columns:auto 1fr;
+      gap:8px 10px;
+      align-items:center;
+      font-variant-numeric:tabular-nums;
+    }
+    .pos-display-grid .k { color:#8ea0ba; font-size:12px; }
+    .pos-display-grid .v { color:#dce8fb; font-size:14px; font-weight:600; text-align:right; }
+    .pos-display-map {
+      border:1px solid transparent;
+      border-radius:10px;
+      background:#0f1722;
+      overflow:hidden;
+      min-width:0;
+      position:relative;
+    }
+    #posDisplayFrame { width:100%; height:100%; border:0; background:#0a0e14; }
+    .pos-display-close {
+      position:absolute;
+      top:8px;
+      right:8px;
+      z-index:3;
+      height:30px;
+      min-width:66px;
+      border-radius:8px;
+      border:1px solid #32445f;
+      background:rgba(16,24,36,.84);
+      color:#dce8fb;
+      font-size:12px;
+      font-weight:600;
+      letter-spacing:.006em;
+      padding:0 10px;
+    }
+    .pos-display-offset {
+      margin-top:2px;
+      display:grid;
+      gap:4px;
+    }
+    .pos-display-sim {
+      margin-top:2px;
+      display:flex;
+      align-items:center;
+      gap:8px;
+      color:#8ea0ba;
+      font-size:12px;
+    }
+    .pos-display-sim input[type="checkbox"] {
+      width:16px;
+      height:16px;
+      accent-color:#9bd85a;
+      cursor:pointer;
+    }
+    .pos-display-offset-head {
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      font-size:12px;
+      color:#8ea0ba;
+    }
+    #posDisplayHeadingOffsetVal {
+      color:#dce8fb;
+      font-weight:600;
+      font-variant-numeric:tabular-nums;
+    }
+    #posDisplayHeadingOffset {
+      width:100%;
+      height:28px;
+      -webkit-appearance:none;
+      appearance:none;
+      background:transparent;
+      accent-color:#9bd85a;
+    }
+    #posDisplayHeadingOffset::-webkit-slider-runnable-track {
+      height:6px;
+      border-radius:3px;
+      border:1px solid #5a6370;
+      background:linear-gradient(90deg,#9bd85a 0%, #9bd85a var(--posOffsetPct, 50%), rgba(255,255,255,.08) var(--posOffsetPct, 50%), rgba(255,255,255,.08) 100%);
+    }
+    #posDisplayHeadingOffset::-moz-range-track {
+      height:6px;
+      border-radius:3px;
+      border:1px solid #5a6370;
+      background:rgba(255,255,255,.08);
+    }
+    #posDisplayHeadingOffset::-moz-range-progress {
+      height:6px;
+      border-radius:3px;
+      background:#9bd85a;
+    }
+    #posDisplayHeadingOffset::-webkit-slider-thumb {
+      -webkit-appearance:none;
+      appearance:none;
+      width:16px;
+      height:12px;
+      border-radius:3px;
+      border:1px solid #cfd6e1;
+      background:#a8b1c2;
+      cursor:pointer;
+      margin-top:-4px;
+    }
+    #posDisplayHeadingOffset::-moz-range-thumb {
+      width:16px;
+      height:12px;
+      border-radius:3px;
+      border:1px solid #cfd6e1;
+      background:#a8b1c2;
+      cursor:pointer;
+    }
     .stack-list { align-content:start; gap:8px; }
     .stack-row-card { grid-column:1 / -1; width:100%; }
     .card { border:0; border-radius:10px; background:#0f1722; padding:10px; display:grid; gap:8px; align-content:start; box-shadow:none; }
@@ -115,7 +258,7 @@
     .page::-webkit-scrollbar-thumb, .surface::-webkit-scrollbar-thumb, .info::-webkit-scrollbar-thumb, .table-wrap::-webkit-scrollbar-thumb, .head-picker-list::-webkit-scrollbar-thumb, .head-config-body::-webkit-scrollbar-thumb { background:var(--border); border-radius:4px; }
     .page::-webkit-scrollbar-thumb:hover, .surface::-webkit-scrollbar-thumb:hover, .info::-webkit-scrollbar-thumb:hover, .table-wrap::-webkit-scrollbar-thumb:hover, .head-picker-list::-webkit-scrollbar-thumb:hover, .head-config-body::-webkit-scrollbar-thumb:hover { background:var(--accent); }
     .info { font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:12px; color:var(--muted); border:1px solid var(--border); border-radius:8px; padding:8px; background:rgba(16,24,36,.65); overflow:auto; max-height:170px; white-space:pre-wrap; }
-    .dock { position:relative; padding:8px; overflow:visible; }
+    .dock { position:relative; --dock-pad-y:8px; padding:var(--dock-pad-y) 8px; overflow:visible; }
     .dock::before {
       content:"";
       position:absolute;
@@ -124,6 +267,20 @@
       top:-12px;
       width:3px;
       height:20px;
+      border-radius:0;
+      background:var(--nav-link-color);
+      box-shadow:none;
+      pointer-events:none;
+      z-index:4;
+    }
+    .dock::after {
+      content:"";
+      position:absolute;
+      left:var(--nav-link-x2);
+      transform:translateX(-50%);
+      top:calc(100% - var(--dock-pad-y));
+      width:3px;
+      height:var(--dock-pad-y);
       border-radius:0;
       background:var(--nav-link-color);
       box-shadow:none;
@@ -240,21 +397,41 @@
       width:100%;
       height:52px;
       border-radius:6px;
-      background:#151f30;
-      border:1px solid #425171;
+      background:transparent;
+      border:0;
       outline:none;
       position:relative;
       z-index:2;
     }
+    .control-slider::-webkit-slider-runnable-track{
+      height:6px;
+      border-radius:3px;
+      border:1px solid #5a6370;
+      background:linear-gradient(90deg,#9bd85a 0%, #9bd85a var(--controlSliderPct, 0%), rgba(255,255,255,.08) var(--controlSliderPct, 0%), rgba(255,255,255,.08) 100%);
+    }
+    .control-slider::-moz-range-track{
+      height:6px;
+      border-radius:3px;
+      border:1px solid #5a6370;
+      background:rgba(255,255,255,.08);
+    }
+    .control-slider::-moz-range-progress{
+      height:6px;
+      border-radius:3px;
+      background:#9bd85a;
+    }
     .control-slider::-webkit-slider-thumb{
       -webkit-appearance:none;
       appearance:none;
-      width:24px; height:24px; border-radius:6px;
-      background:#9ec2ff; border:1px solid #d9e9ff;
+      width:16px; height:12px; border-radius:3px;
+      background:#3d5f93; border:1px solid #9bd85a;
+      cursor:pointer;
+      margin-top:-4px;
     }
     .control-slider::-moz-range-thumb{
-      width:24px; height:24px; border-radius:6px;
-      background:#9ec2ff; border:1px solid #d9e9ff;
+      width:16px; height:12px; border-radius:3px;
+      background:#3d5f93; border:1px solid #9bd85a;
+      cursor:pointer;
     }
     .control-slider-card.pending { border-color:#f59e0b; box-shadow:0 0 0 1px rgba(245,158,11,.45) inset; }
     .control-slider-card.applied { border-color:#22c55e; box-shadow:0 0 0 1px rgba(34,197,94,.45) inset; }
@@ -278,6 +455,132 @@
     .command-row.active { border-color:#57a7ff; box-shadow:0 0 0 1px rgba(87,167,255,.4) inset; }
     .command-row.editing { border-color:#f59e0b; box-shadow:0 0 0 1px rgba(245,158,11,.45) inset; }
     .command-row-name { font-size:15px; color:#d9e7ff; font-weight:600; line-height:1.2; letter-spacing:.005em; }
+    .theme-lab-panel { display:none; border:1px solid #425171; border-radius:10px; background:#111a28; padding:10px; gap:8px; }
+    .theme-lab-panel.open { display:grid; }
+    .theme-lab-head { display:grid; grid-template-columns:1fr auto; gap:8px; align-items:center; }
+    .theme-lab-row { display:grid; grid-template-columns:1fr auto; gap:10px; align-items:center; }
+    .theme-lab-row label { font-size:12px; color:#9eabba; }
+    .theme-lab-row input[type="color"] { width:38px; height:24px; padding:0; border:1px solid #425171; background:transparent; }
+    .theme-lab-row input[type="text"] { max-width:240px; }
+    .theme-lab-actions { display:flex; flex-wrap:wrap; gap:6px; }
+    .theme-lab-enable { display:flex; align-items:center; gap:8px; color:#9eabba; font-size:12px; }
+    .theme-lab-enable input[type="checkbox"] { width:16px; height:16px; accent-color:#9bd85a; cursor:pointer; }
+    .theme-lab-json {
+      width:100%;
+      min-height:88px;
+      resize:vertical;
+      border-radius:8px;
+      border:1px solid #425171;
+      background:#0c1420;
+      color:#cfe0ff;
+      padding:8px;
+      font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
+      font-size:11px;
+    }
+    body.theme-lab-enabled {
+      --bg: var(--theme-lab-bg) !important;
+      --card: var(--theme-lab-card) !important;
+      --card2: var(--theme-lab-card2) !important;
+      --border: var(--theme-lab-border) !important;
+      --text: var(--theme-lab-text) !important;
+      --muted: var(--theme-lab-muted) !important;
+      --accent: var(--theme-lab-accent) !important;
+      --warn: var(--theme-lab-nav) !important;
+      --ok: var(--theme-lab-nav) !important;
+      --danger: var(--theme-lab-nav) !important;
+      --nav-link-color: var(--theme-lab-nav) !important;
+    }
+    body.theme-lab-enabled .app { background: var(--theme-lab-bg) !important; }
+    body.theme-lab-enabled .topbar,
+    body.theme-lab-enabled .tabs,
+    body.theme-lab-enabled .surface,
+    body.theme-lab-enabled .dock,
+    body.theme-lab-enabled .card,
+    body.theme-lab-enabled .popup,
+    body.theme-lab-enabled .head-picker-card,
+    body.theme-lab-enabled .head-config-card { background: var(--theme-lab-card) !important; }
+    body.theme-lab-enabled input,
+    body.theme-lab-enabled select,
+    body.theme-lab-enabled button,
+    body.theme-lab-enabled .command-row,
+    body.theme-lab-enabled .control-slider-card,
+    body.theme-lab-enabled .cmd-window,
+    body.theme-lab-enabled .cmd-body,
+    body.theme-lab-enabled .connection-pill,
+    body.theme-lab-enabled .logo-pill,
+    body.theme-lab-enabled .dock-btn,
+    body.theme-lab-enabled .tab { background: var(--theme-lab-card2) !important; color: var(--theme-lab-text) !important; border-color: var(--theme-lab-border) !important; }
+    body.theme-lab-enabled .top-title,
+    body.theme-lab-enabled .card h3,
+    body.theme-lab-enabled .command-row-name,
+    body.theme-lab-enabled .command-row-value,
+    body.theme-lab-enabled .connection-pill .k,
+    body.theme-lab-enabled .connection-pill .v,
+    body.theme-lab-enabled .logo-pill .brand,
+    body.theme-lab-enabled .logo-pill .tag,
+    body.theme-lab-enabled .tab,
+    body.theme-lab-enabled .dock-btn,
+    body.theme-lab-enabled .control-slider-name,
+    body.theme-lab-enabled .command-list-title { color: var(--theme-lab-text) !important; }
+    body.theme-lab-enabled .row label,
+    body.theme-lab-enabled .card-desc,
+    body.theme-lab-enabled .connection-pill .sep,
+    body.theme-lab-enabled .input-test-label,
+    body.theme-lab-enabled .input-test-count { color: var(--theme-lab-muted) !important; }
+    body.theme-lab-enabled .tab.active,
+    body.theme-lab-enabled .dock-btn.active,
+    body.theme-lab-enabled .command-row.active,
+    body.theme-lab-enabled .command-row.editing,
+    body.theme-lab-enabled .control-slider-card.pending,
+    body.theme-lab-enabled .control-slider-card.applied,
+    body.theme-lab-enabled .control-slider-card.encoder-active,
+    body.theme-lab-enabled .control-slider-card.encoder-editing,
+    body.theme-lab-enabled .control-quick-btn.encoder-active,
+    body.theme-lab-enabled .control-quick-btn.encoder-editing {
+      box-shadow: 0 0 0 1px var(--theme-lab-nav) inset, 0 0 14px var(--theme-lab-nav) !important;
+      border-color: var(--theme-lab-nav) !important;
+      background: var(--theme-lab-card2) !important;
+    }
+    body.theme-lab-enabled .control-live-track {
+      border-color: var(--theme-lab-border) !important;
+      background: var(--theme-lab-card) !important;
+    }
+    body.theme-lab-enabled .control-live-center { background: var(--theme-lab-muted) !important; }
+    body.theme-lab-enabled .control-live-fill { background: var(--theme-lab-accent) !important; }
+    body.theme-lab-enabled .control-slider::-webkit-slider-runnable-track {
+      border-color: var(--theme-lab-border) !important;
+      background: linear-gradient(90deg, var(--theme-lab-accent) 0%, var(--theme-lab-accent) var(--controlSliderPct, 0%), rgba(255,255,255,.08) var(--controlSliderPct, 0%), rgba(255,255,255,.08) 100%) !important;
+    }
+    body.theme-lab-enabled .control-slider::-moz-range-track {
+      border-color: var(--theme-lab-border) !important;
+      background: rgba(255,255,255,.08) !important;
+    }
+    body.theme-lab-enabled .control-slider::-moz-range-progress { background: var(--theme-lab-accent) !important; }
+    body.theme-lab-enabled .control-slider::-webkit-slider-thumb {
+      background: var(--theme-lab-card2) !important;
+      border-color: var(--theme-lab-accent) !important;
+    }
+    body.theme-lab-enabled .control-slider::-moz-range-thumb {
+      background: var(--theme-lab-card2) !important;
+      border-color: var(--theme-lab-accent) !important;
+    }
+    body.theme-lab-enabled #posDisplayHeadingOffset::-webkit-slider-runnable-track {
+      border-color: var(--theme-lab-border) !important;
+      background: linear-gradient(90deg, var(--theme-lab-accent) 0%, var(--theme-lab-accent) var(--posOffsetPct, 50%), rgba(255,255,255,.08) var(--posOffsetPct, 50%), rgba(255,255,255,.08) 100%) !important;
+    }
+    body.theme-lab-enabled #posDisplayHeadingOffset::-moz-range-track {
+      border-color: var(--theme-lab-border) !important;
+      background: rgba(255,255,255,.08) !important;
+    }
+    body.theme-lab-enabled #posDisplayHeadingOffset::-moz-range-progress { background: var(--theme-lab-accent) !important; }
+    body.theme-lab-enabled #posDisplayHeadingOffset::-webkit-slider-thumb {
+      background: var(--theme-lab-card2) !important;
+      border-color: var(--theme-lab-accent) !important;
+    }
+    body.theme-lab-enabled #posDisplayHeadingOffset::-moz-range-thumb {
+      background: var(--theme-lab-card2) !important;
+      border-color: var(--theme-lab-accent) !important;
+    }
     .command-row-value { font-size:24px; color:#c6dbff; min-width:64px; text-align:right; line-height:1; font-weight:600; font-family:Inter, "Segoe UI", system-ui, -apple-system, sans-serif; font-variant-numeric:tabular-nums; font-feature-settings:"tnum" 1; letter-spacing:.01em; }
     .cmd-window { border:1px solid #394863; border-radius:10px; background:#0a0d12; padding:8px; display:grid; gap:6px; }
     .cmd-title { font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:11px; color:#9fcff7; letter-spacing:.012em; }
@@ -357,10 +660,13 @@
       box-shadow:none;
       background:#121a27;
     }
-    .control-live-track,
-    .control-slider {
+    .control-live-track {
       border-color:transparent;
       background:#0f1722;
+    }
+    .control-slider {
+      border-color:transparent;
+      background:transparent;
     }
     .control-slider::-webkit-slider-thumb,
     .control-slider::-moz-range-thumb {
@@ -454,8 +760,8 @@
     body.theme-blackwhite .card { background:linear-gradient(180deg,#1a1a1a 0%,#121212 100%); }
     body.theme-blackwhite .info { background:rgba(20,20,20,.85); border-color:#5f5f5f; color:#d8d8d8; }
     body.theme-blackwhite .control-slider { background:#202020; border-color:#737373; }
-    body.theme-blackwhite .control-slider::-webkit-slider-thumb { background:#d0d0d0; border-color:#efefef; }
-    body.theme-blackwhite .control-slider::-moz-range-thumb { background:#d0d0d0; border-color:#efefef; }
+    body.theme-blackwhite .control-slider::-webkit-slider-thumb { background:#3d5f93; border-color:#9bd85a; }
+    body.theme-blackwhite .control-slider::-moz-range-thumb { background:#3d5f93; border-color:#9bd85a; }
     body.theme-blackwhite .control-slider-card { background:#1c1c1c; border-color:#6c6c6c; }
     body.theme-blackwhite .control-slider-card.applied { border-color:#a5a5a5; box-shadow:0 0 0 1px rgba(220,220,220,.25) inset; }
     body.theme-blackwhite .control-slider-card.pending { border-color:#8f8f8f; box-shadow:0 0 0 1px rgba(200,200,200,.2) inset; }
@@ -565,8 +871,8 @@
     body.theme-highcontrast .card { background:#0a0a0a; border:0.5px solid #fff; }
     body.theme-highcontrast .info { background:#0a0a0a; border:0.5px solid #fff; color:#fff; }
     body.theme-highcontrast .control-slider { background:#111; border:0.5px solid #fff; }
-    body.theme-highcontrast .control-slider::-webkit-slider-thumb { background:#fff; border:0.5px solid #000; }
-    body.theme-highcontrast .control-slider::-moz-range-thumb { background:#fff; border:0.5px solid #000; }
+    body.theme-highcontrast .control-slider::-webkit-slider-thumb { background:#3d5f93; border:1px solid #9bd85a; }
+    body.theme-highcontrast .control-slider::-moz-range-thumb { background:#3d5f93; border:1px solid #9bd85a; }
     body.theme-highcontrast .control-slider-card { background:#0a0a0a; border:0.5px solid #fff; }
     body.theme-highcontrast .control-slider-card.applied, body.theme-highcontrast .control-slider-card.pending,
     body.theme-highcontrast .control-slider-card.encoder-active, body.theme-highcontrast .control-slider-card.encoder-editing { border:0.5px solid #fff; box-shadow:0 0 0 0.5px rgba(255,255,255,.3) inset; }
@@ -600,8 +906,8 @@
     body.theme-highcontrastgreen .card { background:#0a0a0a; border:0.5px solid #1a5c1a; }
     body.theme-highcontrastgreen .info { background:#0a0a0a; border:0.5px solid #1a5c1a; color:#1a5c1a; }
     body.theme-highcontrastgreen .control-slider { background:#111; border:0.5px solid #1a5c1a; }
-    body.theme-highcontrastgreen .control-slider::-webkit-slider-thumb { background:#1a5c1a; border:0.5px solid #000; }
-    body.theme-highcontrastgreen .control-slider::-moz-range-thumb { background:#1a5c1a; border:0.5px solid #000; }
+    body.theme-highcontrastgreen .control-slider::-webkit-slider-thumb { background:#3d5f93; border:1px solid #9bd85a; }
+    body.theme-highcontrastgreen .control-slider::-moz-range-thumb { background:#3d5f93; border:1px solid #9bd85a; }
     body.theme-highcontrastgreen .control-slider-card { background:#0a0a0a; border:0.5px solid #1a5c1a; }
     body.theme-highcontrastgreen .control-slider-card.applied, body.theme-highcontrastgreen .control-slider-card.pending,
     body.theme-highcontrastgreen .control-slider-card.encoder-active, body.theme-highcontrastgreen .control-slider-card.encoder-editing { border:0.5px solid #1a5c1a; box-shadow:0 0 0 0.5px rgba(26,92,26,.3) inset; }
@@ -655,6 +961,7 @@
       .topbar > .row.actions { gap:6px; }
       .topbar > .row.actions button { min-width:0; width:100%; }
       .logo-pill { font-size:11px; padding:0 8px; }
+      #posDisplayPanel { grid-template-columns:1fr; }
       .head-picker-card { width:96vw; max-height:92vh; }
       .head-picker-title { font-size:14px; }
       .head-option { height:52px; font-size:14px; }
@@ -675,6 +982,7 @@
         <div id="connectionPill" class="connection-pill status-off" title="Head and lens connection status">Head: none Lens: none</div>
       </div>
       <div class="row actions">
+        <button id="posDisplayBtn" class="top-action-btn" type="button">Pos Display</button>
         <button id="lockoffBtn" class="lockoff-btn top-action-btn" type="button">Lockoff</button>
         <button id="touchMotorsOn" class="top-action-btn">Motors On</button>
         <button id="touchMotorsOff" class="btn-danger">Motors Off</button>
@@ -767,6 +1075,34 @@
               </select>
             </div>
             <div class="command-row">
+              <div class="command-row-name">Theme Lab (8-color)</div>
+              <button id="themeLabToggle" type="button">Open</button>
+            </div>
+            <div id="themeLabPanel" class="theme-lab-panel">
+              <div class="theme-lab-head">
+                <select id="themeLabPresetSelect" style="max-width:220px;"></select>
+                <label class="theme-lab-enable"><input id="themeLabEnable" type="checkbox" /><span>Enable custom theme</span></label>
+              </div>
+              <div class="theme-lab-row"><label for="themeLabPresetName">Preset name</label><input id="themeLabPresetName" type="text" placeholder="New preset name" /></div>
+              <div class="theme-lab-row"><label for="themeLabColorBg">Background</label><input id="themeLabColorBg" type="color" /></div>
+              <div class="theme-lab-row"><label for="themeLabColorCard">Panel</label><input id="themeLabColorCard" type="color" /></div>
+              <div class="theme-lab-row"><label for="themeLabColorCard2">Surface</label><input id="themeLabColorCard2" type="color" /></div>
+              <div class="theme-lab-row"><label for="themeLabColorBorder">Border</label><input id="themeLabColorBorder" type="color" /></div>
+              <div class="theme-lab-row"><label for="themeLabColorText">Text</label><input id="themeLabColorText" type="color" /></div>
+              <div class="theme-lab-row"><label for="themeLabColorMuted">Muted text</label><input id="themeLabColorMuted" type="color" /></div>
+              <div class="theme-lab-row"><label for="themeLabColorAccent">Accent</label><input id="themeLabColorAccent" type="color" /></div>
+              <div class="theme-lab-row"><label for="themeLabColorNav">Nav highlight</label><input id="themeLabColorNav" type="color" /></div>
+              <div class="theme-lab-actions">
+                <button id="themeLabSaveNew" type="button">Save as new</button>
+                <button id="themeLabUpdate" type="button">Update selected</button>
+                <button id="themeLabDelete" type="button">Delete selected</button>
+                <button id="themeLabReset" type="button">Reset defaults</button>
+                <button id="themeLabExport" type="button">Export JSON</button>
+                <button id="themeLabImport" type="button">Import JSON</button>
+              </div>
+              <textarea id="themeLabJson" class="theme-lab-json" placeholder='{"active":"Default","enabled":true,"presets":{"Default":{"bg":"#070b11","card":"#0d131d","card2":"#101722","border":"#1b2433","text":"#d2d8e3","muted":"#8791a1","accent":"#9bd85a","nav":"#9bd85a"}}}'></textarea>
+            </div>
+            <div class="command-row">
               <div class="command-row-name">Screen Brightness</div>
               <select id="screenBrightnessSelect" style="max-width:220px;">
                 <option value="10">10%</option>
@@ -782,6 +1118,21 @@
               </select>
             </div>
             <div class="command-row">
+              <div class="command-row-name">Position map lat, lon</div>
+              <input id="posDisplayLatLon" placeholder="50.56478249783015, -2.449499288081317" />
+            </div>
+            <div class="command-row">
+              <div class="command-row-name">Position map what3words</div>
+              <div class="row" style="gap:6px; width:100%;">
+                <input id="posDisplayW3WWords" placeholder="filled.count.soap" />
+                <button id="posDisplayW3WApply" type="button">Apply</button>
+              </div>
+            </div>
+            <div class="command-row">
+              <div class="command-row-name">what3words API key</div>
+              <input id="posDisplayW3WKey" placeholder="API key for convert-to-coordinates" />
+            </div>
+            <div class="command-row">
               <div class="command-row-name">Calibrate Inputs</div>
               <button id="touchCalibrateInputs">Run</button>
             </div>
@@ -790,6 +1141,34 @@
         <div class="card stack-row-card"><div id="connectionState" class="info">Connection: -</div></div>
         <div class="card stack-row-card"><div id="calibrationState" class="info">Calibration: -</div></div>
         <div class="card stack-row-card"><div id="screenBrightnessState" class="info">Screen Brightness: -</div></div>
+      </div>
+    </div>
+    <div id="posDisplayPanel">
+      <div class="pos-display-left">
+        <h3>Position Display</h3>
+        <div class="pos-display-grid">
+          <span class="k">Pan</span><span class="v" id="posDisplayPan">—</span>
+          <span class="k">Tilt</span><span class="v" id="posDisplayTilt">—</span>
+          <span class="k">Roll</span><span class="v" id="posDisplayRoll">—</span>
+          <span class="k">Zoom</span><span class="v" id="posDisplayZoom">—</span>
+          <span class="k">Iris</span><span class="v" id="posDisplayIris">—</span>
+          <span class="k">Focus</span><span class="v" id="posDisplayFocus">—</span>
+        </div>
+        <div class="pos-display-offset">
+          <div class="pos-display-offset-head">
+            <span>Heading Offset</span>
+            <span id="posDisplayHeadingOffsetVal">0°</span>
+          </div>
+          <input id="posDisplayHeadingOffset" type="range" min="-180" max="180" step="1" value="0" />
+        </div>
+        <label class="pos-display-sim" title="Use browser gamepad input for map simulation">
+          <input id="posDisplaySimMode" type="checkbox" />
+          <span>Sim mode</span>
+        </label>
+      </div>
+      <div class="pos-display-map">
+        <button id="posDisplayClose" class="pos-display-close" type="button">Close</button>
+        <iframe id="posDisplayFrame" title="Position display map" src="about:blank"></iframe>
       </div>
     </div>
     <div id="dockMain" class="dock">
@@ -901,9 +1280,36 @@ const encoderPageState = {
   inputtests: { index: 0, edit: false },
 };
 const THEME_STORAGE_KEY = "mvp_ui3_theme";
+const THEME_LAB_PRESETS_STORAGE_KEY = "mvp_ui3_theme_lab_presets_v1";
+const THEME_LAB_ACTIVE_STORAGE_KEY = "mvp_ui3_theme_lab_active_v1";
+const THEME_LAB_ENABLED_STORAGE_KEY = "mvp_ui3_theme_lab_enabled_v1";
+const POS_DISPLAY_COORDS_STORAGE_KEY = "mvp_ui3_pos_display_latlon_v1";
+const POS_DISPLAY_HEADING_OFFSET_STORAGE_KEY = "mvp_ui3_pos_display_heading_offset_v1";
+const POS_DISPLAY_SIM_MODE_STORAGE_KEY = "mvp_ui3_pos_display_sim_mode_v1";
+const POS_DISPLAY_W3W_KEY_STORAGE_KEY = "mvp_ui3_pos_display_w3w_api_key_v1";
+const POS_DISPLAY_W3W_WORDS_STORAGE_KEY = "mvp_ui3_pos_display_w3w_words_v1";
 const VALID_THEMES = ["starship", "graphite", "slate", "olivetactical", "blackwhite", "highcontrast", "highcontrastgreen", "neon", "acidtrip"];
 const CONTROL_SLIDER_COUNT = 6;
 const CONTROL_QUICK_BUTTON_COUNT = 5;
+const DEFAULT_POS_DISPLAY_LAT = 50.56478249783015;
+const DEFAULT_POS_DISPLAY_LON = -2.449499288081317;
+let posDisplayCoords = { lat: DEFAULT_POS_DISPLAY_LAT, lon: DEFAULT_POS_DISPLAY_LON };
+let posDisplayHeadingOffsetDeg = 0;
+let posDisplaySimMode = false;
+const THEME_LAB_DEFAULT_PRESET_NAME = "Default";
+const THEME_LAB_DEFAULT_PRESET = {
+  bg: "#070b11",
+  card: "#0d131d",
+  card2: "#101722",
+  border: "#1b2433",
+  text: "#d2d8e3",
+  muted: "#8791a1",
+  accent: "#9bd85a",
+  nav: "#9bd85a",
+};
+let themeLabPresets = {};
+let themeLabActive = THEME_LAB_DEFAULT_PRESET_NAME;
+let themeLabEnabled = false;
 /** Fixed quick row on Control page: Tilt, Roll Invert, Zoom Invert, Wipe Once, Wiper On/Off */
 const CONTROL_QUICK_FIXED = [
   { label: "Tilt", mode: "fast", key: "shape_invert_pitch", type: "toggle" },
@@ -1645,6 +2051,7 @@ function buildControlSliders(){
     input.max = "100";
     input.step = "1";
     input.value = "0";
+    setRangeFillFromValue(input, "--controlSliderPct");
     const liveTrack = document.createElement("div");
     liveTrack.id = `controlSliderLiveTrack_${i}`;
     liveTrack.className = "control-live-track";
@@ -1664,7 +2071,10 @@ function buildControlSliders(){
     card.appendChild(wrap);
     card.appendChild(val);
     host.appendChild(card);
-    input.oninput = () => throttleControlSliderCommit(i);
+    input.oninput = () => {
+      setRangeFillFromValue(input, "--controlSliderPct");
+      throttleControlSliderCommit(i);
+    };
     input.onchange = () => { clearControlSliderThrottle(); commitControlSlider(i); };
     input.onpointerup = () => { clearControlSliderThrottle(); commitControlSlider(i); };
     input.onpointerdown = () => {
@@ -1712,6 +2122,7 @@ function buildSlowSliders(){
     input.max = "100";
     input.step = "1";
     input.value = "0";
+    setRangeFillFromValue(input, "--controlSliderPct");
     const val = document.createElement("div");
     val.id = `slowSliderValue_${i}`;
     val.className = "control-slider-value";
@@ -1720,7 +2131,10 @@ function buildSlowSliders(){
     card.appendChild(wrap);
     card.appendChild(val);
     host.appendChild(card);
-    input.oninput = () => throttleSlowSliderCommit(i);
+    input.oninput = () => {
+      setRangeFillFromValue(input, "--controlSliderPct");
+      throttleSlowSliderCommit(i);
+    };
     input.onchange = () => { clearSlowSliderThrottle(); commitSlowSlider(i); };
     input.onpointerup = () => { clearSlowSliderThrottle(); commitSlowSlider(i); };
     input.onpointerdown = () => {
@@ -1771,6 +2185,7 @@ function renderSlowSliders(forceBuild){
       name.textContent = "(unassigned)";
       slider.value = "0";
       slider.disabled = true;
+      setRangeFillFromValue(slider, "--controlSliderPct");
       val.textContent = "-";
       continue;
     }
@@ -1790,6 +2205,7 @@ function renderSlowSliders(forceBuild){
       } else {
         card.classList.add("pending");
         slider.value = String(Math.round(ui.pending.targetPercent));
+        setRangeFillFromValue(slider, "--controlSliderPct");
         val.textContent = `${formatSliderValue("slow", key, ui.pending.targetValue)} (pending)`;
         name.textContent = sliderDisplayLabel(key) + "  " + val.textContent;
         continue;
@@ -1797,6 +2213,7 @@ function renderSlowSliders(forceBuild){
     }
     const pct = commandValueToPercent("slow", key, readback);
     slider.value = String(Math.round(pct));
+    setRangeFillFromValue(slider, "--controlSliderPct");
     val.textContent = formatSliderValue("slow", key, readback);
     name.textContent = sliderDisplayLabel(key) + "  " + val.textContent;
     if (ui.appliedUntil > Date.now()) card.classList.add("applied");
@@ -1866,6 +2283,19 @@ const LIVE_SPEED_AXIS_KEYS = {
 
 function clamp(v, min, max){
   return Math.max(min, Math.min(max, Number(v)));
+}
+
+function setRangeFillFromValue(el, cssVarName){
+  if (!el) return;
+  const min = Number(el.min);
+  const max = Number(el.max);
+  const value = Number(el.value);
+  if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min || !Number.isFinite(value)){
+    el.style.setProperty(cssVarName, "0%");
+    return;
+  }
+  const pct = Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100));
+  el.style.setProperty(cssVarName, `${pct}%`);
 }
 
 function normalizeAxisValue(raw){
@@ -2064,6 +2494,7 @@ function renderControlSliders(forceBuild=false){
       name.textContent = "(unassigned)";
       slider.value = "0";
       slider.disabled = true;
+      setRangeFillFromValue(slider, "--controlSliderPct");
       val.textContent = "-";
       safeRenderSliderLiveBar(i, "");
       continue;
@@ -2087,6 +2518,7 @@ function renderControlSliders(forceBuild=false){
       } else {
         card.classList.add("pending");
         slider.value = String(Math.round(targetPct));
+        setRangeFillFromValue(slider, "--controlSliderPct");
         val.textContent = `${formatSliderValue(mode, key, ui.pending.targetValue)} (pending)`;
         name.textContent = sliderDisplayLabel(key) + "  " + val.textContent;
         continue;
@@ -2094,6 +2526,7 @@ function renderControlSliders(forceBuild=false){
     }
     const pct = commandValueToPercent(mode, key, readback);
     slider.value = String(Math.round(pct));
+    setRangeFillFromValue(slider, "--controlSliderPct");
     val.textContent = formatSliderValue(mode, key, readback);
     name.textContent = sliderDisplayLabel(key) + "  " + val.textContent;
     if (ui.appliedUntil > Date.now()) card.classList.add("applied");
@@ -2405,12 +2838,421 @@ function applyTheme(themeName){
   const sel = $("themeSelect");
   if (sel) sel.value = theme;
   try { localStorage.setItem(THEME_STORAGE_KEY, theme); } catch {}
+  applyThemeLabCurrent();
 }
 
 function initTheme(){
   let saved = "starship";
   try { saved = localStorage.getItem(THEME_STORAGE_KEY) || "starship"; } catch {}
   applyTheme(saved);
+}
+
+function normalizeThemeLabHex(raw, fallback){
+  const txt = String(raw || "").trim().toLowerCase();
+  if (/^#[0-9a-f]{6}$/.test(txt)) return txt;
+  if (/^#[0-9a-f]{3}$/.test(txt)) return "#" + txt.slice(1).split("").map(ch => ch + ch).join("");
+  return fallback;
+}
+
+function sanitizeThemeLabPreset(p){
+  const src = p || {};
+  return {
+    bg: normalizeThemeLabHex(src.bg, THEME_LAB_DEFAULT_PRESET.bg),
+    card: normalizeThemeLabHex(src.card, THEME_LAB_DEFAULT_PRESET.card),
+    card2: normalizeThemeLabHex(src.card2, THEME_LAB_DEFAULT_PRESET.card2),
+    border: normalizeThemeLabHex(src.border, THEME_LAB_DEFAULT_PRESET.border),
+    text: normalizeThemeLabHex(src.text, THEME_LAB_DEFAULT_PRESET.text),
+    muted: normalizeThemeLabHex(src.muted, THEME_LAB_DEFAULT_PRESET.muted),
+    accent: normalizeThemeLabHex(src.accent, THEME_LAB_DEFAULT_PRESET.accent),
+    nav: normalizeThemeLabHex(src.nav, THEME_LAB_DEFAULT_PRESET.nav),
+  };
+}
+
+function themeLabInputIds(){
+  return {
+    bg: "themeLabColorBg",
+    card: "themeLabColorCard",
+    card2: "themeLabColorCard2",
+    border: "themeLabColorBorder",
+    text: "themeLabColorText",
+    muted: "themeLabColorMuted",
+    accent: "themeLabColorAccent",
+    nav: "themeLabColorNav",
+  };
+}
+
+function setThemeLabInputs(preset){
+  const p = sanitizeThemeLabPreset(preset);
+  const ids = themeLabInputIds();
+  Object.keys(ids).forEach((k) => { if ($(ids[k])) $(ids[k]).value = p[k]; });
+}
+
+function readThemeLabInputs(){
+  const ids = themeLabInputIds();
+  return sanitizeThemeLabPreset({
+    bg: $(ids.bg)?.value,
+    card: $(ids.card)?.value,
+    card2: $(ids.card2)?.value,
+    border: $(ids.border)?.value,
+    text: $(ids.text)?.value,
+    muted: $(ids.muted)?.value,
+    accent: $(ids.accent)?.value,
+    nav: $(ids.nav)?.value,
+  });
+}
+
+function clearThemeLabOverrides(){
+  const root = document.documentElement.style;
+  const body = document.body.style;
+  ["--bg","--card","--card2","--border","--text","--muted","--accent","--warn","--ok","--danger","--nav-link-color"].forEach(v => root.removeProperty(v));
+  ["--theme-lab-bg","--theme-lab-card","--theme-lab-card2","--theme-lab-border","--theme-lab-text","--theme-lab-muted","--theme-lab-accent","--theme-lab-nav"].forEach(v => body.removeProperty(v));
+  document.body.classList.remove("theme-lab-enabled");
+  updateNavVisualLink(currentPage);
+}
+
+function applyThemeLabOverrides(preset){
+  const p = sanitizeThemeLabPreset(preset);
+  const root = document.documentElement.style;
+  const body = document.body.style;
+  root.setProperty("--bg", p.bg);
+  root.setProperty("--card", p.card);
+  root.setProperty("--card2", p.card2);
+  root.setProperty("--border", p.border);
+  root.setProperty("--text", p.text);
+  root.setProperty("--muted", p.muted);
+  root.setProperty("--accent", p.accent);
+  root.setProperty("--warn", p.nav);
+  root.setProperty("--ok", p.nav);
+  root.setProperty("--danger", p.nav);
+  root.setProperty("--nav-link-color", p.nav);
+  body.setProperty("--theme-lab-bg", p.bg);
+  body.setProperty("--theme-lab-card", p.card);
+  body.setProperty("--theme-lab-card2", p.card2);
+  body.setProperty("--theme-lab-border", p.border);
+  body.setProperty("--theme-lab-text", p.text);
+  body.setProperty("--theme-lab-muted", p.muted);
+  body.setProperty("--theme-lab-accent", p.accent);
+  body.setProperty("--theme-lab-nav", p.nav);
+  document.body.classList.add("theme-lab-enabled");
+  updateNavVisualLink(currentPage);
+}
+
+function refreshThemeLabPresetSelect(){
+  const sel = $("themeLabPresetSelect");
+  if (!sel) return;
+  sel.innerHTML = "";
+  Object.keys(themeLabPresets).sort().forEach((name) => {
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent = name;
+    sel.appendChild(opt);
+  });
+  sel.value = themeLabActive;
+}
+
+function persistThemeLabState(){
+  try {
+    localStorage.setItem(THEME_LAB_PRESETS_STORAGE_KEY, JSON.stringify(themeLabPresets));
+    localStorage.setItem(THEME_LAB_ACTIVE_STORAGE_KEY, themeLabActive);
+    localStorage.setItem(THEME_LAB_ENABLED_STORAGE_KEY, themeLabEnabled ? "1" : "0");
+  } catch {}
+}
+
+function exportThemeLabJson(){
+  const payload = {
+    active: themeLabActive,
+    enabled: !!themeLabEnabled,
+    presets: themeLabPresets,
+  };
+  const txt = JSON.stringify(payload, null, 2);
+  if ($("themeLabJson")) $("themeLabJson").value = txt;
+  return txt;
+}
+
+function importThemeLabJson(raw){
+  let parsed = null;
+  try { parsed = JSON.parse(String(raw || "")); } catch { return false; }
+  if (!parsed || typeof parsed !== "object") return false;
+  const incoming = parsed.presets && typeof parsed.presets === "object" ? parsed.presets : {};
+  const next = {};
+  Object.keys(incoming).forEach((name) => {
+    const n = String(name || "").trim();
+    if (!n) return;
+    next[n] = sanitizeThemeLabPreset(incoming[name]);
+  });
+  if (!next[THEME_LAB_DEFAULT_PRESET_NAME]) next[THEME_LAB_DEFAULT_PRESET_NAME] = THEME_LAB_DEFAULT_PRESET;
+  themeLabPresets = next;
+  const reqActive = String(parsed.active || "").trim();
+  themeLabActive = themeLabPresets[reqActive] ? reqActive : THEME_LAB_DEFAULT_PRESET_NAME;
+  themeLabEnabled = !!parsed.enabled;
+  refreshThemeLabPresetSelect();
+  setThemeLabInputs(themeLabPresets[themeLabActive]);
+  if ($("themeLabEnable")) $("themeLabEnable").checked = !!themeLabEnabled;
+  applyThemeLabCurrent();
+  persistThemeLabState();
+  exportThemeLabJson();
+  return true;
+}
+
+function applyThemeLabCurrent(){
+  if (!themeLabEnabled){
+    clearThemeLabOverrides();
+    return;
+  }
+  const preset = sanitizeThemeLabPreset(themeLabPresets[themeLabActive] || THEME_LAB_DEFAULT_PRESET);
+  applyThemeLabOverrides(preset);
+}
+
+function initThemeLab(){
+  themeLabPresets = {};
+  try {
+    const raw = localStorage.getItem(THEME_LAB_PRESETS_STORAGE_KEY) || "";
+    const parsed = raw ? JSON.parse(raw) : {};
+    if (parsed && typeof parsed === "object") themeLabPresets = parsed;
+  } catch {}
+  if (!themeLabPresets[THEME_LAB_DEFAULT_PRESET_NAME]) themeLabPresets[THEME_LAB_DEFAULT_PRESET_NAME] = THEME_LAB_DEFAULT_PRESET;
+  try { themeLabActive = localStorage.getItem(THEME_LAB_ACTIVE_STORAGE_KEY) || THEME_LAB_DEFAULT_PRESET_NAME; } catch {}
+  if (!themeLabPresets[themeLabActive]) themeLabActive = THEME_LAB_DEFAULT_PRESET_NAME;
+  try { themeLabEnabled = (localStorage.getItem(THEME_LAB_ENABLED_STORAGE_KEY) || "0") === "1"; } catch {}
+  refreshThemeLabPresetSelect();
+  setThemeLabInputs(themeLabPresets[themeLabActive]);
+  if ($("themeLabEnable")) $("themeLabEnable").checked = !!themeLabEnabled;
+  applyThemeLabCurrent();
+  exportThemeLabJson();
+}
+
+function parseLatLonPair(raw){
+  const txt = String(raw || "").trim();
+  const m = txt.match(/^(-?[\d.]+)\s*[,;\s]\s*(-?[\d.]+)\s*$/);
+  if (!m) return null;
+  const lat = Number(m[1]);
+  const lon = Number(m[2]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  return { lat, lon };
+}
+
+function sanitizeW3WWords(raw){
+  const txt = String(raw || "").trim().toLowerCase();
+  if (!txt) return "";
+  return txt.replace(/^\/{0,3}/, "").replace(/\//g, ".").replace(/\s+/g, "");
+}
+
+function loadPosDisplayCoords(){
+  let parsed = null;
+  try {
+    const raw = localStorage.getItem(POS_DISPLAY_COORDS_STORAGE_KEY) || "";
+    parsed = parseLatLonPair(raw);
+  } catch {}
+  posDisplayCoords = parsed || { lat: DEFAULT_POS_DISPLAY_LAT, lon: DEFAULT_POS_DISPLAY_LON };
+  if ($("posDisplayLatLon")) $("posDisplayLatLon").value = `${posDisplayCoords.lat}, ${posDisplayCoords.lon}`;
+  if ($("posDisplayW3WWords")){
+    let words = "";
+    try { words = localStorage.getItem(POS_DISPLAY_W3W_WORDS_STORAGE_KEY) || ""; } catch {}
+    $("posDisplayW3WWords").value = sanitizeW3WWords(words);
+  }
+  if ($("posDisplayW3WKey")){
+    let apiKey = "";
+    try { apiKey = localStorage.getItem(POS_DISPLAY_W3W_KEY_STORAGE_KEY) || ""; } catch {}
+    $("posDisplayW3WKey").value = String(apiKey || "");
+  }
+  let savedOffset = 0;
+  try { savedOffset = Number(localStorage.getItem(POS_DISPLAY_HEADING_OFFSET_STORAGE_KEY) || "0"); } catch {}
+  posDisplayHeadingOffsetDeg = Number.isFinite(savedOffset) ? clamp(savedOffset, -180, 180) : 0;
+  let savedSim = "0";
+  try { savedSim = String(localStorage.getItem(POS_DISPLAY_SIM_MODE_STORAGE_KEY) || "0"); } catch {}
+  posDisplaySimMode = savedSim === "1";
+  if ($("posDisplayHeadingOffset")) {
+    $("posDisplayHeadingOffset").value = String(posDisplayHeadingOffsetDeg);
+    $("posDisplayHeadingOffset").style.setProperty("--posOffsetPct", `${((posDisplayHeadingOffsetDeg + 180) / 360) * 100}%`);
+  }
+  if ($("posDisplayHeadingOffsetVal")) $("posDisplayHeadingOffsetVal").textContent = `${Math.round(posDisplayHeadingOffsetDeg)}°`;
+  if ($("posDisplaySimMode")) $("posDisplaySimMode").checked = !!posDisplaySimMode;
+}
+
+function savePosDisplayCoordsFromInput(){
+  const el = $("posDisplayLatLon");
+  if (!el) return false;
+  const parsed = parseLatLonPair(el.value);
+  if (!parsed){
+    el.value = `${posDisplayCoords.lat}, ${posDisplayCoords.lon}`;
+    setEvent("position map lat/lon invalid");
+    return false;
+  }
+  posDisplayCoords = parsed;
+  el.value = `${posDisplayCoords.lat}, ${posDisplayCoords.lon}`;
+  try { localStorage.setItem(POS_DISPLAY_COORDS_STORAGE_KEY, `${parsed.lat},${parsed.lon}`); } catch {}
+  if (document.body && document.querySelector(".app")?.classList.contains("pos-display")) updatePosDisplayMapFrame(true);
+  return true;
+}
+
+function savePosDisplayW3WPrefs(){
+  const wordsEl = $("posDisplayW3WWords");
+  const keyEl = $("posDisplayW3WKey");
+  if (wordsEl){
+    wordsEl.value = sanitizeW3WWords(wordsEl.value);
+    try { localStorage.setItem(POS_DISPLAY_W3W_WORDS_STORAGE_KEY, wordsEl.value); } catch {}
+  }
+  if (keyEl){
+    try { localStorage.setItem(POS_DISPLAY_W3W_KEY_STORAGE_KEY, String(keyEl.value || "").trim()); } catch {}
+  }
+}
+
+async function applyPosDisplayW3W(){
+  const wordsEl = $("posDisplayW3WWords");
+  const keyEl = $("posDisplayW3WKey");
+  if (!wordsEl || !keyEl) return false;
+  const words = sanitizeW3WWords(wordsEl.value);
+  const apiKey = String(keyEl.value || "").trim();
+  wordsEl.value = words;
+  savePosDisplayW3WPrefs();
+  if (!words){
+    setEvent("what3words entry required");
+    return false;
+  }
+  if (!apiKey){
+    setEvent("what3words API key required");
+    return false;
+  }
+  const url = `https://api.what3words.com/v3/convert-to-coordinates?words=${encodeURIComponent(words)}&key=${encodeURIComponent(apiKey)}`;
+  setEvent(`resolving what3words: ${words}`);
+  try {
+    const res = await fetch(url, { method: "GET" });
+    if (!res.ok){
+      setEvent(`what3words lookup failed (${res.status})`);
+      return false;
+    }
+    const data = await res.json();
+    const coords = data && data.coordinates ? data.coordinates : null;
+    const lat = coords ? Number(coords.lat) : NaN;
+    const lon = coords ? Number(coords.lng) : NaN;
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)){
+      setEvent(`what3words lookup invalid${data && data.error ? `: ${data.error.code || "error"}` : ""}`);
+      return false;
+    }
+    posDisplayCoords = { lat, lon };
+    if ($("posDisplayLatLon")) $("posDisplayLatLon").value = `${lat}, ${lon}`;
+    try { localStorage.setItem(POS_DISPLAY_COORDS_STORAGE_KEY, `${lat},${lon}`); } catch {}
+    if (document.body && document.querySelector(".app")?.classList.contains("pos-display")) updatePosDisplayMapFrame(true);
+    postPosDisplayMapUpdate();
+    setEvent(`what3words applied: ${words}`);
+    return true;
+  } catch {
+    setEvent("what3words lookup error");
+    return false;
+  }
+}
+
+function getPosDisplayMapUrl(){
+  const lat = Number(posDisplayCoords.lat);
+  const lon = Number(posDisplayCoords.lon);
+  const safeLat = Number.isFinite(lat) ? lat : DEFAULT_POS_DISPLAY_LAT;
+  const safeLon = Number.isFinite(lon) ? lon : DEFAULT_POS_DISPLAY_LON;
+  return `position_map_standalone.html?minimal=1&lat=${encodeURIComponent(String(safeLat))}&lon=${encodeURIComponent(String(safeLon))}&heading=0`;
+}
+
+function updatePosDisplayMapFrame(forceReload=false){
+  const frame = $("posDisplayFrame");
+  if (!frame) return;
+  const next = getPosDisplayMapUrl();
+  if (forceReload || frame.dataset.src !== next){
+    frame.src = next;
+    frame.dataset.src = next;
+  }
+}
+
+function getPosDisplayHeadingDeg(){
+  const yawNorm = clamp(Number(readLiveAxisSignal("yaw")) || 0, -1, 1);
+  const baseHeading = ((yawNorm * 180) + 360) % 360;
+  return ((baseHeading + Number(posDisplayHeadingOffsetDeg || 0)) % 360 + 360) % 360;
+}
+
+function getPosDisplayLensZoomNorm(){
+  const lens = ((state.head_feedback || {}).lens) || {};
+  const direct = Number(lens.zoom_norm);
+  if (Number.isFinite(direct)) return clamp(direct, 0, 1);
+  const pos = lens.positions || {};
+  const zRaw = Number((pos.zoom !== undefined ? pos.zoom : lens.zoom_position));
+  const zMin = Number(lens.zoom_min ?? lens.zoom_pos_min ?? lens.zoom_range_min);
+  const zMax = Number(lens.zoom_max ?? lens.zoom_pos_max ?? lens.zoom_range_max);
+  if (Number.isFinite(zRaw) && Number.isFinite(zMin) && Number.isFinite(zMax) && zMax > zMin){
+    return clamp((zRaw - zMin) / (zMax - zMin), 0, 1);
+  }
+  const cmdNorm = clamp(Number(readLiveAxisSignal("zoom")) || 0, -1, 1);
+  return clamp((cmdNorm + 1) * 0.5, 0, 1);
+}
+
+function getPosDisplayAttitudeDeg(){
+  const lens = ((state.head_feedback || {}).lens) || {};
+  const pos = lens.positions || {};
+  const panNorm = clamp(Number(readLiveAxisSignal("yaw")) || 0, -1, 1);
+  const tiltNorm = clamp(Number(readLiveAxisSignal("pitch")) || 0, -1, 1);
+  const rollNorm = clamp(Number(readLiveAxisSignal("roll")) || 0, -1, 1);
+  const panFromPos = Number(pos.pan);
+  const tiltFromPos = Number(pos.tilt);
+  const rollFromPos = Number(pos.roll);
+  return {
+    pan: Number.isFinite(panFromPos) ? panFromPos : Math.round(panNorm * 180),
+    tilt: Number.isFinite(tiltFromPos) ? tiltFromPos : Math.round(tiltNorm * 180),
+    roll: Number.isFinite(rollFromPos) ? rollFromPos : Math.round(rollNorm * 180),
+  };
+}
+
+function postPosDisplayMapUpdate(){
+  const frame = $("posDisplayFrame");
+  if (!frame || !frame.contentWindow) return;
+  const lat = Number(posDisplayCoords.lat);
+  const lon = Number(posDisplayCoords.lon);
+  const safeLat = Number.isFinite(lat) ? lat : DEFAULT_POS_DISPLAY_LAT;
+  const safeLon = Number.isFinite(lon) ? lon : DEFAULT_POS_DISPLAY_LON;
+  const att = getPosDisplayAttitudeDeg();
+  frame.contentWindow.postMessage({
+    type: "POSITION_DISPLAY_UPDATE",
+    lat: safeLat,
+    lon: safeLon,
+    heading: getPosDisplayHeadingDeg(),
+    tilt: att.tilt,
+    roll: att.roll,
+    zoom_norm: getPosDisplayLensZoomNorm(),
+    sim_mode: !!posDisplaySimMode,
+  }, "*");
+}
+
+function togglePosDisplay(forceOpen){
+  const app = document.querySelector(".app");
+  const btn = $("posDisplayBtn");
+  if (!app || !btn) return;
+  const currentlyOpen = app.classList.contains("pos-display");
+  const open = (typeof forceOpen === "boolean") ? forceOpen : !currentlyOpen;
+  app.classList.toggle("pos-display", open);
+  btn.classList.toggle("active", open);
+  if (open) {
+    updatePosDisplayMapFrame();
+    postPosDisplayMapUpdate();
+  }
+}
+
+function updatePosDisplayTelemetry(){
+  const lens = (state.head_feedback || {}).lens || {};
+  const pos = lens.positions || {};
+  const panNorm = clamp(Number(readLiveAxisSignal("yaw")) || 0, -1, 1);
+  const tiltNorm = clamp(Number(readLiveAxisSignal("pitch")) || 0, -1, 1);
+  const rollNorm = clamp(Number(readLiveAxisSignal("roll")) || 0, -1, 1);
+  const panFromPos = Number(pos.pan);
+  const tiltFromPos = Number(pos.tilt);
+  const rollFromPos = Number(pos.roll);
+  const panPos = Number.isFinite(panFromPos) ? panFromPos : Math.round(panNorm * 180);
+  const tiltPos = Number.isFinite(tiltFromPos) ? tiltFromPos : Math.round(tiltNorm * 180);
+  const rollPos = Number.isFinite(rollFromPos) ? rollFromPos : Math.round(rollNorm * 180);
+  const z = (pos.zoom !== undefined ? pos.zoom : lens.zoom_position);
+  const i = (pos.iris !== undefined ? pos.iris : lens.iris_position);
+  const f = (pos.focus !== undefined ? pos.focus : lens.focus_position);
+  if ($("posDisplayPan")) $("posDisplayPan").textContent = Number.isFinite(panPos) ? String(Math.round(panPos)) : "—";
+  if ($("posDisplayTilt")) $("posDisplayTilt").textContent = Number.isFinite(tiltPos) ? String(Math.round(tiltPos)) : "—";
+  if ($("posDisplayRoll")) $("posDisplayRoll").textContent = Number.isFinite(rollPos) ? String(Math.round(rollPos)) : "—";
+  if ($("posDisplayZoom")) $("posDisplayZoom").textContent = z !== undefined && z !== null ? String(z) : "—";
+  if ($("posDisplayIris")) $("posDisplayIris").textContent = i !== undefined && i !== null ? String(i) : "—";
+  if ($("posDisplayFocus")) $("posDisplayFocus").textContent = f !== undefined && f !== null ? String(f) : "—";
+  postPosDisplayMapUpdate();
 }
 
 function updateConnectionPillContent(){
@@ -2704,7 +3546,12 @@ function updateNavVisualLink(page){
   }
   if (idx < 0) idx = 0;
   const x = `${(idx * 20) + 10}%`;
+  // Secondary joiner offset by encoder slot:
+  // E1/E2 left of center, E3 center, E4/E5 mirrored right.
+  const joinerOffsetPxByIndex = [20, 10, 0, -10, -20];
+  const x2 = `calc(${x} + ${(joinerOffsetPxByIndex[idx] ?? 0)}px)`;
   document.documentElement.style.setProperty("--nav-link-x", x);
+  document.documentElement.style.setProperty("--nav-link-x2", x2);
   document.documentElement.style.setProperty("--nav-link-color", getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#9bd85a");
 }
 
@@ -2921,6 +3768,7 @@ function renderState(){
   }
   const lens = (state.head_feedback || {}).lens || {};
   const pos = lens.positions || {};
+  updatePosDisplayTelemetry();
   updateConnectionPillContent();
   const zoomMode = lens.zoom_control_mode || "position";
   const zoomCmd = lens.zoom_velocity_cmd ?? 0;
@@ -3240,6 +4088,9 @@ function connectWs(){
 function bindUI(){
   $("heads").onchange = (e) => requestHeadSelection(parseInt(e.target.value, 10) || 0);
   $("headSelectorBtn").onclick = openHeadPicker;
+  if ($("posDisplayBtn")) $("posDisplayBtn").onclick = () => togglePosDisplay();
+  if ($("posDisplayClose")) $("posDisplayClose").onclick = () => togglePosDisplay(false);
+  if ($("posDisplayFrame")) $("posDisplayFrame").onload = () => postPosDisplayMapUpdate();
   $("lockoffBtn").onclick = () => {
     deadAheadCfg.enabled = !deadAheadCfg.enabled;
     saveDeadAheadCfg();
@@ -3260,6 +4111,137 @@ function bindUI(){
   if ($("touchResetDefaults")) $("touchResetDefaults").onclick = () => send({ type: "RESET_USER_DEFAULTS" });
   $("touchCalibrateInputs").onclick = () => send({ type: "CALIBRATE_INPUTS", duration_s: 2.5 });
   $("themeSelect").onchange = (e) => applyTheme(e.target.value);
+  if ($("themeLabToggle")) {
+    $("themeLabToggle").onclick = () => {
+      const p = $("themeLabPanel");
+      if (!p) return;
+      const open = !p.classList.contains("open");
+      p.classList.toggle("open", open);
+      $("themeLabToggle").textContent = open ? "Close" : "Open";
+    };
+  }
+  if ($("themeLabPresetSelect")) {
+    $("themeLabPresetSelect").onchange = (e) => {
+      const name = String(e.target.value || "").trim();
+      if (!themeLabPresets[name]) return;
+      themeLabActive = name;
+      setThemeLabInputs(themeLabPresets[name]);
+      applyThemeLabCurrent();
+      persistThemeLabState();
+    };
+  }
+  if ($("themeLabEnable")) {
+    $("themeLabEnable").onchange = (e) => {
+      themeLabEnabled = !!e.target.checked;
+      applyThemeLabCurrent();
+      persistThemeLabState();
+    };
+  }
+  ["themeLabColorBg","themeLabColorCard","themeLabColorCard2","themeLabColorBorder","themeLabColorText","themeLabColorMuted","themeLabColorAccent","themeLabColorNav"].forEach((id) => {
+    if (!$(id)) return;
+    $(id).oninput = () => {
+      if (!themeLabPresets[themeLabActive]) themeLabPresets[themeLabActive] = THEME_LAB_DEFAULT_PRESET;
+      themeLabPresets[themeLabActive] = readThemeLabInputs();
+      if (themeLabEnabled) applyThemeLabCurrent();
+      persistThemeLabState();
+    };
+  });
+  if ($("themeLabSaveNew")) {
+    $("themeLabSaveNew").onclick = () => {
+      const name = String($("themeLabPresetName")?.value || "").trim();
+      if (!name) return;
+      themeLabPresets[name] = readThemeLabInputs();
+      themeLabActive = name;
+      refreshThemeLabPresetSelect();
+      applyThemeLabCurrent();
+      persistThemeLabState();
+    };
+  }
+  if ($("themeLabUpdate")) {
+    $("themeLabUpdate").onclick = () => {
+      if (!themeLabActive) return;
+      themeLabPresets[themeLabActive] = readThemeLabInputs();
+      applyThemeLabCurrent();
+      persistThemeLabState();
+    };
+  }
+  if ($("themeLabDelete")) {
+    $("themeLabDelete").onclick = () => {
+      if (!themeLabActive || themeLabActive === THEME_LAB_DEFAULT_PRESET_NAME) return;
+      delete themeLabPresets[themeLabActive];
+      themeLabActive = THEME_LAB_DEFAULT_PRESET_NAME;
+      refreshThemeLabPresetSelect();
+      setThemeLabInputs(themeLabPresets[themeLabActive] || THEME_LAB_DEFAULT_PRESET);
+      applyThemeLabCurrent();
+      persistThemeLabState();
+    };
+  }
+  if ($("themeLabReset")) {
+    $("themeLabReset").onclick = () => {
+      themeLabPresets = { [THEME_LAB_DEFAULT_PRESET_NAME]: THEME_LAB_DEFAULT_PRESET };
+      themeLabActive = THEME_LAB_DEFAULT_PRESET_NAME;
+      refreshThemeLabPresetSelect();
+      setThemeLabInputs(THEME_LAB_DEFAULT_PRESET);
+      applyThemeLabCurrent();
+      persistThemeLabState();
+      exportThemeLabJson();
+    };
+  }
+  if ($("themeLabExport")) {
+    $("themeLabExport").onclick = async () => {
+      const txt = exportThemeLabJson();
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText){
+          await navigator.clipboard.writeText(txt);
+          setEvent("theme presets copied to clipboard");
+        } else {
+          setEvent("theme presets exported to text box");
+        }
+      } catch {
+        setEvent("theme presets exported to text box");
+      }
+    };
+  }
+  if ($("themeLabImport")) {
+    $("themeLabImport").onclick = () => {
+      const txt = $("themeLabJson")?.value || "";
+      if (importThemeLabJson(txt)) setEvent("theme presets imported");
+      else setEvent("theme presets import failed");
+    };
+  }
+  if ($("posDisplayLatLon")){
+    $("posDisplayLatLon").onchange = () => savePosDisplayCoordsFromInput();
+    $("posDisplayLatLon").onclick = () => openKeyboard($("posDisplayLatLon"));
+  }
+  if ($("posDisplayW3WWords")){
+    $("posDisplayW3WWords").onchange = () => savePosDisplayW3WPrefs();
+    $("posDisplayW3WWords").onclick = () => openKeyboard($("posDisplayW3WWords"));
+  }
+  if ($("posDisplayW3WKey")){
+    $("posDisplayW3WKey").onchange = () => savePosDisplayW3WPrefs();
+    $("posDisplayW3WKey").onclick = () => openKeyboard($("posDisplayW3WKey"));
+  }
+  if ($("posDisplayW3WApply")){
+    $("posDisplayW3WApply").onclick = () => { applyPosDisplayW3W(); };
+  }
+  if ($("posDisplayHeadingOffset")){
+    $("posDisplayHeadingOffset").oninput = (e) => {
+      const v = clamp(Number(e.target.value) || 0, -180, 180);
+      posDisplayHeadingOffsetDeg = v;
+      if ($("posDisplayHeadingOffsetVal")) $("posDisplayHeadingOffsetVal").textContent = `${Math.round(v)}°`;
+      const pct = `${((v + 180) / 360) * 100}%`;
+      e.target.style.setProperty("--posOffsetPct", pct);
+      try { localStorage.setItem(POS_DISPLAY_HEADING_OFFSET_STORAGE_KEY, String(v)); } catch {}
+      postPosDisplayMapUpdate();
+    };
+  }
+  if ($("posDisplaySimMode")){
+    $("posDisplaySimMode").onchange = (e) => {
+      posDisplaySimMode = !!e.target.checked;
+      try { localStorage.setItem(POS_DISPLAY_SIM_MODE_STORAGE_KEY, posDisplaySimMode ? "1" : "0"); } catch {}
+      postPosDisplayMapUpdate();
+    };
+  }
   $("screenBrightnessSelect").onchange = (e) => {
     const pct = clamp(parseInt(e.target.value, 10) || 50, 10, 100);
     send({ type: "SET_SCREEN_BRIGHTNESS", percent: pct });
@@ -3296,6 +4278,8 @@ function bindUI(){
       const v = $("kbdBuffer").value;
       kbdTarget.value = v;
       applyInputToNetworkDraft(kbdTarget.id, v);
+      if (kbdTarget.id === "posDisplayLatLon") savePosDisplayCoordsFromInput();
+      if (kbdTarget.id === "posDisplayW3WWords" || kbdTarget.id === "posDisplayW3WKey") savePosDisplayW3WPrefs();
     }
     closeKeyboard();
   };
@@ -3319,6 +4303,8 @@ function init(){
   readQuickButtonAssignments();
   loadDeadAheadCfg();
   initTheme();
+  initThemeLab();
+  loadPosDisplayCoords();
   updateHeadIdStatus(state.connection_status || {});
   renderKeyboard();
   bindUI();

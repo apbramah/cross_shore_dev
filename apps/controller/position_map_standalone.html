@@ -8,28 +8,74 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <style>
     * { box-sizing: border-box; }
-    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; font-family: "DJI Droid Sans", "SF Pro Display", system-ui, -apple-system, sans-serif; background: #0a0e14; color: #e8f0ff; }
+    :root {
+      --theme-bg: #0a0e14;
+      --theme-map-bg: #1a2332;
+      --theme-panel: #0a101a;
+      --theme-surface: #141c2c;
+      --theme-border: #4078dc;
+      --theme-text: #e8f0ff;
+      --theme-muted: #6b8cbe;
+      --theme-accent: #9bd85a;
+      --theme-panel-rgb: 10,16,26;
+      --theme-surface-rgb: 20,28,44;
+      --theme-border-rgb: 64,120,220;
+    }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; font-family: "DJI Droid Sans", "SF Pro Display", system-ui, -apple-system, sans-serif; background: var(--theme-bg); color: var(--theme-text); }
     .app { display: grid; grid-template-rows: auto 1fr; height: 100vh; }
     /* Top bar: DJI-style dark strip with key inputs */
-    .topbar { display: flex; align-items: center; gap: 12px; padding: 8px 12px; background: rgba(12, 18, 28, 0.92); border-bottom: 1px solid rgba(64, 120, 220, 0.35); flex-wrap: wrap; }
-    .topbar-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #6b8cbe; }
-    .topbar input { width: 100px; padding: 6px 8px; border-radius: 6px; border: 1px solid rgba(64, 120, 220, 0.5); background: rgba(20, 28, 44, 0.9); color: #e8f0ff; font-size: 13px; font-variant-numeric: tabular-nums; }
-    .topbar input::placeholder { color: #5a6d8a; }
-    .topbar button { padding: 6px 14px; border-radius: 6px; border: 1px solid rgba(64, 160, 255, 0.6); background: rgba(40, 80, 160, 0.4); color: #a8d4ff; font-weight: 600; font-size: 13px; cursor: pointer; }
-    .topbar button:active { background: rgba(60, 100, 180, 0.5); }
-    .topbar .sep { width: 1px; height: 20px; background: rgba(64, 120, 220, 0.3); }
-    #map { width: 100%; height: 100%; background: #1a2332; }
+    .topbar { display: flex; align-items: center; gap: 12px; padding: 8px 12px; background: rgba(var(--theme-panel-rgb), 0.92); border-bottom: 1px solid rgba(var(--theme-border-rgb), 0.35); flex-wrap: wrap; }
+    .topbar-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--theme-muted); }
+    .topbar input { width: 100px; padding: 6px 8px; border-radius: 6px; border: 1px solid rgba(var(--theme-border-rgb), 0.5); background: rgba(var(--theme-surface-rgb), 0.9); color: var(--theme-text); font-size: 13px; font-variant-numeric: tabular-nums; }
+    .topbar input::placeholder { color: var(--theme-muted); opacity: 0.78; }
+    .topbar button { padding: 6px 14px; border-radius: 6px; border: 1px solid rgba(var(--theme-border-rgb), 0.6); background: rgba(var(--theme-border-rgb), 0.35); color: var(--theme-text); font-weight: 600; font-size: 13px; cursor: pointer; }
+    .topbar button:active { background: rgba(var(--theme-border-rgb), 0.48); }
+    .topbar .sep { width: 1px; height: 20px; background: rgba(var(--theme-border-rgb), 0.3); }
+    #map { width: 100%; height: 100%; background: var(--theme-map-bg); }
+    .leaflet-control-zoom a {
+      background: rgba(8, 12, 18, 0.9) !important;
+      border-color: rgba(58, 74, 98, 0.9) !important;
+      color: var(--theme-muted) !important;
+    }
+    .leaflet-control-zoom a:hover {
+      background: rgba(14, 20, 30, 0.95) !important;
+      color: var(--theme-text) !important;
+    }
+    .leaflet-control-attribution {
+      background: rgba(8, 12, 18, 0.86) !important;
+      color: var(--theme-muted) !important;
+      border-top: 1px solid rgba(58, 74, 98, 0.55);
+      border-left: 1px solid rgba(58, 74, 98, 0.55);
+      border-top-left-radius: 6px;
+      padding: 2px 6px !important;
+    }
+    .leaflet-control-attribution a {
+      color: var(--theme-text) !important;
+    }
+    .leaflet-control-scale-line {
+      border-color: rgba(var(--theme-border-rgb), 0.85) !important;
+      color: var(--theme-text) !important;
+      background: rgba(8, 12, 18, 0.86) !important;
+      text-shadow: none !important;
+      font-weight: 600;
+    }
     /* Overlay panels: DJI-style rounded dark glass */
-    .overlay-panel { position: absolute; z-index: 1000; background: rgba(10, 16, 26, 0.88); border: 1px solid rgba(64, 120, 220, 0.25); border-radius: 10px; padding: 10px 12px; backdrop-filter: blur(8px); }
-    .overlay-panel h3 { margin: 0 0 8px 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #6b8cbe; font-weight: 600; }
-    .position-readouts { bottom: 12px; left: 12px; max-width: min(220px, 28vw); display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; align-items: baseline; font-variant-numeric: tabular-nums; padding: 6px 10px; }
+    .overlay-panel { position: absolute; z-index: 1000; background: rgba(var(--theme-panel-rgb), 0.88); border: 1px solid rgba(var(--theme-border-rgb), 0.25); border-radius: 10px; padding: 10px 12px; backdrop-filter: blur(8px); }
+    .overlay-panel h3 { margin: 0 0 8px 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--theme-muted); font-weight: 600; }
+    .position-readouts { bottom: 12px; left: 12px; max-width: min(220px, 28vw); font-variant-numeric: tabular-nums; padding: 6px 10px; }
     .position-readouts h3 { margin: 0 0 4px 0; font-size: 9px; }
-    .position-readouts .label { font-size: 10px; color: #8aa0c4; }
-    .position-readouts .value { font-size: 12px; font-weight: 600; color: #b8d4ff; min-width: 2.5em; text-align: right; }
+    .position-readouts .readout-row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+    .position-readouts .label { font-size: 10px; color: var(--theme-muted); }
+    .position-readouts .value { font-size: 12px; font-weight: 600; color: var(--theme-text); min-width: 2.5em; text-align: right; }
     .compass-wrap { top: 12px; right: 12px; width: 72px; height: 72px; }
-    .compass-ring { width: 100%; height: 100%; border-radius: 50%; border: 2px solid rgba(64, 120, 220, 0.4); background: rgba(10, 16, 26, 0.75); position: relative; display: flex; align-items: center; justify-content: center; }
-    .compass-north { position: absolute; top: 4px; left: 50%; transform: translateX(-50%); font-size: 10px; color: #6b8cbe; font-weight: 700; }
-    .compass-needle { width: 4px; height: 28px; background: linear-gradient(to top, #4080ff 0%, transparent 100%); border-radius: 2px; transform-origin: center 14px; box-shadow: 0 0 12px rgba(64, 128, 255, 0.5); }
+    .compass-ring { width: 100%; height: 100%; border-radius: 50%; border: 2px solid rgba(var(--theme-border-rgb), 0.4); background: rgba(var(--theme-panel-rgb), 0.75); position: relative; display: flex; align-items: center; justify-content: center; }
+    .compass-north { position: absolute; top: 4px; left: 50%; transform: translateX(-50%); font-size: 10px; color: var(--theme-muted); font-weight: 700; }
+    .compass-needle { width: 4px; height: 28px; background: linear-gradient(to top, var(--theme-border) 0%, transparent 100%); border-radius: 2px; transform-origin: center 14px; box-shadow: 0 0 12px rgba(var(--theme-border-rgb), 0.5); }
+    .tilt-roll-wrap { left: 12px; bottom: 12px; width: 64px; height: 180px; display: flex; align-items: center; justify-content: center; }
+    .tilt-roll-svg { width: 44px; height: 156px; }
+    .tilt-roll-rail { stroke: rgba(155,216,90,0.8); stroke: var(--theme-accent); stroke-width: 1.4; }
+    .tilt-roll-tick { stroke: var(--theme-accent); stroke-opacity: 0.62; stroke-width: 1.1; }
+    .tilt-roll-indicator { stroke: var(--theme-accent); stroke-width: 2.1; stroke-linecap: round; }
     .head-marker { background: none !important; border: none !important; }
     .head-marker div { filter: drop-shadow(0 2px 6px rgba(0,0,0,0.5)); }
 
@@ -37,10 +83,10 @@
     .axes-panel { bottom: 16px; right: 16px; width: 280px; }
     .axes-panel h3 { margin-bottom: 6px; }
     .axes-instruments { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
-    .axis-widget { background: rgba(0, 0, 0, 0.35); border: 1px solid rgba(64, 120, 220, 0.3); border-radius: 6px; padding: 6px; position: relative; }
-    .axis-widget .axis-title { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: #5a6d8a; text-align: center; margin-bottom: 2px; }
+    .axis-widget { background: rgba(var(--theme-panel-rgb), 0.52); border: 1px solid rgba(var(--theme-border-rgb), 0.3); border-radius: 6px; padding: 6px; position: relative; }
+    .axis-widget .axis-title { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--theme-muted); text-align: center; margin-bottom: 2px; }
     .axis-widget svg { display: block; width: 100%; height: auto; }
-    .axis-widget .axis-value { font-size: 10px; color: #8aa0c4; text-align: center; font-variant-numeric: tabular-nums; margin-top: 2px; }
+    .axis-widget .axis-value { font-size: 10px; color: var(--theme-muted); text-align: center; font-variant-numeric: tabular-nums; margin-top: 2px; }
     .axis-widget.pan-tilt { grid-column: 1 / -1; }
     .axis-widget.pan-tilt .combined-svg { display: flex; justify-content: center; gap: 8px; align-items: center; }
     .axis-widget.pan-tilt .combined-svg svg { flex: 0 0 auto; }
@@ -49,13 +95,19 @@
     .sim-panel { top: 60px; left: 16px; width: 200px; display: none; }
     .sim-panel.visible { display: block; }
     .sim-panel .axis-row { display: grid; grid-template-columns: 42px 1fr 48px; gap: 6px; align-items: center; margin-bottom: 6px; }
-    .sim-panel .axis-row label { font-size: 10px; color: #8aa0c4; font-variant-numeric: tabular-nums; }
-    .sim-panel input[type="range"] { width: 100%; height: 6px; -webkit-appearance: none; appearance: none; background: rgba(64, 120, 220, 0.25); border-radius: 3px; }
-    .sim-panel input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #4080ff; border: 1px solid #70b0ff; cursor: pointer; }
-    .sim-panel input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: #4080ff; border: 1px solid #70b0ff; cursor: pointer; }
-    .sim-panel .packet-row { margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(64, 120, 220, 0.25); }
+    .sim-panel .axis-row label { font-size: 10px; color: var(--theme-muted); font-variant-numeric: tabular-nums; }
+    .sim-panel input[type="range"] { width: 100%; height: 6px; -webkit-appearance: none; appearance: none; background: rgba(var(--theme-border-rgb), 0.25); border-radius: 3px; }
+    .sim-panel input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: var(--theme-border); border: 1px solid var(--theme-text); cursor: pointer; }
+    .sim-panel input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--theme-border); border: 1px solid var(--theme-text); cursor: pointer; }
+    .sim-panel .packet-row { margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(var(--theme-border-rgb), 0.25); }
     .sim-panel .packet-row input { width: 100%; font-size: 10px; font-family: ui-monospace, monospace; }
     .sim-panel .packet-row button { margin-top: 4px; font-size: 11px; padding: 4px 8px; }
+    body.minimal .app { grid-template-rows: 1fr; }
+    body.minimal .topbar,
+    body.minimal .sim-panel,
+    body.minimal .position-readouts,
+    body.minimal .axes-panel,
+    body.minimal .compass-wrap { display: none !important; }
   </style>
 </head>
 <body>
@@ -112,11 +164,11 @@
 
   <div class="overlay-panel position-readouts">
     <h3>Position <span style="font-weight:400;color:#5a6d8a;font-size:10px;">(head telemetry when connected)</span></h3>
-    <span class="label">Pan</span><span class="value" id="valPan">—</span>
-    <span class="label">Tilt</span><span class="value" id="valTilt">—</span>
-    <span class="label">Roll</span><span class="value" id="valRoll">—</span>
-    <span class="label">Zoom</span><span class="value" id="valZoom">—</span>
-    <span class="label">Focus</span><span class="value" id="valFocus">—</span>
+    <div class="readout-row"><span class="label">Pan</span><span class="value" id="valPan">—</span></div>
+    <div class="readout-row"><span class="label">Tilt</span><span class="value" id="valTilt">—</span></div>
+    <div class="readout-row"><span class="label">Roll</span><span class="value" id="valRoll">—</span></div>
+    <div class="readout-row"><span class="label">Zoom</span><span class="value" id="valZoom">—</span></div>
+    <div class="readout-row"><span class="label">Focus</span><span class="value" id="valFocus">—</span></div>
   </div>
 
   <div class="overlay-panel compass-wrap">
@@ -124,6 +176,18 @@
       <span class="compass-north">N</span>
       <div class="compass-needle" id="compassNeedle"></div>
     </div>
+  </div>
+
+  <div class="overlay-panel tilt-roll-wrap">
+    <svg class="tilt-roll-svg" viewBox="0 0 44 156" xmlns="http://www.w3.org/2000/svg" aria-label="Tilt roll indicator">
+      <line class="tilt-roll-rail" x1="22" y1="12" x2="22" y2="144"/>
+      <line class="tilt-roll-tick" x1="17" y1="12" x2="27" y2="12"/>
+      <line class="tilt-roll-tick" x1="17" y1="45" x2="27" y2="45"/>
+      <line class="tilt-roll-tick" x1="17" y1="78" x2="27" y2="78"/>
+      <line class="tilt-roll-tick" x1="17" y1="111" x2="27" y2="111"/>
+      <line class="tilt-roll-tick" x1="17" y1="144" x2="27" y2="144"/>
+      <line id="tiltRollIndicator" class="tilt-roll-indicator" x1="8" y1="78" x2="36" y2="78"/>
+    </svg>
   </div>
 
   <div class="overlay-panel axes-panel">
@@ -192,22 +256,42 @@
       const headingInput = document.getElementById("heading");
       const applyBtn = document.getElementById("apply");
       const compassNeedle = document.getElementById("compassNeedle");
+      const qs = new URLSearchParams(window.location.search || "");
+      const minimalMode = qs.get("minimal") === "1";
+      const qLat = Number(qs.get("lat"));
+      const qLon = Number(qs.get("lon"));
+      const qHeading = Number(qs.get("heading"));
+      const defaultLat = Number.isFinite(qLat) ? qLat : 50.56478249783015;
+      const defaultLon = Number.isFinite(qLon) ? qLon : -2.449499288081317;
+      const defaultHeading = Number.isFinite(qHeading) ? ((qHeading % 360) + 360) % 360 : 45;
+      if (minimalMode) document.body.classList.add("minimal");
 
       let map;
       let headMarker = null;
-      let headIcon = null;
       let headingLine = null;
+      let headingTriangle = null;
+      let indicatorZoomRatio = null;
+      let latestTiltDeg = 0;
+      let latestRollDeg = 0;
+      const indicatorColor = "#9bd85a";
+      const INDICATOR_DIAMETER_PX = 12;
+      const INDICATOR_RADIUS_PX = INDICATOR_DIAMETER_PX / 2;
+      const TRI_POS_MAX_FROM_CENTER_DIAMETERS = 5;
+      const ARROW_TRIANGLE_BASE_DIAMETERS = 1;
+      const ARROW_TRIANGLE_LENGTH_DIAMETERS = 0.9;
+      const ARROW_ZOOM_MIN = 14;
+      const ARROW_ZOOM_MAX = 19;
 
       function parseNum(id, def) {
         const v = parseFloat(document.getElementById(id).value);
         return Number.isFinite(v) ? v : def;
       }
 
-      function getLat() { return parseNum("lat", 50.56478249783015); }
-      function getLon() { return parseNum("lon", -2.449499288081317); }
+      function getLat() { return parseNum("lat", defaultLat); }
+      function getLon() { return parseNum("lon", defaultLon); }
       function getHeading() {
         const v = parseInt(document.getElementById("heading").value, 10);
-        return Number.isFinite(v) ? ((v % 360) + 360) % 360 : 0;
+        return Number.isFinite(v) ? ((v % 360) + 360) % 360 : defaultHeading;
       }
 
       function updateReadouts(pan, tilt, roll, zoom, focus) {
@@ -256,26 +340,133 @@
         document.getElementById("axisFocusVal").textContent = Number.isFinite(focusNorm) ? Math.round(focus) + "%" : "—";
       }
 
-      function createHeadIcon(headingDeg) {
+      function updateTiltRollIndicator(tiltDeg, rollDeg) {
+        const line = document.getElementById("tiltRollIndicator");
+        if (!line) return;
+        const railTop = 12;
+        const railBottom = 144;
+        const railCenterX = 22;
+        const baseHalfLen = 14;
+        const t = Math.max(-180, Math.min(180, Number(tiltDeg) || 0));
+        const r = Math.max(-180, Math.min(180, Number(rollDeg) || 0));
+        const yNorm = (t + 180) / 360;
+        const y = railTop + ((1 - yNorm) * (railBottom - railTop));
+        const rr = (r * Math.PI) / 180;
+        const dx = Math.cos(rr) * baseHalfLen;
+        const dy = Math.sin(rr) * baseHalfLen;
+        line.setAttribute("x1", String(railCenterX - dx));
+        line.setAttribute("y1", String(y - dy));
+        line.setAttribute("x2", String(railCenterX + dx));
+        line.setAttribute("y2", String(y + dy));
+      }
+
+      function metersPerPixelAtLatZoom(latDeg, zoom) {
+        const latRad = (latDeg * Math.PI) / 180;
+        return (156543.03392 * Math.cos(latRad)) / Math.pow(2, zoom);
+      }
+
+      function getZoomRatio() {
+        if (Number.isFinite(indicatorZoomRatio)) return Math.max(0, Math.min(1, indicatorZoomRatio));
+        const z = map ? Number(map.getZoom()) : ARROW_ZOOM_MIN;
+        return Math.max(0, Math.min(1, (z - ARROW_ZOOM_MIN) / (ARROW_ZOOM_MAX - ARROW_ZOOM_MIN)));
+      }
+
+      function getArrowLengthMeters(latDeg, lonDeg, headingDeg) {
+        const z = map ? Number(map.getZoom()) : ARROW_ZOOM_MIN;
+        const fallbackPx = INDICATOR_DIAMETER_PX * 5;
+        if (!map) return fallbackPx * metersPerPixelAtLatZoom(latDeg, z);
+        const size = map.getSize();
+        const origin = map.latLngToContainerPoint([latDeg, lonDeg]);
         const r = (headingDeg * Math.PI) / 180;
-        const size = 40;
-        const cx = size / 2, cy = size / 2;
-        const nose = 16;
-        const tail = 8;
-        const tipX = cx + nose * Math.sin(r);
-        const tipY = cy - nose * Math.cos(r);
-        const lX = cx - tail * Math.cos(r) - 5 * Math.sin(r);
-        const lY = cy + tail * Math.sin(r) - 5 * Math.cos(r);
-        const rX = cx - tail * Math.cos(r) + 5 * Math.sin(r);
-        const rY = cy + tail * Math.sin(r) + 5 * Math.cos(r);
-        const path = "M " + tipX + " " + tipY + " L " + lX + " " + lY + " L " + cx + " " + cy + " L " + rX + " " + rY + " Z";
-        const svg = "<svg xmlns='http://www.w3.org/2000/svg' width='" + size + "' height='" + size + "' viewBox='0 0 " + size + " " + size + "'><path fill='#4080ff' stroke='#70b0ff' stroke-width='1.5' d='" + path + "'/><circle cx='" + cx + "' cy='" + cy + "' r='4' fill='#0a0e14' stroke='#4080ff'/></svg>";
-        return L.divIcon({
-          html: "<div style='width:" + size + "px;height:" + size + "px;margin-left:-" + (size/2) + "px;margin-top:-" + (size/2) + "px;'>" + svg + "</div>",
-          className: "head-marker",
-          iconSize: [size, size],
-          iconAnchor: [size/2, size/2],
-        });
+        const dx = Math.sin(r);
+        const dy = -Math.cos(r);
+        const eps = 1e-6;
+        const ts = [];
+        if (Math.abs(dx) > eps){
+          ts.push((0 - origin.x) / dx);
+          ts.push((size.x - origin.x) / dx);
+        }
+        if (Math.abs(dy) > eps){
+          ts.push((0 - origin.y) / dy);
+          ts.push((size.y - origin.y) / dy);
+        }
+        const tPos = ts.filter(t => Number.isFinite(t) && t > 0);
+        const edgeDistPx = tPos.length ? Math.min(...tPos) : fallbackPx;
+        return Math.max(0, edgeDistPx) * metersPerPixelAtLatZoom(latDeg, z);
+      }
+
+      function getTriangleHalfBaseMeters(latDeg) {
+        const z = map ? Number(map.getZoom()) : ARROW_ZOOM_MIN;
+        const lengthPx = INDICATOR_DIAMETER_PX * ARROW_TRIANGLE_BASE_DIAMETERS * 0.5;
+        return lengthPx * metersPerPixelAtLatZoom(latDeg, z);
+      }
+
+      function getTriangleLengthMeters(latDeg) {
+        const z = map ? Number(map.getZoom()) : ARROW_ZOOM_MIN;
+        const lengthPx = INDICATOR_DIAMETER_PX * ARROW_TRIANGLE_LENGTH_DIAMETERS;
+        return lengthPx * metersPerPixelAtLatZoom(latDeg, z);
+      }
+
+      function getTriangleCenterDistanceMeters(latDeg) {
+        const z = map ? Number(map.getZoom()) : ARROW_ZOOM_MIN;
+        const ratio = getZoomRatio();
+        const distPx = INDICATOR_DIAMETER_PX * TRI_POS_MAX_FROM_CENTER_DIAMETERS * ratio;
+        return distPx * metersPerPixelAtLatZoom(latDeg, z);
+      }
+
+      function renderHeadingIndicator(lat, lon, headingDeg) {
+        if (!map) return;
+        if (!headMarker) {
+          headMarker = L.circleMarker([lat, lon], {
+            radius: INDICATOR_RADIUS_PX,
+            color: indicatorColor,
+            weight: 1.5,
+            fillColor: indicatorColor,
+            fillOpacity: 0.15,
+            opacity: 0.95,
+          }).addTo(map);
+        } else {
+          headMarker.setLatLng([lat, lon]);
+        }
+
+        const lengthMeters = getArrowLengthMeters(lat, lon, headingDeg);
+        const end = projectHeading(lat, lon, headingDeg, lengthMeters);
+        if (!headingLine) {
+          headingLine = L.polyline([[lat, lon], end], {
+            color: indicatorColor,
+            weight: 1.5,
+            opacity: 0.95,
+          }).addTo(map);
+        } else {
+          headingLine.setLatLngs([[lat, lon], end]);
+          headingLine.setStyle({ color: indicatorColor, weight: 1.5, opacity: 0.95 });
+        }
+
+        const markerDistMeters = Math.min(lengthMeters, getTriangleCenterDistanceMeters(lat));
+        const markerPos = projectHeading(lat, lon, headingDeg, markerDistMeters);
+        const halfBaseMeters = getTriangleHalfBaseMeters(lat);
+        const triLenMeters = getTriangleLengthMeters(lat);
+        const left = projectHeading(markerPos[0], markerPos[1], headingDeg - 90, halfBaseMeters);
+        const right = projectHeading(markerPos[0], markerPos[1], headingDeg + 90, halfBaseMeters);
+        const tip = projectHeading(markerPos[0], markerPos[1], headingDeg, triLenMeters);
+        if (!headingTriangle) {
+          headingTriangle = L.polygon([left, right, tip], {
+            color: indicatorColor,
+            weight: 1,
+            opacity: 0.95,
+            fillColor: indicatorColor,
+            fillOpacity: 0.9,
+          }).addTo(map);
+        } else {
+          headingTriangle.setLatLngs([left, right, tip]);
+          headingTriangle.setStyle({
+            color: indicatorColor,
+            weight: 1,
+            opacity: 0.95,
+            fillColor: indicatorColor,
+            fillOpacity: 0.9,
+          });
+        }
       }
 
       function projectHeading(lat, lon, headingDeg, lengthMeters) {
@@ -297,21 +488,11 @@
         if (!map) return;
         map.setView([lat, lon], map.getZoom());
 
-        if (headMarker) map.removeLayer(headMarker);
-        headIcon = createHeadIcon(heading);
-        headMarker = L.marker([lat, lon], { icon: headIcon }).addTo(map);
-
-        if (headingLine) map.removeLayer(headingLine);
-        const end = projectHeading(lat, lon, heading, 80);
-        headingLine = L.polyline([[lat, lon], end], {
-          color: "#4080ff",
-          weight: 3,
-          opacity: 0.85,
-          dashArray: "8,6",
-        }).addTo(map);
+        renderHeadingIndicator(lat, lon, heading);
 
         updateCompass(heading);
-        updateReadouts(heading, 0, 0, "—", "—");
+        updateReadouts(heading, latestTiltDeg, latestRollDeg, "—", "—");
+        updateTiltRollIndicator(latestTiltDeg, latestRollDeg);
         updateAxisInstruments(heading, 0, 0, 50, 50);
       }
 
@@ -331,6 +512,15 @@
         map.setView(latLng, leafletZoom);
       }
 
+      function setSimModeEnabled(on) {
+        var enabled = !!on;
+        var simModeEl = document.getElementById("simMode");
+        var panelEl = document.getElementById("simPanel");
+        if (simModeEl) simModeEl.checked = enabled;
+        if (panelEl) panelEl.classList.toggle("visible", enabled);
+        if (enabled) applySimToInstruments();
+      }
+
       function applySimToInstruments() {
         var pan180 = parseInt(document.getElementById("simPan").value, 10) || 0;
         var tilt = parseInt(document.getElementById("simTilt").value, 10) || 0;
@@ -344,23 +534,56 @@
         document.getElementById("valSimFocus").textContent = focus + "%";
         var pan360 = simPanTo360(pan180);
         var zoomPct = Math.max(0, Math.min(100, (zoom + 180) / 360 * 100));
+        indicatorZoomRatio = zoomPct / 100;
+        latestTiltDeg = tilt;
+        latestRollDeg = roll;
         updateReadouts(pan360, tilt, roll, zoom, focus);
         updateAxisInstruments(pan360, tilt, roll, zoomPct, focus);
+        updateTiltRollIndicator(tilt, roll);
         updateCompass(pan360);
         setMapZoomFromHeadZoom(zoomPct);
-        if (headMarker && map) {
+        if (map) {
           var lat = getLat(), lon = getLon();
-          if (headMarker) map.removeLayer(headMarker);
-          headMarker = L.marker([lat, lon], { icon: createHeadIcon(pan360) }).addTo(map);
-          if (headingLine) map.removeLayer(headingLine);
-          var end = projectHeading(lat, lon, pan360, 80);
-          headingLine = L.polyline([[lat, lon], end], { color: "#4080ff", weight: 3, opacity: 0.85, dashArray: "8,6" }).addTo(map);
+          renderHeadingIndicator(lat, lon, pan360);
         }
       }
 
+      function pollGamepadForSimMode() {
+        var simModeEl = document.getElementById("simMode");
+        if (!simModeEl || !simModeEl.checked) return;
+        var pads = navigator.getGamepads ? navigator.getGamepads() : [];
+        var gp = pads && pads[0];
+        if (!gp || !gp.axes) return;
+        var x = Number(gp.axes[0]);
+        var y = Number(gp.axes[1]);
+        var z = Number(gp.axes[2]);
+        var zr = Number(gp.axes[5]);
+        var xr = Number(gp.axes[3]);
+        if (!Number.isFinite(x)) x = 0;
+        if (!Number.isFinite(y)) y = 0;
+        if (!Number.isFinite(z)) z = 0;
+        if (!Number.isFinite(zr)) zr = 0;
+        if (!Number.isFinite(xr)) xr = 0;
+        var pan180 = Math.max(-180, Math.min(180, Math.round(x * 180)));
+        var tilt180 = Math.max(-180, Math.min(180, Math.round(y * 180)));
+        var roll180 = Math.max(-180, Math.min(180, Math.round(z * 180)));
+        var zoom180 = Math.max(-180, Math.min(180, Math.round(zr * 180)));
+        var focusPct = Math.max(0, Math.min(100, Math.round((xr + 1) * 50)));
+        document.getElementById("simPan").value = String(pan180);
+        document.getElementById("simTilt").value = String(tilt180);
+        document.getElementById("simRoll").value = String(roll180);
+        document.getElementById("simZoom").value = String(zoom180);
+        document.getElementById("simFocus").value = String(focusPct);
+        applySimToInstruments();
+      }
+
+      function gamepadSimLoop() {
+        pollGamepadForSimMode();
+        requestAnimationFrame(gamepadSimLoop);
+      }
+
       document.getElementById("simMode").addEventListener("change", function () {
-        document.getElementById("simPanel").classList.toggle("visible", this.checked);
-        if (this.checked) applySimToInstruments();
+        setSimModeEnabled(this.checked);
       });
 
       ["simPan", "simTilt", "simRoll", "simZoom", "simFocus"].forEach(function (id) {
@@ -488,17 +711,44 @@
         }
       });
 
-      map = L.map("map", { zoomControl: true }).setView([50.56478249783015, -2.449499288081317], 16);
+      window.addEventListener("message", function (ev) {
+        try {
+          var msg = ev && ev.data;
+          if (!msg || msg.type !== "POSITION_DISPLAY_UPDATE") return;
+          var lat = Number(msg.lat);
+          var lon = Number(msg.lon);
+          var heading = Number(msg.heading);
+          var tilt = Number(msg.tilt);
+          var roll = Number(msg.roll);
+          var zoomNorm = Number(msg.zoom_norm);
+          var simMode = msg.sim_mode;
+          if (!Number.isFinite(lat) || !Number.isFinite(lon) || !Number.isFinite(heading)) return;
+          document.getElementById("lat").value = String(lat);
+          document.getElementById("lon").value = String(lon);
+          document.getElementById("heading").value = String(((heading % 360) + 360) % 360);
+          if (Number.isFinite(tilt)) latestTiltDeg = tilt;
+          if (Number.isFinite(roll)) latestRollDeg = roll;
+          if (Number.isFinite(zoomNorm)) indicatorZoomRatio = Math.max(0, Math.min(1, zoomNorm));
+          if (typeof simMode === "boolean") setSimModeEnabled(simMode);
+          apply();
+        } catch (e) {}
+      });
+
+      map = L.map("map", { zoomControl: true }).setView([defaultLat, defaultLon], 16);
       L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
         attribution: "&copy; OpenStreetMap, &copy; CARTO",
         maxZoom: 19,
       }).addTo(map);
       map.attributionControl.setPrefix("");
+      L.control.scale({ position: "bottomright", metric: true, imperial: false, maxWidth: 120 }).addTo(map);
+      map.on("zoomend", apply);
 
-      latInput.value = "50.56478249783015";
-      lonInput.value = "-2.449499288081317";
-      headingInput.value = "45";
+      latInput.value = String(defaultLat);
+      lonInput.value = String(defaultLon);
+      headingInput.value = String(defaultHeading);
+      setSimModeEnabled(false);
       apply();
+      requestAnimationFrame(gamepadSimLoop);
     })();
   </script>
 </body>
