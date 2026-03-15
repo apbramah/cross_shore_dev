@@ -347,8 +347,9 @@
 
       let map;
       let headMarker = null;
-      let headingLine = null;
-      let headingTriangle = null;
+      let headingLeftRay = null;
+      let headingRightRay = null;
+      let headingFovFill = null;
       let indicatorZoomRatio = null;
       let latestTiltDeg = 0;
       let latestRollDeg = 0;
@@ -381,11 +382,10 @@
       const indicatorColor = "#9bd85a";
       const INDICATOR_DIAMETER_PX = 12;
       const INDICATOR_RADIUS_PX = INDICATOR_DIAMETER_PX / 2;
-      const TRI_POS_MAX_FROM_CENTER_DIAMETERS = 5;
-      const ARROW_TRIANGLE_BASE_DIAMETERS = 1;
-      const ARROW_TRIANGLE_LENGTH_DIAMETERS = 0.9;
       const ARROW_ZOOM_MIN = 14;
       const ARROW_ZOOM_MAX = 19;
+      const H_FOV_MIN_DEG = 5;
+      const H_FOV_MAX_DEG = 64;
 
       function parseNum(id, def) {
         const v = parseFloat(document.getElementById(id).value);
@@ -507,23 +507,9 @@
         return Math.max(0, edgeDistPx) * metersPerPixelAtLatZoom(latDeg, z);
       }
 
-      function getTriangleHalfBaseMeters(latDeg) {
-        const z = map ? Number(map.getZoom()) : ARROW_ZOOM_MIN;
-        const lengthPx = INDICATOR_DIAMETER_PX * ARROW_TRIANGLE_BASE_DIAMETERS * 0.5;
-        return lengthPx * metersPerPixelAtLatZoom(latDeg, z);
-      }
-
-      function getTriangleLengthMeters(latDeg) {
-        const z = map ? Number(map.getZoom()) : ARROW_ZOOM_MIN;
-        const lengthPx = INDICATOR_DIAMETER_PX * ARROW_TRIANGLE_LENGTH_DIAMETERS;
-        return lengthPx * metersPerPixelAtLatZoom(latDeg, z);
-      }
-
-      function getTriangleCenterDistanceMeters(latDeg) {
-        const z = map ? Number(map.getZoom()) : ARROW_ZOOM_MIN;
-        const ratio = getZoomRatio();
-        const distPx = INDICATOR_DIAMETER_PX * TRI_POS_MAX_FROM_CENTER_DIAMETERS * ratio;
-        return distPx * metersPerPixelAtLatZoom(latDeg, z);
+      function getHorizontalFovDeg() {
+        const r = getZoomRatio();
+        return H_FOV_MAX_DEG - ((H_FOV_MAX_DEG - H_FOV_MIN_DEG) * r);
       }
 
       function renderHeadingIndicator(lat, lon, headingDeg) {
@@ -541,42 +527,53 @@
           headMarker.setLatLng([lat, lon]);
         }
 
-        const lengthMeters = getArrowLengthMeters(lat, lon, headingDeg);
-        const end = projectHeading(lat, lon, headingDeg, lengthMeters);
-        if (!headingLine) {
-          headingLine = L.polyline([[lat, lon], end], {
+        const fovDeg = getHorizontalFovDeg();
+        const halfFov = fovDeg * 0.5;
+        const leftHeading = headingDeg - halfFov;
+        const rightHeading = headingDeg + halfFov;
+        const leftLen = getArrowLengthMeters(lat, lon, leftHeading);
+        const rightLen = getArrowLengthMeters(lat, lon, rightHeading);
+        const leftEnd = projectHeading(lat, lon, leftHeading, leftLen);
+        const rightEnd = projectHeading(lat, lon, rightHeading, rightLen);
+
+        if (!headingLeftRay) {
+          headingLeftRay = L.polyline([[lat, lon], leftEnd], {
             color: indicatorColor,
             weight: 1.5,
             opacity: 0.95,
           }).addTo(map);
         } else {
-          headingLine.setLatLngs([[lat, lon], end]);
-          headingLine.setStyle({ color: indicatorColor, weight: 1.5, opacity: 0.95 });
+          headingLeftRay.setLatLngs([[lat, lon], leftEnd]);
+          headingLeftRay.setStyle({ color: indicatorColor, weight: 1.5, opacity: 0.95 });
         }
 
-        const markerDistMeters = Math.min(lengthMeters, getTriangleCenterDistanceMeters(lat));
-        const markerPos = projectHeading(lat, lon, headingDeg, markerDistMeters);
-        const halfBaseMeters = getTriangleHalfBaseMeters(lat);
-        const triLenMeters = getTriangleLengthMeters(lat);
-        const left = projectHeading(markerPos[0], markerPos[1], headingDeg - 90, halfBaseMeters);
-        const right = projectHeading(markerPos[0], markerPos[1], headingDeg + 90, halfBaseMeters);
-        const tip = projectHeading(markerPos[0], markerPos[1], headingDeg, triLenMeters);
-        if (!headingTriangle) {
-          headingTriangle = L.polygon([left, right, tip], {
+        if (!headingRightRay) {
+          headingRightRay = L.polyline([[lat, lon], rightEnd], {
             color: indicatorColor,
-            weight: 1,
+            weight: 1.5,
             opacity: 0.95,
-            fillColor: indicatorColor,
-            fillOpacity: 0.9,
           }).addTo(map);
         } else {
-          headingTriangle.setLatLngs([left, right, tip]);
-          headingTriangle.setStyle({
+          headingRightRay.setLatLngs([[lat, lon], rightEnd]);
+          headingRightRay.setStyle({ color: indicatorColor, weight: 1.5, opacity: 0.95 });
+        }
+
+        if (!headingFovFill) {
+          headingFovFill = L.polygon([[lat, lon], leftEnd, rightEnd], {
             color: indicatorColor,
-            weight: 1,
-            opacity: 0.95,
+            weight: 0,
+            opacity: 0,
             fillColor: indicatorColor,
-            fillOpacity: 0.9,
+            fillOpacity: 0.14,
+          }).addTo(map);
+        } else {
+          headingFovFill.setLatLngs([[lat, lon], leftEnd, rightEnd]);
+          headingFovFill.setStyle({
+            color: indicatorColor,
+            weight: 0,
+            opacity: 0,
+            fillColor: indicatorColor,
+            fillOpacity: 0.14,
           });
         }
       }
