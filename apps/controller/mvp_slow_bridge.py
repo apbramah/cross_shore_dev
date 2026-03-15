@@ -49,6 +49,7 @@ SCHEMA_VERSION = mvp_protocol.PKT_SCHEMA_VERSION
 ETH_IFACE = "eth0"
 WLAN_IFACE = "wlan0"
 DEFAULT_LAN_SUBNET_THIRD_OCTET = 111
+DEFAULT_HEAD_IP_START_OCTET = 10
 UI_INPUT_TEST_DEFAULTS = {
     "debounce_ms": 100,
     "group_lockout_ms": 175,
@@ -302,7 +303,7 @@ def _default_network_model(head_count: int, source_heads: list[dict[str, Any]]) 
     heads_cfg = []
     for i in range(max(15, head_count)):
         base = source_heads[i] if i < len(source_heads) else {}
-        head_octet = max(1, min(254, i + 1))
+        head_octet = max(1, min(254, DEFAULT_HEAD_IP_START_OCTET + i))
         heads_cfg.append(
             {
                 "index": i,
@@ -956,7 +957,7 @@ def _state_payload() -> dict[str, Any]:
                 "subnet_prefix": subnet_prefix,
                 "pi_lan_default_ip": pi_default_ip,
                 "gateway_default": gateway_ip,
-                "head_ip_base": f"{subnet_prefix}.1",
+                "head_ip_base": f"{subnet_prefix}.{DEFAULT_HEAD_IP_START_OCTET:03d}",
             },
             "profiles": {
                 "active": active_profile_name,

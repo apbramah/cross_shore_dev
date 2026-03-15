@@ -4002,7 +4002,9 @@ function syncNetworkDraftFromState(force=false){
   const headBase = String(nd.head_ip_base || "").trim();
   const baseParts = headBase.split(".");
   const headPrefix = baseParts.length >= 3 ? `${baseParts[0]}.${baseParts[1]}.${baseParts[2]}` : "";
-  const defaultHeadIp = (idx) => headPrefix ? `${headPrefix}.${Math.max(1, Math.min(254, idx + 1))}` : "";
+  const baseOctet = parseInt(baseParts[3], 10);
+  const startOctet = Number.isFinite(baseOctet) ? Math.max(1, Math.min(254, baseOctet)) : 10;
+  const defaultHeadIp = (idx) => headPrefix ? `${headPrefix}.${Math.max(1, Math.min(254, startOctet + idx))}` : "";
   const applyNetworkDraftDefaults = () => {
     networkDraft.pi_lan = networkDraft.pi_lan || {};
     if (!String(networkDraft.pi_lan.address || "").trim() && piDefault) networkDraft.pi_lan.address = piDefault;
