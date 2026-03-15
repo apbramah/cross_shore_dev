@@ -962,10 +962,10 @@
       .topbar > .row.actions button { min-width:0; width:100%; }
       .logo-pill { font-size:11px; padding:0 8px; }
       #posDisplayPanel {
-        grid-template-columns:1fr;
-        grid-template-rows:auto minmax(0,1fr);
+        grid-template-columns:minmax(220px,0.95fr) minmax(0,1.65fr);
+        grid-template-rows:minmax(0,1fr);
       }
-      .pos-display-left { max-height:42vh; overflow:auto; }
+      .pos-display-left { max-height:none; min-height:0; overflow:auto; }
       .pos-display-map { min-height:0; }
       .head-picker-card { width:96vw; max-height:92vh; }
       .head-picker-title { font-size:14px; }
