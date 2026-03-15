@@ -71,7 +71,18 @@
     .compass-ring { width: 100%; height: 100%; border-radius: 50%; border: 2px solid rgba(var(--theme-border-rgb), 0.4); background: rgba(var(--theme-panel-rgb), 0.75); position: relative; display: flex; align-items: center; justify-content: center; }
     .compass-north { position: absolute; top: 4px; left: 50%; transform: translateX(-50%); font-size: 10px; color: var(--theme-muted); font-weight: 700; }
     .compass-needle { width: 4px; height: 28px; background: linear-gradient(to top, var(--theme-border) 0%, transparent 100%); border-radius: 2px; transform-origin: center 14px; box-shadow: 0 0 12px rgba(var(--theme-border-rgb), 0.5); }
-    .tilt-roll-wrap { left: 12px; bottom: 12px; width: 64px; height: 180px; display: flex; align-items: center; justify-content: center; }
+    .tilt-roll-wrap {
+      left: 12px;
+      bottom: 12px;
+      width: 64px;
+      height: 180px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      border-color: transparent;
+      backdrop-filter: none;
+    }
     .tilt-roll-svg { width: 44px; height: 156px; }
     .tilt-roll-rail { stroke: rgba(155,216,90,0.8); stroke: var(--theme-accent); stroke-width: 1.4; }
     .tilt-roll-tick { stroke: var(--theme-accent); stroke-opacity: 0.62; stroke-width: 1.1; }
@@ -115,6 +126,21 @@
       pointer-events: none;
     }
     .tile-status.show { display: block; }
+    .map-style-toggle {
+      height: 30px;
+      padding: 0 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(var(--theme-border-rgb), 0.55);
+      background: rgba(var(--theme-surface-rgb), 0.92);
+      color: var(--theme-text);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      cursor: pointer;
+    }
+    .map-style-toggle:active {
+      filter: brightness(0.95);
+    }
     body.minimal .app { grid-template-rows: 1fr; }
     body.minimal .topbar,
     body.minimal .sim-panel,
@@ -147,6 +173,7 @@
         <input type="checkbox" id="simMode" />
         <span class="topbar-label" style="margin:0;">Sim mode</span>
       </label>
+      <button type="button" id="mapStyleToggle" class="map-style-toggle">Map: Color</button>
       <span class="topbar-label" style="font-size:9px;color:#5a6d8a;max-width:140px;">(check to show sliders)</span>
       <div style="align-self: flex-end;">
         <button type="button" id="apply">Apply</button>
@@ -289,6 +316,30 @@
       let latestRollDeg = 0;
       let tileLayer = null;
       let tileProviderIndex = 0;
+      const TILE_STYLE_STORAGE_KEY = "position_map_tile_style_v1";
+      const TILE_STYLE_ORDER = ["color", "mono", "dark"];
+      const tileStyles = {
+        color: [
+          { url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", attribution: "&copy; OpenStreetMap, &copy; CARTO" },
+          { url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", attribution: "&copy; OpenStreetMap, &copy; CARTO" },
+        ],
+        mono: [
+          { url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", attribution: "&copy; OpenStreetMap, &copy; CARTO" },
+          { url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", attribution: "&copy; OpenStreetMap, &copy; CARTO" },
+        ],
+        dark: [
+          { url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", attribution: "&copy; OpenStreetMap, &copy; CARTO" },
+          { url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", attribution: "&copy; OpenStreetMap, &copy; CARTO" },
+        ],
+      };
+      const osmFallbackProviders = [
+        // Keep OSM endpoints as final fallback. Some environments block file:// origins by referer policy.
+        { url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", attribution: "&copy; OpenStreetMap contributors" },
+        { url: "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png", attribution: "&copy; OpenStreetMap contributors" },
+        { url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", attribution: "&copy; OpenStreetMap contributors" },
+      ];
+      let tileStyle = "color";
+      let providers = [];
       const indicatorColor = "#9bd85a";
       const INDICATOR_DIAMETER_PX = 12;
       const INDICATOR_RADIUS_PX = INDICATOR_DIAMETER_PX / 2;
@@ -527,12 +578,34 @@
         return ((d + 360) % 360 + 360) % 360;
       }
 
-      function setMapZoomFromHeadZoom(zoomPct) {
-        if (!map || !Number.isFinite(zoomPct)) return;
-        var pct = Math.max(0, Math.min(100, zoomPct));
-        var latLng = map.getCenter();
-        var leafletZoom = Math.round(14 + (pct / 100) * 5);
-        map.setView(latLng, leafletZoom);
+      function normalizeTileStyle(style) {
+        var s = String(style || "").toLowerCase();
+        return TILE_STYLE_ORDER.indexOf(s) >= 0 ? s : "color";
+      }
+
+      function setMapStyleButtonLabel() {
+        var btn = document.getElementById("mapStyleToggle");
+        if (!btn) return;
+        var txt = (tileStyle === "dark") ? "Dark" : (tileStyle === "mono" ? "Mono" : "Color");
+        btn.textContent = "Map: " + txt;
+      }
+
+      function cycleMapStyle() {
+        var idx = TILE_STYLE_ORDER.indexOf(tileStyle);
+        if (idx < 0) idx = 0;
+        var next = TILE_STYLE_ORDER[(idx + 1) % TILE_STYLE_ORDER.length];
+        setMapStyle(next, true);
+      }
+
+      function setMapStyle(style, persist) {
+        tileStyle = normalizeTileStyle(style);
+        providers = (tileStyles[tileStyle] || tileStyles.color).concat(osmFallbackProviders);
+        tileProviderIndex = 0;
+        setMapStyleButtonLabel();
+        if (persist) {
+          try { localStorage.setItem(TILE_STYLE_STORAGE_KEY, tileStyle); } catch (e) {}
+        }
+        activateTileProvider(0);
       }
 
       function setSimModeEnabled(on) {
@@ -564,7 +637,6 @@
         updateAxisInstruments(pan360, tilt, roll, zoomPct, focus);
         updateTiltRollIndicator(tilt, roll);
         updateCompass(pan360);
-        setMapZoomFromHeadZoom(zoomPct);
         if (map) {
           var lat = getLat(), lon = getLon();
           renderHeadingIndicator(lat, lon, pan360);
@@ -745,6 +817,7 @@
           var roll = Number(msg.roll);
           var zoomNorm = Number(msg.zoom_norm);
           var simMode = msg.sim_mode;
+          var mapStyle = msg.map_style;
           if (!Number.isFinite(lat) || !Number.isFinite(lon) || !Number.isFinite(heading)) return;
           document.getElementById("lat").value = String(lat);
           document.getElementById("lon").value = String(lon);
@@ -753,20 +826,18 @@
           if (Number.isFinite(roll)) latestRollDeg = roll;
           if (Number.isFinite(zoomNorm)) indicatorZoomRatio = Math.max(0, Math.min(1, zoomNorm));
           if (typeof simMode === "boolean") setSimModeEnabled(simMode);
+          if (typeof mapStyle === "string") setMapStyle(mapStyle, false);
           apply();
         } catch (e) {}
       });
 
       map = L.map("map", { zoomControl: true }).setView([defaultLat, defaultLon], 16);
-      var providers = [
-        // Prefer providers that are typically more tolerant of kiosk/local origins.
-        { url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", attribution: "&copy; OpenStreetMap, &copy; CARTO" },
-        { url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", attribution: "&copy; OpenStreetMap, &copy; CARTO" },
-        // Keep OSM endpoints as last-resort fallback. Some environments block file:// origins by referer policy.
-        { url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", attribution: "&copy; OpenStreetMap contributors" },
-        { url: "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png", attribution: "&copy; OpenStreetMap contributors" },
-        { url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", attribution: "&copy; OpenStreetMap contributors" },
-      ];
+      var mapStyleToggleBtn = document.getElementById("mapStyleToggle");
+      if (mapStyleToggleBtn) mapStyleToggleBtn.addEventListener("click", cycleMapStyle);
+      var styleFromQuery = normalizeTileStyle(qs.get("mapStyle"));
+      var styleFromStorage = "color";
+      try { styleFromStorage = normalizeTileStyle(localStorage.getItem(TILE_STYLE_STORAGE_KEY)); } catch (e) {}
+      setMapStyle(qs.has("mapStyle") ? styleFromQuery : styleFromStorage, false);
       function activateTileProvider(index) {
         if (!map) return;
         if (index >= providers.length) {

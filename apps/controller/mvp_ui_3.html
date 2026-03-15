@@ -191,6 +191,25 @@
       accent-color:#9bd85a;
       cursor:pointer;
     }
+    .pos-display-sim-row {
+      margin-top:2px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:8px;
+    }
+    .pos-display-map-style-btn {
+      height:30px;
+      min-width:86px;
+      border-radius:8px;
+      border:1px solid #32445f;
+      background:rgba(16,24,36,.84);
+      color:#dce8fb;
+      font-size:11px;
+      font-weight:600;
+      letter-spacing:.01em;
+      padding:0 10px;
+    }
     .pos-display-offset-head {
       display:flex;
       justify-content:space-between;
@@ -1166,10 +1185,13 @@
           </div>
           <input id="posDisplayHeadingOffset" type="range" min="-180" max="180" step="1" value="0" />
         </div>
-        <label class="pos-display-sim" title="Use browser gamepad input for map simulation">
-          <input id="posDisplaySimMode" type="checkbox" />
-          <span>Sim mode</span>
-        </label>
+        <div class="pos-display-sim-row">
+          <label class="pos-display-sim" title="Use browser gamepad input for map simulation">
+            <input id="posDisplaySimMode" type="checkbox" />
+            <span>Sim mode</span>
+          </label>
+          <button id="posDisplayMapStyleBtn" class="pos-display-map-style-btn" type="button">Map: Color</button>
+        </div>
       </div>
       <div class="pos-display-map">
         <button id="posDisplayClose" class="pos-display-close" type="button">Close</button>
@@ -1291,6 +1313,7 @@ const THEME_LAB_ENABLED_STORAGE_KEY = "mvp_ui3_theme_lab_enabled_v1";
 const POS_DISPLAY_COORDS_STORAGE_KEY = "mvp_ui3_pos_display_latlon_v1";
 const POS_DISPLAY_HEADING_OFFSET_STORAGE_KEY = "mvp_ui3_pos_display_heading_offset_v1";
 const POS_DISPLAY_SIM_MODE_STORAGE_KEY = "mvp_ui3_pos_display_sim_mode_v1";
+const POS_DISPLAY_MAP_STYLE_STORAGE_KEY = "mvp_ui3_pos_display_map_style_v1";
 const POS_DISPLAY_W3W_KEY_STORAGE_KEY = "mvp_ui3_pos_display_w3w_api_key_v1";
 const POS_DISPLAY_W3W_WORDS_STORAGE_KEY = "mvp_ui3_pos_display_w3w_words_v1";
 const VALID_THEMES = ["starship", "graphite", "slate", "olivetactical", "blackwhite", "highcontrast", "highcontrastgreen", "neon", "acidtrip"];
@@ -1302,6 +1325,7 @@ const POS_DISPLAY_MAP_ASSET_VERSION = "20260315a";
 let posDisplayCoords = { lat: DEFAULT_POS_DISPLAY_LAT, lon: DEFAULT_POS_DISPLAY_LON };
 let posDisplayHeadingOffsetDeg = 0;
 let posDisplaySimMode = false;
+let posDisplayMapStyle = "color";
 const THEME_LAB_DEFAULT_PRESET_NAME = "Default";
 const THEME_LAB_DEFAULT_PRESET = {
   bg: "#070b11",
@@ -3043,6 +3067,28 @@ function sanitizeW3WWords(raw){
   return txt.replace(/^\/{0,3}/, "").replace(/\//g, ".").replace(/\s+/g, "");
 }
 
+function normalizePosDisplayMapStyle(raw){
+  const s = String(raw || "").trim().toLowerCase();
+  if (s === "mono" || s === "dark") return s;
+  return "color";
+}
+
+function getPosDisplayMapStyleLabel(style){
+  const s = normalizePosDisplayMapStyle(style);
+  if (s === "mono") return "Mono";
+  if (s === "dark") return "Dark";
+  return "Color";
+}
+
+function cyclePosDisplayMapStyle(){
+  const order = ["color", "mono", "dark"];
+  const idx = order.indexOf(normalizePosDisplayMapStyle(posDisplayMapStyle));
+  posDisplayMapStyle = order[(idx >= 0 ? idx : 0) + 1] || order[0];
+  try { localStorage.setItem(POS_DISPLAY_MAP_STYLE_STORAGE_KEY, posDisplayMapStyle); } catch {}
+  if ($("posDisplayMapStyleBtn")) $("posDisplayMapStyleBtn").textContent = `Map: ${getPosDisplayMapStyleLabel(posDisplayMapStyle)}`;
+  postPosDisplayMapUpdate();
+}
+
 function loadPosDisplayCoords(){
   let parsed = null;
   try {
@@ -3067,12 +3113,14 @@ function loadPosDisplayCoords(){
   let savedSim = "0";
   try { savedSim = String(localStorage.getItem(POS_DISPLAY_SIM_MODE_STORAGE_KEY) || "0"); } catch {}
   posDisplaySimMode = savedSim === "1";
+  try { posDisplayMapStyle = normalizePosDisplayMapStyle(localStorage.getItem(POS_DISPLAY_MAP_STYLE_STORAGE_KEY) || "color"); } catch { posDisplayMapStyle = "color"; }
   if ($("posDisplayHeadingOffset")) {
     $("posDisplayHeadingOffset").value = String(posDisplayHeadingOffsetDeg);
     $("posDisplayHeadingOffset").style.setProperty("--posOffsetPct", `${((posDisplayHeadingOffsetDeg + 180) / 360) * 100}%`);
   }
   if ($("posDisplayHeadingOffsetVal")) $("posDisplayHeadingOffsetVal").textContent = `${Math.round(posDisplayHeadingOffsetDeg)}°`;
   if ($("posDisplaySimMode")) $("posDisplaySimMode").checked = !!posDisplaySimMode;
+  if ($("posDisplayMapStyleBtn")) $("posDisplayMapStyleBtn").textContent = `Map: ${getPosDisplayMapStyleLabel(posDisplayMapStyle)}`;
 }
 
 function savePosDisplayCoordsFromInput(){
@@ -3220,6 +3268,7 @@ function postPosDisplayMapUpdate(){
     roll: att.roll,
     zoom_norm: getPosDisplayLensZoomNorm(),
     sim_mode: !!posDisplaySimMode,
+    map_style: normalizePosDisplayMapStyle(posDisplayMapStyle),
   }, "*");
 }
 
@@ -4247,6 +4296,9 @@ function bindUI(){
       try { localStorage.setItem(POS_DISPLAY_SIM_MODE_STORAGE_KEY, posDisplaySimMode ? "1" : "0"); } catch {}
       postPosDisplayMapUpdate();
     };
+  }
+  if ($("posDisplayMapStyleBtn")){
+    $("posDisplayMapStyleBtn").onclick = () => cyclePosDisplayMapStyle();
   }
   $("screenBrightnessSelect").onchange = (e) => {
     const pct = clamp(parseInt(e.target.value, 10) || 50, 10, 100);
