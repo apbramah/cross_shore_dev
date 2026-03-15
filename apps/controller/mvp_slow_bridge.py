@@ -1051,7 +1051,8 @@ def _push_head_network_config(index: int, config: dict[str, Any], route_ip_hint:
     configured_ip = str(heads[index].get("ip", "")).strip()
     previous_ip = str(head_previous_ip_by_index[index]).strip() if 0 <= index < len(head_previous_ip_by_index) else ""
     route_candidates: list[str] = []
-    for candidate in (str(route_ip_hint or "").strip(), previous_ip, configured_ip):
+    # Prefer previous IP first: when a row is edited/saved, the head is most likely still on old IP.
+    for candidate in (previous_ip, str(route_ip_hint or "").strip(), configured_ip):
         c = str(candidate or "").strip()
         if c and c not in route_candidates:
             route_candidates.append(c)
@@ -1073,25 +1074,28 @@ def _push_head_network_config(index: int, config: dict[str, Any], route_ip_hint:
     gw_hi, gw_lo = _ipv4_u32_to_hi_lo(gw_u32)
     slow_apply_id = (slow_apply_id + 1) & 0xFFFF
     apply_id = slow_apply_id
-    steps = [
+    field_steps = [
         (mvp_protocol.SLOW_KEY_NETCFG_IP_HI, ip_hi),
         (mvp_protocol.SLOW_KEY_NETCFG_IP_LO, ip_lo),
         (mvp_protocol.SLOW_KEY_NETCFG_GW_HI, gw_hi),
         (mvp_protocol.SLOW_KEY_NETCFG_GW_LO, gw_lo),
         (mvp_protocol.SLOW_KEY_NETCFG_PREFIX, int(norm["prefix"])),
-        (mvp_protocol.SLOW_KEY_NETCFG_APPLY, int(index) + 1),
     ]
+    apply_step = (mvp_protocol.SLOW_KEY_NETCFG_APPLY, int(index) + 1)
     any_send_ok = False
     for route_ip in valid_routes:
-        route_ok_all = True
-        for key_id, value in steps:
-            slow_seq = (slow_seq + 1) & 0xFFFF
-            pkt = mvp_protocol.build_slow_cmd_packet(slow_seq, apply_id, int(key_id), int(value))
-            if not mvp_protocol.send_udp_to(route_ip, port, pkt):
-                route_ok_all = False
-                break
-        if route_ok_all:
-            any_send_ok = True
+        # UDP is lossy and unordered. Send two passes, and send APPLY twice per pass.
+        for _ in range(2):
+            for key_id, value in field_steps:
+                slow_seq = (slow_seq + 1) & 0xFFFF
+                pkt = mvp_protocol.build_slow_cmd_packet(slow_seq, apply_id, int(key_id), int(value))
+                if mvp_protocol.send_udp_to(route_ip, port, pkt):
+                    any_send_ok = True
+            for _ in range(2):
+                slow_seq = (slow_seq + 1) & 0xFFFF
+                pkt = mvp_protocol.build_slow_cmd_packet(slow_seq, apply_id, int(apply_step[0]), int(apply_step[1]))
+                if mvp_protocol.send_udp_to(route_ip, port, pkt):
+                    any_send_ok = True
     if not any_send_ok:
         _set_head_network_push_status(index, "send_error", "slow_send_failed", apply_id=apply_id)
         return False, "slow_send_failed"
