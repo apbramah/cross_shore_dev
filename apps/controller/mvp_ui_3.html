@@ -695,13 +695,12 @@
     .head-picker-head { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-shrink:0; }
     .head-picker-title { margin:0; font-size:16px; color:#dbe8ff; }
     .head-picker-grid { display:grid; grid-template-columns:repeat(5,1fr); grid-template-rows:repeat(3,1fr); gap:10px; flex:1; min-height:0; overflow:hidden; }
-    .head-picker-grid .head-option { height:100%; min-height:64px; border-radius:10px; border:2px solid #465b7f; background:#243349; color:#e8f2ff; font-weight:700; font-size:clamp(14px, 3.2vw, 20px); display:flex; align-items:center; justify-content:center; padding:8px; text-align:center; position:relative; }
+    .head-picker-grid .head-option { height:100%; min-height:64px; border-radius:10px; border:2px solid #465b7f; background:rgba(36,51,73,.55); color:#e8f2ff; font-weight:700; font-size:clamp(14px, 3.2vw, 20px); display:flex; align-items:center; justify-content:center; padding:8px; text-align:center; position:relative; }
     .head-picker-grid .head-option .head-option-label { display:block; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .head-picker-grid .head-option .head-availability { position:absolute; top:8px; right:8px; width:10px; height:10px; border-radius:50%; border:1px solid rgba(255,255,255,.45); background:#6f7e95; }
-    .head-picker-grid .head-option .head-availability.avail-ok { background:#4ad97a; box-shadow:0 0 8px rgba(74,217,122,.45); }
-    .head-picker-grid .head-option .head-availability.avail-fail { background:#f07a7a; box-shadow:0 0 8px rgba(240,122,122,.35); }
-    .head-picker-grid .head-option .head-availability.avail-unknown { background:#8a95a8; opacity:.75; }
-    .head-picker-grid .head-option.active { border-color:var(--accent); box-shadow:0 0 0 2px rgba(87,167,255,.35) inset; background:#284362; }
+    .head-picker-grid .head-option.avail-ok { background:rgba(74,217,122,.2); border-color:rgba(74,217,122,.55); }
+    .head-picker-grid .head-option.avail-fail,
+    .head-picker-grid .head-option.avail-unknown { background:rgba(240,122,122,.18); border-color:rgba(240,122,122,.45); }
+    .head-picker-grid .head-option.active { border-color:#4ad97a !important; box-shadow:0 0 0 2px rgba(74,217,122,.45) inset, 0 0 18px rgba(74,217,122,.55), 0 0 32px rgba(74,217,122,.32) !important; background:rgba(36,86,52,.46) !important; }
     .head-picker-grid .head-option.empty { opacity:0.5; cursor:default; }
     .head-picker-actions { display:flex; justify-content:flex-end; gap:8px; flex-shrink:0; }
     .head-config-editor { position:fixed; inset:0; background:rgba(0,0,0,.7); display:none; align-items:center; justify-content:center; z-index:18; }
@@ -3626,16 +3625,13 @@ function renderHeadPickerList(){
   for (let i = 0; i < 15; i++){
     const b = document.createElement("button");
     b.type = "button";
-    b.className = "head-option" + (selected === i ? " active" : "") + (i >= headCount ? " empty" : "");
+    const avail = headAvailabilityState(i);
+    b.className = "head-option" + (selected === i ? " active" : "") + ` ${avail.cls}` + (i >= headCount ? " empty" : "");
     const label = document.createElement("span");
     label.className = "head-option-label";
     label.textContent = getHeadLabel(i);
-    const avail = headAvailabilityState(i);
-    const dot = document.createElement("span");
-    dot.className = `head-availability ${avail.cls}`;
-    dot.title = `Head ${i + 1}: ${avail.label}`;
     b.appendChild(label);
-    b.appendChild(dot);
+    b.title = `Head ${i + 1}: ${avail.label}`;
     b.onclick = () => {
       $("heads").value = String(i);
       requestHeadSelection(i);
