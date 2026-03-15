@@ -1283,7 +1283,7 @@
       <div class="head-config-body">
         <div class="table-wrap" style="max-height:none;">
           <table>
-            <thead><tr><th>#</th><th>Name</th><th>IP</th><th>Prefix</th><th>Gateway</th><th>Ping</th><th>Save</th></tr></thead>
+            <thead><tr><th>#</th><th>Name</th><th>IP</th><th>Prefix</th><th>Gateway</th><th>Ping</th><th>Ping Status</th><th>Save</th></tr></thead>
             <tbody id="headTableBodyEditor"></tbody>
           </table>
         </div>
@@ -1331,6 +1331,7 @@ let keyboardShift = false;
 let keyboardCaps = false;
 let networkDraft = null;
 let networkDirty = { pi_lan: false, heads: {} };
+let pingStatusByHead = {};
 const INPUT_DEBOUNCE_MS = 100;
 const INPUT_GROUP_LOCKOUT_MS = 175;
 let inputLastActionMs = Array(15).fill(0);
@@ -4090,6 +4091,7 @@ function renderIpConfigTable(){
       <td><input id="h_prefix_${i}" readonly value="${h.prefix ?? 24}" /></td>
       <td><input id="h_gw_${i}" readonly value="${h.gateway || ""}" /></td>
       <td><button id="h_ping_${i}">Ping Now</button></td>
+      <td id="h_ping_status_${i}">${pingStatusByHead[i] || "-"}</td>
       <td><button id="h_save_${i}">Save</button></td>
     `;
     body.appendChild(tr);
@@ -4113,6 +4115,9 @@ function renderIpConfigTable(){
     };
     $(`h_ping_${i}`).onclick = () => {
       const ip = $(`h_ip_${i}`).value || "(no ip)";
+      pingStatusByHead[i] = "pending...";
+      const statusCell = $(`h_ping_status_${i}`);
+      if (statusCell) statusCell.textContent = pingStatusByHead[i];
       setEvent(`ping head #${i+1} ${ip}...`);
       send({ type: "PING_HEAD", index: i });
     };
@@ -4159,6 +4164,12 @@ function connectWs(){
         setEvent(msg.ok ? "wifi scan complete" : `wifi scan failed: ${msg.message}`);
       } else if (msg.type === "PING_HEAD_RESULT"){
         const firstLine = String(msg.message || "").split("\n")[0];
+        const idx = Number(msg.index);
+        if (Number.isFinite(idx) && idx >= 0){
+          pingStatusByHead[idx] = `${msg.ok ? "ok" : "fail"}${firstLine ? `: ${firstLine}` : ""}`;
+          const statusCell = $(`h_ping_status_${idx}`);
+          if (statusCell) statusCell.textContent = pingStatusByHead[idx];
+        }
         setEvent(`PING_HEAD #${(Number(msg.index) || 0) + 1} ${msg.ip || ""}: ${msg.ok ? "ok" : "fail"} ${firstLine}`);
       } else if (msg.type === "LIST_USER_PROFILES_RESULT"){
         if (!state.ui_config) state.ui_config = {};
