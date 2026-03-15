@@ -759,10 +759,13 @@
 
       map = L.map("map", { zoomControl: true }).setView([defaultLat, defaultLon], 16);
       var providers = [
+        // Prefer providers that are typically more tolerant of kiosk/local origins.
+        { url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", attribution: "&copy; OpenStreetMap, &copy; CARTO" },
+        { url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", attribution: "&copy; OpenStreetMap, &copy; CARTO" },
+        // Keep OSM endpoints as last-resort fallback. Some environments block file:// origins by referer policy.
         { url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", attribution: "&copy; OpenStreetMap contributors" },
         { url: "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png", attribution: "&copy; OpenStreetMap contributors" },
         { url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", attribution: "&copy; OpenStreetMap contributors" },
-        { url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", attribution: "&copy; OpenStreetMap, &copy; CARTO" },
       ];
       function activateTileProvider(index) {
         if (!map) return;
