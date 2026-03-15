@@ -409,6 +409,7 @@ head_network_push_status: list[dict[str, Any]] = [
     for _ in range(15)
 ]
 head_network_push_pending: dict[int, dict[str, Any]] = {}
+head_previous_ip_by_index: list[str] = ["" for _ in range(15)]
 # Zoom normalization: track observed lens zoom range, expose zoom_norm in [0, 1].
 _zoom_raw_min: float = 0.0
 _zoom_raw_max: float = 1.0
@@ -1047,17 +1048,24 @@ def _push_head_network_config(index: int, config: dict[str, Any], route_ip_hint:
     if not ok:
         _set_head_network_push_status(index, "invalid", msg)
         return False, msg
-    route_ip = str(route_ip_hint or "").strip()
-    if not route_ip:
-        route_ip = str(heads[index].get("ip", "")).strip()
-    if not route_ip:
+    configured_ip = str(heads[index].get("ip", "")).strip()
+    previous_ip = str(head_previous_ip_by_index[index]).strip() if 0 <= index < len(head_previous_ip_by_index) else ""
+    route_candidates: list[str] = []
+    for candidate in (str(route_ip_hint or "").strip(), previous_ip, configured_ip):
+        c = str(candidate or "").strip()
+        if c and c not in route_candidates:
+            route_candidates.append(c)
+    if not route_candidates:
         _set_head_network_push_status(index, "send_error", "missing_route_ip")
         return False, "missing_route_ip"
-    # Route IP must be legal too to avoid sending to malformed destinations.
-    route_ok, _, route_msg = _parse_ipv4_parts(route_ip)
-    if not route_ok:
-        _set_head_network_push_status(index, "send_error", route_msg)
-        return False, route_msg
+    valid_routes: list[str] = []
+    for ip in route_candidates:
+        route_ok, _, _ = _parse_ipv4_parts(ip)
+        if route_ok:
+            valid_routes.append(ip)
+    if not valid_routes:
+        _set_head_network_push_status(index, "send_error", "invalid_route_ip")
+        return False, "invalid_route_ip"
     port = int(heads[index].get("port_slow_cmd", mvp_protocol.SLOW_CMD_PORT))
     ip_u32 = _ipv4_parts_to_u32([int(x) for x in norm["ip"].split(".")])
     gw_u32 = _ipv4_parts_to_u32([int(x) for x in norm["gateway"].split(".")])
@@ -1073,14 +1081,22 @@ def _push_head_network_config(index: int, config: dict[str, Any], route_ip_hint:
         (mvp_protocol.SLOW_KEY_NETCFG_PREFIX, int(norm["prefix"])),
         (mvp_protocol.SLOW_KEY_NETCFG_APPLY, int(index) + 1),
     ]
-    for key_id, value in steps:
-        slow_seq = (slow_seq + 1) & 0xFFFF
-        pkt = mvp_protocol.build_slow_cmd_packet(slow_seq, apply_id, int(key_id), int(value))
-        if not mvp_protocol.send_udp_to(route_ip, port, pkt):
-            _set_head_network_push_status(index, "send_error", "slow_send_failed", apply_id=apply_id)
-            return False, "slow_send_failed"
+    any_send_ok = False
+    for route_ip in valid_routes:
+        route_ok_all = True
+        for key_id, value in steps:
+            slow_seq = (slow_seq + 1) & 0xFFFF
+            pkt = mvp_protocol.build_slow_cmd_packet(slow_seq, apply_id, int(key_id), int(value))
+            if not mvp_protocol.send_udp_to(route_ip, port, pkt):
+                route_ok_all = False
+                break
+        if route_ok_all:
+            any_send_ok = True
+    if not any_send_ok:
+        _set_head_network_push_status(index, "send_error", "slow_send_failed", apply_id=apply_id)
+        return False, "slow_send_failed"
     head_network_push_pending[apply_id] = {"index": index, "sent_at": time.time()}
-    _set_head_network_push_status(index, "awaiting_ack", f"sent_to_{route_ip}", apply_id=apply_id)
+    _set_head_network_push_status(index, "awaiting_ack", f"sent_to_{','.join(valid_routes)}", apply_id=apply_id)
     return True, "head_network_push_sent"
 
 
@@ -1455,10 +1471,13 @@ def _set_head_config(index: int, config: dict[str, Any]) -> tuple[bool, str]:
     if not ok:
         return False, msg
     h = network_user["heads"][index]
+    old_ip = str(h.get("ip", "")).strip()
     h["name"] = norm["name"] if norm["name"] else h.get("name", f"HEAD-{index+1:02d}")
     h["ip"] = norm["ip"]
     h["gateway"] = norm["gateway"]
     h["prefix"] = int(norm["prefix"])
+    if old_ip and old_ip != h["ip"] and 0 <= index < len(head_previous_ip_by_index):
+        head_previous_ip_by_index[index] = old_ip
     for key in ("port_fast", "port_slow_cmd"):
         if key in config:
             h[key] = int(config[key])
