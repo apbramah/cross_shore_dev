@@ -396,7 +396,7 @@
     .table-wrap { max-height:360px; overflow:auto; border:1px solid var(--border); border-radius:8px; }
     table { width:100%; border-collapse:collapse; font-size:13px; }
     th, td { border-bottom:1px solid #2f3e57; padding:6px; text-align:left; }
-    #page-ipconfig td.ping-status-cell {
+    #page-ipconfig td.status-cell {
       font-size:12px;
       font-weight:600;
       white-space:nowrap;
@@ -404,9 +404,9 @@
       text-overflow:ellipsis;
       max-width:260px;
     }
-    #page-ipconfig td.ping-status-cell.ping-ok { color:#7ddf9d; }
-    #page-ipconfig td.ping-status-cell.ping-fail { color:#f2b0a8; }
-    #page-ipconfig td.ping-status-cell.ping-pending { color:#b8c5d8; }
+    #page-ipconfig td.status-cell.status-ok { color:#7ddf9d; }
+    #page-ipconfig td.status-cell.status-fail { color:#f2b0a8; }
+    #page-ipconfig td.status-cell.status-pending { color:#b8c5d8; }
     .input-test-controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
     #page-inputtests .input-test-controls { display:grid; gap:8px; }
     #page-inputtests .slider-assign-grid { grid-template-columns:1fr; gap:8px; margin:0; }
@@ -1298,12 +1298,13 @@
       <div class="head-config-body">
         <div class="table-wrap" style="max-height:none;">
           <table>
-            <thead><tr><th>#</th><th>Name</th><th>IP</th><th>Prefix</th><th>Gateway</th><th>Ping</th><th>Ping Status</th><th>Save</th></tr></thead>
+            <thead><tr><th>#</th><th>Name</th><th>IP</th><th>Prefix</th><th>Gateway</th><th>Ping</th><th>Ping Status</th><th>Push Status</th><th>Save</th><th>Push</th></tr></thead>
             <tbody id="headTableBodyEditor"></tbody>
           </table>
         </div>
       </div>
       <div class="head-config-actions">
+        <button id="matchConsoleLanSubnetBtn" type="button">Match Console LAN Subnet</button>
         <button id="headConfigDone" type="button">Done</button>
       </div>
     </div>
@@ -1333,6 +1334,7 @@ let state = {
   head_feedback: {},
   connection_status: {},
   network_config: { pi_lan: {}, heads: [] },
+  head_network_push_status: [],
   wifi_status: {},
   calibration: {},
   ui_config: {},
@@ -1348,6 +1350,7 @@ let keyboardCaps = false;
 let networkDraft = null;
 let networkDirty = { pi_lan: false, heads: {} };
 let pingStatusByHead = {};
+let pushStatusByHead = {};
 const INPUT_DEBOUNCE_MS = 100;
 const INPUT_GROUP_LOCKOUT_MS = 175;
 let inputLastActionMs = Array(15).fill(0);
@@ -4115,15 +4118,18 @@ function summarizePingMessage(raw){
   return msg.length > 36 ? `${msg.slice(0, 36)}...` : msg;
 }
 
+function applyStatusCell(cell, text, tone="pending"){
+  if (!cell) return;
+  cell.className = "status-cell";
+  if (tone === "ok") cell.classList.add("status-ok");
+  else if (tone === "fail") cell.classList.add("status-fail");
+  else if (tone === "pending") cell.classList.add("status-pending");
+  cell.textContent = text || "-";
+}
+
 function setPingStatus(index, text, tone="pending"){
   pingStatusByHead[index] = { text, tone };
-  const cell = $(`h_ping_status_${index}`);
-  if (!cell) return;
-  cell.className = "ping-status-cell";
-  if (tone === "ok") cell.classList.add("ping-ok");
-  else if (tone === "fail") cell.classList.add("ping-fail");
-  else if (tone === "pending") cell.classList.add("ping-pending");
-  cell.textContent = text || "-";
+  applyStatusCell($(`h_ping_status_${index}`), text, tone);
 }
 
 function pingStatusLabel(index){
@@ -4134,6 +4140,111 @@ function pingStatusLabel(index){
 function pingStatusTone(index){
   const entry = pingStatusByHead[index];
   return entry && entry.tone ? entry.tone : "";
+}
+
+function setPushStatus(index, text, tone="pending"){
+  pushStatusByHead[index] = { text, tone };
+  applyStatusCell($(`h_push_status_${index}`), text, tone);
+}
+
+function pushStatusLabel(index){
+  const entry = pushStatusByHead[index];
+  return entry && entry.text ? entry.text : "-";
+}
+
+function pushStatusTone(index){
+  const entry = pushStatusByHead[index];
+  return entry && entry.tone ? entry.tone : "";
+}
+
+function parseIpv4Parts(raw){
+  const s = String(raw || "").trim();
+  const parts = s.split(".");
+  if (parts.length !== 4) return null;
+  const out = [];
+  for (const p of parts){
+    if (!/^\d+$/.test(p)) return null;
+    const n = Number(p);
+    if (!Number.isFinite(n) || n < 0 || n > 255) return null;
+    out.push(n);
+  }
+  if (out[0] === 0 || out[0] >= 224 || out[0] === 127) return null;
+  if (out[3] <= 0 || out[3] >= 255) return null;
+  return out;
+}
+
+function ipv4PartsToU32(parts){
+  return (((parts[0] << 24) >>> 0) | (parts[1] << 16) | (parts[2] << 8) | parts[3]) >>> 0;
+}
+
+function maskForPrefix(prefix){
+  const p = Number(prefix);
+  if (!Number.isFinite(p) || p <= 0) return 0;
+  if (p >= 32) return 0xFFFFFFFF >>> 0;
+  return (0xFFFFFFFF << (32 - p)) >>> 0;
+}
+
+function validateHeadRowForNetworkPush(i){
+  const ipParts = parseIpv4Parts($(`h_ip_${i}`).value);
+  if (!ipParts) return { ok:false, message:"invalid_ip" };
+  const gwParts = parseIpv4Parts($(`h_gw_${i}`).value);
+  if (!gwParts) return { ok:false, message:"invalid_gateway" };
+  const prefix = parseInt($(`h_prefix_${i}`).value, 10);
+  if (!Number.isFinite(prefix) || prefix < 1 || prefix > 30) return { ok:false, message:"invalid_prefix_range" };
+  const ipU32 = ipv4PartsToU32(ipParts);
+  const gwU32 = ipv4PartsToU32(gwParts);
+  if (ipU32 === gwU32) return { ok:false, message:"ip_equals_gateway" };
+  const mask = maskForPrefix(prefix);
+  if (((ipU32 & mask) >>> 0) !== ((gwU32 & mask) >>> 0)) return { ok:false, message:"ip_gateway_subnet_mismatch" };
+  return {
+    ok: true,
+    message: "ok",
+    value: {
+      name: String($(`h_name_${i}`).value || "").trim(),
+      ip: ipParts.join("."),
+      prefix,
+      gateway: gwParts.join("."),
+    },
+  };
+}
+
+function validatePiLanDraft(){
+  const ipParts = parseIpv4Parts($("piAddress").value);
+  if (!ipParts) return { ok:false, message:"invalid_pi_address" };
+  const gwParts = parseIpv4Parts($("piGateway").value);
+  if (!gwParts) return { ok:false, message:"invalid_pi_gateway" };
+  const prefix = parseInt($("piPrefix").value, 10);
+  if (!Number.isFinite(prefix) || prefix < 1 || prefix > 30) return { ok:false, message:"invalid_prefix_range" };
+  const ipU32 = ipv4PartsToU32(ipParts);
+  const gwU32 = ipv4PartsToU32(gwParts);
+  if (ipU32 === gwU32) return { ok:false, message:"ip_equals_gateway" };
+  const mask = maskForPrefix(prefix);
+  if (((ipU32 & mask) >>> 0) !== ((gwU32 & mask) >>> 0)) return { ok:false, message:"ip_gateway_subnet_mismatch" };
+  return { ok:true, value:{ address: ipParts.join("."), prefix, gateway: gwParts.join(".") } };
+}
+
+function matchConsoleLanSubnetDraft(){
+  syncNetworkDraftFromState();
+  const piParts = parseIpv4Parts($("piAddress").value) || [];
+  const gwParts = parseIpv4Parts($("piGateway").value) || [];
+  const prefix = parseInt($("piPrefix").value, 10);
+  if (piParts.length !== 4 || gwParts.length !== 4 || !Number.isFinite(prefix) || prefix < 1 || prefix > 30){
+    setEvent("match subnet failed: invalid Pi LAN values");
+    return;
+  }
+  const subnetPrefix = `${piParts[0]}.${piParts[1]}.${piParts[2]}`;
+  while ((networkDraft.heads || []).length < 15) networkDraft.heads.push({});
+  for (let i = 0; i < 15; i++){
+    const h = networkDraft.heads[i] || {};
+    const octet = Math.max(1, Math.min(254, 10 + i));
+    h.ip = `${subnetPrefix}.${octet}`;
+    h.prefix = prefix;
+    h.gateway = gwParts.join(".");
+    networkDraft.heads[i] = h;
+    networkDirty.heads[i] = true;
+  }
+  renderIpConfigTable();
+  setEvent("matched heads to console LAN subnet");
 }
 
 function renderIpConfigTable(){
@@ -4156,27 +4267,28 @@ function renderIpConfigTable(){
       <td><input id="h_prefix_${i}" readonly value="${h.prefix ?? 24}" /></td>
       <td><input id="h_gw_${i}" readonly value="${h.gateway || ""}" /></td>
       <td><button id="h_ping_${i}">Ping Now</button></td>
-      <td id="h_ping_status_${i}" class="ping-status-cell">${pingStatusLabel(i)}</td>
+      <td id="h_ping_status_${i}" class="status-cell">${pingStatusLabel(i)}</td>
+      <td id="h_push_status_${i}" class="status-cell">${pushStatusLabel(i)}</td>
       <td><button id="h_save_${i}">Save</button></td>
+      <td><button id="h_push_${i}">Push To Head</button></td>
     `;
     body.appendChild(tr);
-    if (pingStatusTone(i) === "ok") $(`h_ping_status_${i}`).classList.add("ping-ok");
-    else if (pingStatusTone(i) === "fail") $(`h_ping_status_${i}`).classList.add("ping-fail");
-    else if (pingStatusTone(i) === "pending") $(`h_ping_status_${i}`).classList.add("ping-pending");
+    applyStatusCell($(`h_ping_status_${i}`), pingStatusLabel(i), pingStatusTone(i) || "");
+    applyStatusCell($(`h_push_status_${i}`), pushStatusLabel(i), pushStatusTone(i) || "");
     ["name","ip","prefix","gw"].forEach(k => {
       const id = k === "gw" ? `h_gw_${i}` : `h_${k}_${i}`;
       $(id).onclick = () => openKeyboard($(id));
     });
     $(`h_save_${i}`).onclick = () => {
+      const v = validateHeadRowForNetworkPush(i);
+      if (!v.ok){
+        setEvent(`HEAD_CONFIG invalid #${i+1}: ${v.message}`);
+        return;
+      }
       send({
         type: "SET_HEAD_CONFIG",
         index: i,
-        value: {
-          name: $(`h_name_${i}`).value,
-          ip: $(`h_ip_${i}`).value,
-          prefix: parseInt($(`h_prefix_${i}`).value, 10) || 24,
-          gateway: $(`h_gw_${i}`).value,
-        },
+        value: v.value,
       });
       networkDirty.heads[i] = false;
       setEvent(`save head config #${i+1}`);
@@ -4186,6 +4298,23 @@ function renderIpConfigTable(){
       setPingStatus(i, "PENDING", "pending");
       setEvent(`ping head #${i+1} ${ip}...`);
       send({ type: "PING_HEAD", index: i });
+    };
+    $(`h_push_${i}`).onclick = () => {
+      const v = validateHeadRowForNetworkPush(i);
+      if (!v.ok){
+        setPushStatus(i, `INVALID: ${v.message}`, "fail");
+        setEvent(`PUSH_HEAD_NETWORK #${i+1} invalid: ${v.message}`);
+        return;
+      }
+      const routeHint = String((((state.heads || [])[i] || {}).ip) || "").trim();
+      setPushStatus(i, "SENDING", "pending");
+      send({
+        type: "PUSH_HEAD_NETWORK_CONFIG",
+        index: i,
+        value: v.value,
+        route_ip_hint: routeHint,
+      });
+      setEvent(`push head network #${i+1} route=${routeHint || v.value.ip}`);
     };
   }
 }
@@ -4221,6 +4350,18 @@ function connectWs(){
       if (msg.type === "STATE"){
         const frozen = getFrozenActiveSlot();
         state = Object.assign(state, msg);
+        const pushRows = Array.isArray(state.head_network_push_status) ? state.head_network_push_status : [];
+        pushStatusByHead = {};
+        for (let i = 0; i < pushRows.length; i++){
+          const row = pushRows[i] || {};
+          const text = String(row.message || row.state || "-").trim() || "-";
+          let tone = "";
+          const s = String(row.state || "").toLowerCase();
+          if (s === "confirmed") tone = "ok";
+          else if (s === "awaiting_ack" || s === "sending") tone = "pending";
+          else if (s && s !== "idle") tone = "fail";
+          pushStatusByHead[i] = { text, tone };
+        }
         if (frozen) setCommandValue(frozen.key, frozen.value);
         restoreActiveValueFreeze();
         buildHeads();
@@ -4236,6 +4377,20 @@ function connectWs(){
           else setPingStatus(idx, `FAIL: ${summarizePingMessage(firstLine)}`, "fail");
         }
         setEvent(`PING_HEAD #${(Number(msg.index) || 0) + 1} ${msg.ip || ""}: ${msg.ok ? "ok" : "fail"} ${firstLine}`);
+      } else if (msg.type === "HEAD_CONFIG_SAVED"){
+        const idx = Number(msg.index);
+        if (Number.isFinite(idx) && idx >= 0 && msg.ok) networkDirty.heads[idx] = false;
+        setEvent(`HEAD_CONFIG #${(idx || 0) + 1}: ${msg.ok ? "ok" : "fail"} ${msg.message || ""}`);
+      } else if (msg.type === "PI_LAN_SAVED"){
+        if (msg.ok) networkDirty.pi_lan = false;
+        setEvent(`PI_LAN_SAVED: ${msg.ok ? "ok" : "fail"} ${msg.message || ""}`);
+      } else if (msg.type === "PUSH_HEAD_NETWORK_RESULT"){
+        const idx = Number(msg.index);
+        if (Number.isFinite(idx) && idx >= 0){
+          if (msg.ok) setPushStatus(idx, "SENT (awaiting head ACK)", "pending");
+          else setPushStatus(idx, `FAIL: ${String(msg.message || "push_failed")}`, "fail");
+        }
+        setEvent(`PUSH_HEAD_NETWORK #${(idx || 0) + 1}: ${msg.ok ? "ok" : "fail"} ${msg.message || ""}`);
       } else if (msg.type === "LIST_USER_PROFILES_RESULT"){
         if (!state.ui_config) state.ui_config = {};
         if (!state.ui_config.profiles) state.ui_config.profiles = {};
@@ -4446,12 +4601,18 @@ function bindUI(){
     send({ type: "SET_SCREEN_BRIGHTNESS", percent: pct });
   };
   $("savePiLan").onclick = () => {
+    const v = validatePiLanDraft();
+    if (!v.ok){
+      setEvent(`PI_LAN invalid: ${v.message}`);
+      return;
+    }
     send({
       type: "SET_PI_LAN_CONFIG",
-      value: { address: $("piAddress").value, prefix: parseInt($("piPrefix").value, 10) || 24, gateway: $("piGateway").value },
+      value: v.value,
     });
     networkDirty.pi_lan = false;
   };
+  if ($("matchConsoleLanSubnetBtn")) $("matchConsoleLanSubnetBtn").onclick = matchConsoleLanSubnetDraft;
   $("applyNetwork").onclick = () => send({ type: "APPLY_NETWORK_CONFIG" });
   $("factoryResetNetwork").onclick = () => {
     networkDirty = { pi_lan: false, heads: {} };

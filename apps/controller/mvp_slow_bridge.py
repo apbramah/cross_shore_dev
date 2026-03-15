@@ -404,6 +404,11 @@ network_factory = _default_network_model(len(heads), heads)
 network_user = _default_network_model(len(heads), heads)
 
 head_feedback: dict[str, Any] = {"slow": {}, "lens": {}, "bgc": {}, "updated_at": 0.0}
+head_network_push_status: list[dict[str, Any]] = [
+    {"state": "idle", "message": "", "updated_at": 0.0, "apply_id": None}
+    for _ in range(15)
+]
+head_network_push_pending: dict[int, dict[str, Any]] = {}
 # Zoom normalization: track observed lens zoom range, expose zoom_norm in [0, 1].
 _zoom_raw_min: float = 0.0
 _zoom_raw_max: float = 1.0
@@ -655,6 +660,108 @@ def _load_network_models() -> None:
     _safe_save_json(NETWORK_FACTORY_FILE, network_factory)
     _safe_save_json(NETWORK_USER_FILE, network_user)
     _apply_network_user_to_heads()
+
+
+def _parse_ipv4_parts(value: Any) -> tuple[bool, list[int], str]:
+    raw = str(value or "").strip()
+    parts = raw.split(".")
+    if len(parts) != 4:
+        return False, [], "invalid_ipv4_format"
+    out: list[int] = []
+    for p in parts:
+        if not p or not p.isdigit():
+            return False, [], "invalid_ipv4_octet"
+        n = int(p)
+        if n < 0 or n > 255:
+            return False, [], "invalid_ipv4_octet_range"
+        out.append(n)
+    # Restrict to normal unicast host IPs for deterministic cable-recovery behavior.
+    if out[0] == 0 or out[0] >= 224 or out[0] == 127:
+        return False, [], "invalid_ipv4_unicast_range"
+    if out[3] <= 0 or out[3] >= 255:
+        return False, [], "invalid_ipv4_host_octet"
+    return True, out, ""
+
+
+def _ipv4_parts_to_str(parts: list[int]) -> str:
+    return ".".join(str(int(p) & 0xFF) for p in parts[:4])
+
+
+def _ipv4_parts_to_u32(parts: list[int]) -> int:
+    return (
+        ((int(parts[0]) & 0xFF) << 24)
+        | ((int(parts[1]) & 0xFF) << 16)
+        | ((int(parts[2]) & 0xFF) << 8)
+        | (int(parts[3]) & 0xFF)
+    )
+
+
+def _ipv4_u32_to_hi_lo(value: int) -> tuple[int, int]:
+    v = int(value) & 0xFFFFFFFF
+    return (v >> 16) & 0xFFFF, v & 0xFFFF
+
+
+def _prefix_mask_u32(prefix: int) -> int:
+    if prefix <= 0:
+        return 0
+    if prefix >= 32:
+        return 0xFFFFFFFF
+    return ((0xFFFFFFFF << (32 - int(prefix))) & 0xFFFFFFFF)
+
+
+def _same_subnet(ip_a_u32: int, ip_b_u32: int, prefix: int) -> bool:
+    mask = _prefix_mask_u32(int(prefix))
+    return (int(ip_a_u32) & mask) == (int(ip_b_u32) & mask)
+
+
+def _validate_head_network_config(config: dict[str, Any]) -> tuple[bool, str, dict[str, Any]]:
+    try:
+        prefix = int(config.get("prefix", 24))
+    except Exception:
+        return False, "invalid_prefix", {}
+    if prefix < 1 or prefix > 30:
+        return False, "invalid_prefix_range", {}
+    ok_ip, ip_parts, ip_msg = _parse_ipv4_parts(config.get("ip", ""))
+    if not ok_ip:
+        return False, ip_msg, {}
+    ok_gw, gw_parts, gw_msg = _parse_ipv4_parts(config.get("gateway", ""))
+    if not ok_gw:
+        return False, gw_msg, {}
+    ip_u32 = _ipv4_parts_to_u32(ip_parts)
+    gw_u32 = _ipv4_parts_to_u32(gw_parts)
+    if ip_u32 == gw_u32:
+        return False, "ip_equals_gateway", {}
+    if not _same_subnet(ip_u32, gw_u32, prefix):
+        return False, "ip_gateway_subnet_mismatch", {}
+    out = {
+        "name": str(config.get("name", "")).strip(),
+        "ip": _ipv4_parts_to_str(ip_parts),
+        "gateway": _ipv4_parts_to_str(gw_parts),
+        "prefix": int(prefix),
+    }
+    return True, "ok", out
+
+
+def _validate_pi_lan_config(config: dict[str, Any]) -> tuple[bool, str, dict[str, Any]]:
+    try:
+        prefix = int(config.get("prefix", 24))
+    except Exception:
+        return False, "invalid_prefix", {}
+    if prefix < 1 or prefix > 30:
+        return False, "invalid_prefix_range", {}
+    ok_ip, ip_parts, ip_msg = _parse_ipv4_parts(config.get("address", ""))
+    if not ok_ip:
+        return False, ip_msg, {}
+    ok_gw, gw_parts, gw_msg = _parse_ipv4_parts(config.get("gateway", ""))
+    if not ok_gw:
+        return False, gw_msg, {}
+    ip_u32 = _ipv4_parts_to_u32(ip_parts)
+    gw_u32 = _ipv4_parts_to_u32(gw_parts)
+    if ip_u32 == gw_u32:
+        return False, "ip_equals_gateway", {}
+    if not _same_subnet(ip_u32, gw_u32, prefix):
+        return False, "ip_gateway_subnet_mismatch", {}
+    return True, "ok", {"address": _ipv4_parts_to_str(ip_parts), "prefix": prefix, "gateway": _ipv4_parts_to_str(gw_parts)}
 
 
 def _apply_network_user_to_heads() -> None:
@@ -911,6 +1018,72 @@ def _selected_head_ip() -> str:
     return ""
 
 
+def _resolve_head_index_by_ip(ip: str) -> int:
+    ip_s = str(ip or "").strip()
+    if not ip_s:
+        return -1
+    for i, h in enumerate(heads):
+        if str(h.get("ip", "")).strip() == ip_s:
+            return i
+    return -1
+
+
+def _set_head_network_push_status(index: int, state_name: str, message: str, apply_id: int | None = None) -> None:
+    if index < 0 or index >= len(head_network_push_status):
+        return
+    head_network_push_status[index] = {
+        "state": str(state_name),
+        "message": str(message),
+        "updated_at": time.time(),
+        "apply_id": int(apply_id) if apply_id is not None else None,
+    }
+
+
+def _push_head_network_config(index: int, config: dict[str, Any], route_ip_hint: str = "") -> tuple[bool, str]:
+    global slow_seq, slow_apply_id
+    if index < 0 or index >= len(heads):
+        return False, "index_out_of_range"
+    ok, msg, norm = _validate_head_network_config(config)
+    if not ok:
+        _set_head_network_push_status(index, "invalid", msg)
+        return False, msg
+    route_ip = str(route_ip_hint or "").strip()
+    if not route_ip:
+        route_ip = str(heads[index].get("ip", "")).strip()
+    if not route_ip:
+        _set_head_network_push_status(index, "send_error", "missing_route_ip")
+        return False, "missing_route_ip"
+    # Route IP must be legal too to avoid sending to malformed destinations.
+    route_ok, _, route_msg = _parse_ipv4_parts(route_ip)
+    if not route_ok:
+        _set_head_network_push_status(index, "send_error", route_msg)
+        return False, route_msg
+    port = int(heads[index].get("port_slow_cmd", mvp_protocol.SLOW_CMD_PORT))
+    ip_u32 = _ipv4_parts_to_u32([int(x) for x in norm["ip"].split(".")])
+    gw_u32 = _ipv4_parts_to_u32([int(x) for x in norm["gateway"].split(".")])
+    ip_hi, ip_lo = _ipv4_u32_to_hi_lo(ip_u32)
+    gw_hi, gw_lo = _ipv4_u32_to_hi_lo(gw_u32)
+    slow_apply_id = (slow_apply_id + 1) & 0xFFFF
+    apply_id = slow_apply_id
+    steps = [
+        (mvp_protocol.SLOW_KEY_NETCFG_IP_HI, ip_hi),
+        (mvp_protocol.SLOW_KEY_NETCFG_IP_LO, ip_lo),
+        (mvp_protocol.SLOW_KEY_NETCFG_GW_HI, gw_hi),
+        (mvp_protocol.SLOW_KEY_NETCFG_GW_LO, gw_lo),
+        (mvp_protocol.SLOW_KEY_NETCFG_PREFIX, int(norm["prefix"])),
+        (mvp_protocol.SLOW_KEY_NETCFG_APPLY, int(index) + 1),
+    ]
+    for key_id, value in steps:
+        slow_seq = (slow_seq + 1) & 0xFFFF
+        pkt = mvp_protocol.build_slow_cmd_packet(slow_seq, apply_id, int(key_id), int(value))
+        if not mvp_protocol.send_udp_to(route_ip, port, pkt):
+            _set_head_network_push_status(index, "send_error", "slow_send_failed", apply_id=apply_id)
+            return False, "slow_send_failed"
+    head_network_push_pending[apply_id] = {"index": index, "sent_at": time.time()}
+    _set_head_network_push_status(index, "awaiting_ack", f"sent_to_{route_ip}", apply_id=apply_id)
+    return True, "head_network_push_sent"
+
+
 def _normalize_lens_feedback(lens_payload: dict[str, Any]) -> dict[str, Any]:
     global _zoom_raw_min, _zoom_raw_max
     lens_payload = dict(lens_payload or {})
@@ -961,6 +1134,7 @@ def _state_payload() -> dict[str, Any]:
         "head_reachability": copy.deepcopy(head_reachability),
         "connection_status": copy.deepcopy(connection_status),
         "network_config": copy.deepcopy(network_user),
+        "head_network_push_status": copy.deepcopy(head_network_push_status),
         "wifi_status": copy.deepcopy(wifi_status),
         "ifconfig": copy.deepcopy(iface_cli_outputs),
         "display": copy.deepcopy(display_status),
@@ -1029,23 +1203,48 @@ async def telemetry_receiver_task() -> None:
             await asyncio.sleep(0.05)
             continue
         src_ip = str((addr or ("", 0))[0]).strip()
-        want_ip = _selected_head_ip()
-        # Bind feedback to selected head only so runtime status flips correctly.
-        if want_ip and src_ip and src_ip != want_ip:
-            continue
         ack = mvp_protocol.decode_slow_ack_packet(data)
         if ack:
-            key = next((k for k, kid in mvp_protocol.SLOW_KEY_IDS.items() if kid == ack.get("key_id")), None)
+            key_id = int(ack.get("key_id", -1))
+            apply_id = int(ack.get("apply_id", -1))
+            if key_id in mvp_protocol.NETWORK_SLOW_KEY_IDS.values():
+                if key_id == mvp_protocol.SLOW_KEY_NETCFG_APPLY:
+                    idx = -1
+                    pending = head_network_push_pending.get(apply_id)
+                    if isinstance(pending, dict):
+                        idx = int(pending.get("index", -1))
+                    if idx < 0:
+                        idx = _resolve_head_index_by_ip(src_ip)
+                    if idx >= 0:
+                        ok_state = int(ack.get("status", 0)) == 1
+                        _set_head_network_push_status(
+                            idx,
+                            "confirmed" if ok_state else "rejected",
+                            "head_ack_ok" if ok_state else "head_ack_reject",
+                            apply_id=apply_id,
+                        )
+                    if apply_id in head_network_push_pending:
+                        del head_network_push_pending[apply_id]
+                continue
+            want_ip = _selected_head_ip()
+            # Bind regular slow key feedback to selected head only.
+            if want_ip and src_ip and src_ip != want_ip:
+                continue
+            key = next((k for k, kid in mvp_protocol.SLOW_KEY_IDS.items() if kid == key_id), None)
             if key:
                 slow_apply_status[key] = {
                     "state": "confirmed" if int(ack.get("status", 1)) == 1 else "rejected",
-                    "apply_id": ack.get("apply_id"),
+                    "apply_id": apply_id,
                     "seq": ack.get("seq"),
                     "updated_at": time.time(),
                 }
             continue
         telem = mvp_protocol.decode_slow_telem_packet(data)
         if telem:
+            want_ip = _selected_head_ip()
+            # Bind telemetry to selected head only so runtime status flips correctly.
+            if want_ip and src_ip and src_ip != want_ip:
+                continue
             head_feedback["slow"] = telem.get("slow", {})
             head_feedback["lens"] = _normalize_lens_feedback(telem.get("lens", {}))
             head_feedback["bgc"] = telem.get("bgc", {})
@@ -1180,12 +1379,29 @@ def _set_screen_brightness_percent(percent: Any) -> tuple[bool, str]:
         return False, str(e)
 
 
+def _refresh_head_network_push_timeouts(timeout_s: float = 4.0) -> None:
+    now = time.time()
+    stale_apply_ids: list[int] = []
+    for apply_id, pending in list(head_network_push_pending.items()):
+        sent_at = float(pending.get("sent_at", 0.0) or 0.0)
+        if sent_at <= 0.0:
+            continue
+        if (now - sent_at) < float(timeout_s):
+            continue
+        idx = int(pending.get("index", -1))
+        _set_head_network_push_status(idx, "timeout", "head_ack_timeout", apply_id=apply_id)
+        stale_apply_ids.append(int(apply_id))
+    for apply_id in stale_apply_ids:
+        head_network_push_pending.pop(apply_id, None)
+
+
 async def status_publish_task() -> None:
     while True:
         _refresh_connection_status()
         _refresh_wifi_status()
         _refresh_iface_cli_outputs()
         _refresh_display_status()
+        _refresh_head_network_push_timeouts()
         _refresh_calibration_status()
         _write_zoom_feedback_runtime()
         await _publish_state()
@@ -1235,11 +1451,15 @@ def _ping_head(index: int) -> tuple[bool, str, str]:
 def _set_head_config(index: int, config: dict[str, Any]) -> tuple[bool, str]:
     if index < 0 or index >= 15:
         return False, "index_out_of_range"
+    ok, msg, norm = _validate_head_network_config(config)
+    if not ok:
+        return False, msg
     h = network_user["heads"][index]
-    for key in ("name", "ip", "gateway"):
-        if key in config:
-            h[key] = str(config[key]).strip()
-    for key in ("prefix", "port_fast", "port_slow_cmd"):
+    h["name"] = norm["name"] if norm["name"] else h.get("name", f"HEAD-{index+1:02d}")
+    h["ip"] = norm["ip"]
+    h["gateway"] = norm["gateway"]
+    h["prefix"] = int(norm["prefix"])
+    for key in ("port_fast", "port_slow_cmd"):
         if key in config:
             h[key] = int(config[key])
     _safe_save_json(NETWORK_USER_FILE, network_user)
@@ -1248,12 +1468,13 @@ def _set_head_config(index: int, config: dict[str, Any]) -> tuple[bool, str]:
 
 
 def _set_pi_lan_config(config: dict[str, Any]) -> tuple[bool, str]:
+    ok, msg, norm = _validate_pi_lan_config(config)
+    if not ok:
+        return False, msg
     pi = network_user.setdefault("pi_lan", {})
-    for key in ("address", "gateway"):
-        if key in config:
-            pi[key] = str(config[key]).strip()
-    if "prefix" in config:
-        pi["prefix"] = int(config["prefix"])
+    pi["address"] = norm["address"]
+    pi["gateway"] = norm["gateway"]
+    pi["prefix"] = int(norm["prefix"])
     _safe_save_json(NETWORK_USER_FILE, network_user)
     return True, "pi_lan_saved"
 
@@ -1462,6 +1683,14 @@ async def handler(websocket: Any) -> None:
                 idx = int(data.get("index", -1))
                 ok, msg = _set_head_config(idx, data.get("value", {}) or {})
                 await websocket.send(json.dumps({"type": "HEAD_CONFIG_SAVED", "index": idx, "ok": ok, "message": msg}))
+            elif msg_type == "PUSH_HEAD_NETWORK_CONFIG":
+                idx = int(data.get("index", -1))
+                cfg = data.get("value", {}) or {}
+                route_ip_hint = str(data.get("route_ip_hint", "")).strip()
+                ok, msg = _set_head_config(idx, cfg)
+                if ok:
+                    ok, msg = _push_head_network_config(idx, cfg, route_ip_hint=route_ip_hint)
+                await websocket.send(json.dumps({"type": "PUSH_HEAD_NETWORK_RESULT", "index": idx, "ok": ok, "message": msg}))
             elif msg_type == "APPLY_NETWORK_CONFIG":
                 ok, msg = _apply_pi_lan_config()
                 await websocket.send(json.dumps({"type": "NETWORK_APPLIED", "ok": ok, "message": msg}))

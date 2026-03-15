@@ -36,6 +36,12 @@ SLOW_KEY_ROLL_ACCEL = 15
 SLOW_KEY_PAN_GAIN = 16
 SLOW_KEY_TILT_GAIN = 17
 SLOW_KEY_ROLL_GAIN = 18
+SLOW_KEY_NETCFG_IP_HI = 40
+SLOW_KEY_NETCFG_IP_LO = 41
+SLOW_KEY_NETCFG_GW_HI = 42
+SLOW_KEY_NETCFG_GW_LO = 43
+SLOW_KEY_NETCFG_PREFIX = 44
+SLOW_KEY_NETCFG_APPLY = 45
 
 SLOW_KEY_IDS = {
     "motors_on": SLOW_KEY_MOTORS_ON,
@@ -56,6 +62,15 @@ SLOW_KEY_IDS = {
     "pan_gain": SLOW_KEY_PAN_GAIN,
     "tilt_gain": SLOW_KEY_TILT_GAIN,
     "roll_gain": SLOW_KEY_ROLL_GAIN,
+}
+
+NETWORK_SLOW_KEY_IDS = {
+    "netcfg_ip_hi": SLOW_KEY_NETCFG_IP_HI,
+    "netcfg_ip_lo": SLOW_KEY_NETCFG_IP_LO,
+    "netcfg_gw_hi": SLOW_KEY_NETCFG_GW_HI,
+    "netcfg_gw_lo": SLOW_KEY_NETCFG_GW_LO,
+    "netcfg_prefix": SLOW_KEY_NETCFG_PREFIX,
+    "netcfg_apply": SLOW_KEY_NETCFG_APPLY,
 }
 
 # Resolve heads.json relative to this file so it works from any CWD

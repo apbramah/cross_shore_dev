@@ -13,9 +13,11 @@ from bgc import BGC
 from lens_controller import LensController, LENS_FUJI
 import fuji_lens_from_calibration
 import fuji_control_calibration
+from i2c_status_payload import build_status_frame_from_runtime
+from i2c_status_slave import I2CStatusSlave
 
 # Set False for BGC-only hardware variants with no lens connected.
-ENABLE_LENS = False
+ENABLE_LENS = True
 
 # Explicit startup Fuji ownership mode (applied once).
 # - "pc_all": zoom/focus/iris on host
@@ -24,14 +26,21 @@ FUJI_OWNERSHIP_MODE = "pc_all"
 FAST_CHANNEL_MODE = "v2"  # Set to "legacy" for immediate rollback.
 ENABLE_DUAL_CHANNEL = FAST_CHANNEL_MODE == "v2"
 ENABLE_SLOW_CHANNEL = True   # Slow receive/apply remains active in both modes.
-CTRL_DEBUG = True
+CTRL_DEBUG = False
 CTRL_DEBUG_INTERVAL_MS = 250
-ENABLE_STARTUP_BIT = False
+ENABLE_STARTUP_BIT = True
 MVP_FAST_DEBUG = False
 MVP_FAST_DEBUG_INTERVAL_MS = 5000
-SLOW_DEBUG = True
+SLOW_DEBUG = False
 # Set True to log Fuji focus input/target and UART connection (SW4 poll, FOCUS TX).
 FUJI_DEBUG = False
+I2C_STATUS_ENABLE = True
+I2C_STATUS_BUS_ID = 1
+I2C_STATUS_SDA_PIN = 4
+I2C_STATUS_SCL_PIN = 5
+I2C_STATUS_ADDRESS = 0x3A
+I2C_STATUS_FREQ_HZ = 100_000
+HEAD_NETWORK_CONFIG_FILE = "head_network_config.json"
 
 # ---------- LED ----------
 led = machine.Pin("LED", machine.Pin.OUT)
@@ -68,22 +77,179 @@ nic = network.WIZNET5K(  # type: ignore[attr-defined]
 
 nic.active(True)
 
-nic.ifconfig((
-    "192.168.60.120",
-    "255.255.255.0",
-    "192.168.60.1",
-    "8.8.8.8"
-))
+DEFAULT_ETHERNET_CONFIG = {
+    "ip": "192.168.111.14",
+    "prefix": 24,
+    "gateway": "192.168.111.1",
+    "dns": "8.8.8.8",
+}
+
+
+def _parse_ipv4_parts(value):
+    raw = str(value or "").strip()
+    parts = raw.split(".")
+    if len(parts) != 4:
+        return False, []
+    out = []
+    for p in parts:
+        if not p or (not p.isdigit()):
+            return False, []
+        n = int(p)
+        if n < 0 or n > 255:
+            return False, []
+        out.append(n)
+    if out[0] == 0 or out[0] >= 224 or out[0] == 127:
+        return False, []
+    if out[3] <= 0 or out[3] >= 255:
+        return False, []
+    return True, out
+
+
+def _ip_parts_to_u32(parts):
+    return (
+        ((int(parts[0]) & 0xFF) << 24)
+        | ((int(parts[1]) & 0xFF) << 16)
+        | ((int(parts[2]) & 0xFF) << 8)
+        | (int(parts[3]) & 0xFF)
+    )
+
+
+def _u32_to_ip_str(value):
+    v = int(value) & 0xFFFFFFFF
+    return "{}.{}.{}.{}".format((v >> 24) & 0xFF, (v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF)
+
+
+def _prefix_to_mask(prefix):
+    p = int(prefix)
+    if p <= 0:
+        return "0.0.0.0"
+    if p >= 32:
+        return "255.255.255.255"
+    mask = ((0xFFFFFFFF << (32 - p)) & 0xFFFFFFFF)
+    return _u32_to_ip_str(mask)
+
+
+def _prefix_mask_u32(prefix):
+    p = int(prefix)
+    if p <= 0:
+        return 0
+    if p >= 32:
+        return 0xFFFFFFFF
+    return ((0xFFFFFFFF << (32 - p)) & 0xFFFFFFFF)
+
+
+def _same_subnet(ip_u32, gw_u32, prefix):
+    mask = _prefix_mask_u32(prefix)
+    return (int(ip_u32) & mask) == (int(gw_u32) & mask)
+
+
+def _sanitize_network_config(raw):
+    if not isinstance(raw, dict):
+        return None
+    try:
+        prefix = int(raw.get("prefix", 24))
+    except Exception:
+        return None
+    if prefix < 1 or prefix > 30:
+        return None
+    ok_ip, ip_parts = _parse_ipv4_parts(raw.get("ip", ""))
+    ok_gw, gw_parts = _parse_ipv4_parts(raw.get("gateway", ""))
+    if not ok_ip or not ok_gw:
+        return None
+    ip_u32 = _ip_parts_to_u32(ip_parts)
+    gw_u32 = _ip_parts_to_u32(gw_parts)
+    if ip_u32 == gw_u32:
+        return None
+    if not _same_subnet(ip_u32, gw_u32, prefix):
+        return None
+    ok_dns, dns_parts = _parse_ipv4_parts(raw.get("dns", DEFAULT_ETHERNET_CONFIG["dns"]))
+    dns_ip = _u32_to_ip_str(_ip_parts_to_u32(dns_parts)) if ok_dns else DEFAULT_ETHERNET_CONFIG["dns"]
+    return {
+        "ip": _u32_to_ip_str(ip_u32),
+        "prefix": prefix,
+        "gateway": _u32_to_ip_str(gw_u32),
+        "dns": dns_ip,
+    }
+
+
+def _load_head_network_config():
+    cfg = None
+    try:
+        with open(HEAD_NETWORK_CONFIG_FILE, "r") as f:
+            cfg = json.load(f)
+    except Exception:
+        cfg = None
+    if cfg is None:
+        cfg = DEFAULT_ETHERNET_CONFIG
+    normalized = _sanitize_network_config(cfg)
+    if normalized is None:
+        normalized = dict(DEFAULT_ETHERNET_CONFIG)
+    return normalized
+
+
+def _save_head_network_config(cfg):
+    try:
+        with open(HEAD_NETWORK_CONFIG_FILE, "w") as f:
+            json.dump(cfg, f)
+        return True
+    except Exception as exc:
+        print("Failed to save head network config:", exc)
+        return False
+
+
+def _apply_nic_config(cfg):
+    ip = str(cfg.get("ip", "")).strip()
+    gateway = str(cfg.get("gateway", "")).strip()
+    dns = str(cfg.get("dns", DEFAULT_ETHERNET_CONFIG["dns"])).strip() or DEFAULT_ETHERNET_CONFIG["dns"]
+    prefix = int(cfg.get("prefix", 24))
+    mask = _prefix_to_mask(prefix)
+    try:
+        nic.ifconfig((ip, mask, gateway, dns))
+        return True, "nic_config_applied"
+    except Exception as exc:
+        return False, str(exc)
+
+
+active_network_config = _load_head_network_config()
+_ok_nic, _nic_msg = _apply_nic_config(active_network_config)
+if not _ok_nic:
+    # No fallback behavior after push; keep running and allow manual controller subnet match.
+    print("NIC config apply failed:", _nic_msg)
 
 while not nic.isconnected():
     time.sleep(0.2)
 
 print("Ethernet ready:", nic.ifconfig())
 
+i2c_status_slave = None
+if I2C_STATUS_ENABLE:
+    try:
+        i2c_status_slave = I2CStatusSlave(
+            bus_id=I2C_STATUS_BUS_ID,
+            sda_pin=I2C_STATUS_SDA_PIN,
+            scl_pin=I2C_STATUS_SCL_PIN,
+            address=I2C_STATUS_ADDRESS,
+            freq=I2C_STATUS_FREQ_HZ,
+        )
+        print(
+            "[I2C_STATUS] enabled=",
+            i2c_status_slave.available,
+            "backend=",
+            i2c_status_slave.backend_name,
+            "addr=0x{:02X}".format(I2C_STATUS_ADDRESS),
+        )
+        if not i2c_status_slave.available and i2c_status_slave.last_error:
+            print("[I2C_STATUS] init warning:", i2c_status_slave.last_error)
+    except Exception as exc:
+        i2c_status_slave = None
+        print("[I2C_STATUS] init failed:", exc)
+
 # ---------- Hardware ----------
 bgc = BGC()
 if ENABLE_LENS:
     lens = LensController(default_lens_type=LENS_FUJI)
+    detected = lens.detect_and_switch_lens_type()
+    print("[LENS] detection:", lens.get_lens_type() if detected else "none (no reply, left as fuji)")
 else:
     lens = None
 last_applied_lens_type = None
@@ -99,6 +265,13 @@ _last_fast_debug_ms = 0
 _last_slow_sender_ip = None
 _last_telem_ms = 0
 _lens_name_last_try_ms = 0
+pending_network_push = {
+    "ip_hi": None,
+    "ip_lo": None,
+    "gw_hi": None,
+    "gw_lo": None,
+    "prefix": None,
+}
 
 if lens is not None:
     print("BGC + ENG lens ready")
@@ -109,6 +282,11 @@ if FUJI_DEBUG and lens is not None:
     fuji_lens_from_calibration.FUJI_FOCUS_DEBUG = True
     fuji_control_calibration.FUJI_CONN_DEBUG = True
     print("Fuji focus/connection debug ON")
+
+if lens is not None and lens.get_lens_type() == "canon":
+    import canon_lens
+    canon_lens.CANON_DEBUG = True
+    print("Canon control debug ON")
 
 if lens is not None:
     # Lens startup is timing-sensitive on real hardware; give it a short settle window.
@@ -165,6 +343,11 @@ apply_fuji_ownership_mode_once()
 if lens is not None:
     last_applied_lens_type = lens.get_lens_type()
     last_applied_sources = lens.get_axis_sources()
+    name = lens.get_lens_full_name()
+    if name:
+        print("[LENS] Connected lens:", name)
+    else:
+        print("[LENS] Connected lens:", lens.get_lens_type(), "(name not available)")
 
 # ---------- UDP ----------
 FAST_UDP_PORT = 8888
@@ -195,6 +378,12 @@ SLOW_KEY_ROLL_ACCEL = 15
 SLOW_KEY_PAN_GAIN = 16
 SLOW_KEY_TILT_GAIN = 17
 SLOW_KEY_ROLL_GAIN = 18
+SLOW_KEY_NETCFG_IP_HI = 40
+SLOW_KEY_NETCFG_IP_LO = 41
+SLOW_KEY_NETCFG_GW_HI = 42
+SLOW_KEY_NETCFG_GW_LO = 43
+SLOW_KEY_NETCFG_PREFIX = 44
+SLOW_KEY_NETCFG_APPLY = 45
 SLOW_KEY_NAMES = {
     SLOW_KEY_MOTORS_ON: "motors_on",
     SLOW_KEY_CONTROL_MODE: "control_mode",
@@ -214,6 +403,12 @@ SLOW_KEY_NAMES = {
     SLOW_KEY_PAN_GAIN: "pan_gain",
     SLOW_KEY_TILT_GAIN: "tilt_gain",
     SLOW_KEY_ROLL_GAIN: "roll_gain",
+    SLOW_KEY_NETCFG_IP_HI: "netcfg_ip_hi",
+    SLOW_KEY_NETCFG_IP_LO: "netcfg_ip_lo",
+    SLOW_KEY_NETCFG_GW_HI: "netcfg_gw_hi",
+    SLOW_KEY_NETCFG_GW_LO: "netcfg_gw_lo",
+    SLOW_KEY_NETCFG_PREFIX: "netcfg_prefix",
+    SLOW_KEY_NETCFG_APPLY: "netcfg_apply",
 }
 
 sock_fast = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -331,6 +526,20 @@ def _send_slow_ack(target_ip, seq, apply_id, key_id, status=1):
         pass
 
 
+def _update_i2c_status_frame():
+    if i2c_status_slave is None:
+        return
+    try:
+        frame = build_status_frame_from_runtime(
+            nic=nic,
+            v_main_mv=None,
+            v_aux_mv=None,
+        )
+        i2c_status_slave.set_frame(frame)
+    except Exception:
+        pass
+
+
 def _send_slow_telem():
     global _last_telem_ms, _lens_name_last_try_ms
     if not _last_slow_sender_ip:
@@ -391,6 +600,14 @@ def _send_slow_telem():
                 "power_level_main": None,
                 "power_level_aux": None,
             },
+            "i2c_status": {
+                "enabled": bool(i2c_status_slave is not None),
+                "available": bool(i2c_status_slave and i2c_status_slave.available),
+                "backend": str(i2c_status_slave.backend_name) if i2c_status_slave else "",
+                "address": int(I2C_STATUS_ADDRESS),
+                "freq_hz": int(I2C_STATUS_FREQ_HZ),
+                "last_error": str(i2c_status_slave.last_error) if i2c_status_slave else "",
+            },
         }
         body = json.dumps(payload).encode("utf-8")
         if len(body) > 65535:
@@ -430,6 +647,83 @@ def _decode_source(v):
     return "pc"
 
 
+def _network_push_u32_from_hi_lo(hi, lo):
+    return (((int(hi) & 0xFFFF) << 16) | (int(lo) & 0xFFFF)) & 0xFFFFFFFF
+
+
+def _clear_pending_network_push():
+    pending_network_push["ip_hi"] = None
+    pending_network_push["ip_lo"] = None
+    pending_network_push["gw_hi"] = None
+    pending_network_push["gw_lo"] = None
+    pending_network_push["prefix"] = None
+
+
+def _apply_network_slow_command(seq, apply_id, key, value):
+    global active_network_config
+    if key == SLOW_KEY_NETCFG_IP_HI:
+        pending_network_push["ip_hi"] = int(value) & 0xFFFF
+        _send_slow_ack(_last_slow_sender_ip, seq, apply_id, key, 1)
+        return
+    if key == SLOW_KEY_NETCFG_IP_LO:
+        pending_network_push["ip_lo"] = int(value) & 0xFFFF
+        _send_slow_ack(_last_slow_sender_ip, seq, apply_id, key, 1)
+        return
+    if key == SLOW_KEY_NETCFG_GW_HI:
+        pending_network_push["gw_hi"] = int(value) & 0xFFFF
+        _send_slow_ack(_last_slow_sender_ip, seq, apply_id, key, 1)
+        return
+    if key == SLOW_KEY_NETCFG_GW_LO:
+        pending_network_push["gw_lo"] = int(value) & 0xFFFF
+        _send_slow_ack(_last_slow_sender_ip, seq, apply_id, key, 1)
+        return
+    if key == SLOW_KEY_NETCFG_PREFIX:
+        p = int(value)
+        if p < 1 or p > 30:
+            _send_slow_ack(_last_slow_sender_ip, seq, apply_id, key, 0)
+            return
+        pending_network_push["prefix"] = p
+        _send_slow_ack(_last_slow_sender_ip, seq, apply_id, key, 1)
+        return
+    if key == SLOW_KEY_NETCFG_APPLY:
+        required = ("ip_hi", "ip_lo", "gw_hi", "gw_lo", "prefix")
+        for field in required:
+            if pending_network_push.get(field) is None:
+                _send_slow_ack(_last_slow_sender_ip, seq, apply_id, key, 0)
+                return
+        ip_u32 = _network_push_u32_from_hi_lo(pending_network_push["ip_hi"], pending_network_push["ip_lo"])
+        gw_u32 = _network_push_u32_from_hi_lo(pending_network_push["gw_hi"], pending_network_push["gw_lo"])
+        prefix = int(pending_network_push["prefix"])
+        dns = DEFAULT_ETHERNET_CONFIG["dns"]
+        try:
+            dns = str(nic.ifconfig()[3])
+        except Exception:
+            pass
+        proposed = {
+            "ip": _u32_to_ip_str(ip_u32),
+            "prefix": prefix,
+            "gateway": _u32_to_ip_str(gw_u32),
+            "dns": dns,
+        }
+        normalized = _sanitize_network_config(proposed)
+        if normalized is None:
+            _send_slow_ack(_last_slow_sender_ip, seq, apply_id, key, 0)
+            _clear_pending_network_push()
+            return
+        ok_apply, msg_apply = _apply_nic_config(normalized)
+        if not ok_apply:
+            print("Network push apply failed:", msg_apply)
+            _send_slow_ack(_last_slow_sender_ip, seq, apply_id, key, 0)
+            _clear_pending_network_push()
+            return
+        active_network_config = normalized
+        _save_head_network_config(active_network_config)
+        print("Network push applied:", active_network_config)
+        _send_slow_ack(_last_slow_sender_ip, seq, apply_id, key, 1)
+        _clear_pending_network_push()
+        return
+
+
 def apply_slow_command(cmd):
     global last_applied_lens_type, last_applied_sources, _last_slow_apply_id, _last_slow_seq
     global slow_motors_on, slow_control_mode
@@ -457,17 +751,19 @@ def apply_slow_command(cmd):
                 seq, apply_id, key, _slow_key_name(key), value
             )
         )
+    if key in (
+        SLOW_KEY_NETCFG_IP_HI,
+        SLOW_KEY_NETCFG_IP_LO,
+        SLOW_KEY_NETCFG_GW_HI,
+        SLOW_KEY_NETCFG_GW_LO,
+        SLOW_KEY_NETCFG_PREFIX,
+        SLOW_KEY_NETCFG_APPLY,
+    ):
+        _apply_network_slow_command(seq, apply_id, key, value)
+        return
     _send_slow_ack(_last_slow_sender_ip, seq, apply_id, key, 1)
     if key == SLOW_KEY_LENS_SELECT:
-        if lens is None:
-            return
-        requested_type = _decode_lens_select(value)
-        if requested_type != lens.get_lens_type():
-            changed = lens.set_lens_type(requested_type)
-            if changed:
-                last_applied_lens_type = requested_type
-                last_applied_sources = lens.get_axis_sources()
-                print("Slow apply lens_select ->", requested_type)
+        # Ignore: lens type is determined by head at boot (Fuji/Canon detection). Controller must not override.
         return
 
     if key == SLOW_KEY_SOURCE_ZOOM:
@@ -601,6 +897,9 @@ def apply_slow_command(cmd):
 # ---------- Main Loop ----------
 while True:
     pulse_update()
+    _update_i2c_status_frame()
+    if i2c_status_slave is not None:
+        i2c_status_slave.poll()
     _slow_cmd, _slow_addr = poll_slow_command_once()
     if _slow_cmd:
         if _slow_addr:
@@ -677,17 +976,9 @@ while True:
         roll_s = u16_to_bgc_speed(fields["roll"])
         bgc.send_joystick_control(yaw_s, pitch_s, roll_s)
 
-    # Runtime lens commands are not gated by startup BIT.
-    lens_control = fields.get("lens_control")
+    # Runtime lens commands are not gated by startup BIT. Lens type is fixed at head boot (detection); do not apply from controller.
+    lens_control = fields.get("lens_control") or {}
     if lens is not None and lens_control:
-        requested_type = lens_control.get("lens_type")
-        if requested_type and requested_type != lens.get_lens_type():
-            changed = lens.set_lens_type(requested_type)
-            if changed:
-                last_applied_lens_type = requested_type
-                last_applied_sources = lens.get_axis_sources()
-                print("Applied lens_type from packet:", requested_type)
-
         requested_sources = lens_control.get("axis_sources", {}) or {}
         for axis in ("zoom", "focus", "iris"):
             req_src = requested_sources.get(axis)
