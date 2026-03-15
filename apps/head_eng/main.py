@@ -272,6 +272,8 @@ pending_network_push = {
     "gw_lo": None,
     "prefix": None,
 }
+NETWORK_CONFIG_MODE_HOLD_MS = 5000
+network_config_mode_until_ms = 0
 
 if lens is not None:
     print("BGC + ENG lens ready")
@@ -384,6 +386,8 @@ SLOW_KEY_NETCFG_GW_HI = 42
 SLOW_KEY_NETCFG_GW_LO = 43
 SLOW_KEY_NETCFG_PREFIX = 44
 SLOW_KEY_NETCFG_APPLY = 45
+SLOW_KEY_NETCFG_ENTER = 46
+SLOW_KEY_NETCFG_EXIT = 47
 SLOW_KEY_NAMES = {
     SLOW_KEY_MOTORS_ON: "motors_on",
     SLOW_KEY_CONTROL_MODE: "control_mode",
@@ -409,6 +413,8 @@ SLOW_KEY_NAMES = {
     SLOW_KEY_NETCFG_GW_LO: "netcfg_gw_lo",
     SLOW_KEY_NETCFG_PREFIX: "netcfg_prefix",
     SLOW_KEY_NETCFG_APPLY: "netcfg_apply",
+    SLOW_KEY_NETCFG_ENTER: "netcfg_enter",
+    SLOW_KEY_NETCFG_EXIT: "netcfg_exit",
 }
 
 sock_fast = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -651,6 +657,20 @@ def _network_push_u32_from_hi_lo(hi, lo):
     return (((int(hi) & 0xFFFF) << 16) | (int(lo) & 0xFFFF)) & 0xFFFFFFFF
 
 
+def _network_config_mode_active():
+    return time.ticks_diff(network_config_mode_until_ms, time.ticks_ms()) > 0
+
+
+def _touch_network_config_mode():
+    global network_config_mode_until_ms
+    network_config_mode_until_ms = time.ticks_add(time.ticks_ms(), NETWORK_CONFIG_MODE_HOLD_MS)
+
+
+def _clear_network_config_mode():
+    global network_config_mode_until_ms
+    network_config_mode_until_ms = 0
+
+
 def _clear_pending_network_push():
     pending_network_push["ip_hi"] = None
     pending_network_push["ip_lo"] = None
@@ -661,35 +681,53 @@ def _clear_pending_network_push():
 
 def _apply_network_slow_command(seq, apply_id, key, value):
     global active_network_config
+    if key == SLOW_KEY_NETCFG_ENTER:
+        _clear_pending_network_push()
+        _touch_network_config_mode()
+        _send_slow_ack(_last_slow_sender_ip, seq, apply_id, key, 1)
+        return
+    if key == SLOW_KEY_NETCFG_EXIT:
+        _clear_network_config_mode()
+        _clear_pending_network_push()
+        _send_slow_ack(_last_slow_sender_ip, seq, apply_id, key, 1)
+        return
     if key == SLOW_KEY_NETCFG_IP_HI:
+        _touch_network_config_mode()
         pending_network_push["ip_hi"] = int(value) & 0xFFFF
         _send_slow_ack(_last_slow_sender_ip, seq, apply_id, key, 1)
         return
     if key == SLOW_KEY_NETCFG_IP_LO:
+        _touch_network_config_mode()
         pending_network_push["ip_lo"] = int(value) & 0xFFFF
         _send_slow_ack(_last_slow_sender_ip, seq, apply_id, key, 1)
         return
     if key == SLOW_KEY_NETCFG_GW_HI:
+        _touch_network_config_mode()
         pending_network_push["gw_hi"] = int(value) & 0xFFFF
         _send_slow_ack(_last_slow_sender_ip, seq, apply_id, key, 1)
         return
     if key == SLOW_KEY_NETCFG_GW_LO:
+        _touch_network_config_mode()
         pending_network_push["gw_lo"] = int(value) & 0xFFFF
         _send_slow_ack(_last_slow_sender_ip, seq, apply_id, key, 1)
         return
     if key == SLOW_KEY_NETCFG_PREFIX:
+        _touch_network_config_mode()
         p = int(value)
         if p < 1 or p > 30:
             _send_slow_ack(_last_slow_sender_ip, seq, apply_id, key, 0)
+            _clear_network_config_mode()
             return
         pending_network_push["prefix"] = p
         _send_slow_ack(_last_slow_sender_ip, seq, apply_id, key, 1)
         return
     if key == SLOW_KEY_NETCFG_APPLY:
+        _touch_network_config_mode()
         required = ("ip_hi", "ip_lo", "gw_hi", "gw_lo", "prefix")
         for field in required:
             if pending_network_push.get(field) is None:
                 _send_slow_ack(_last_slow_sender_ip, seq, apply_id, key, 0)
+                _clear_network_config_mode()
                 return
         ip_u32 = _network_push_u32_from_hi_lo(pending_network_push["ip_hi"], pending_network_push["ip_lo"])
         gw_u32 = _network_push_u32_from_hi_lo(pending_network_push["gw_hi"], pending_network_push["gw_lo"])
@@ -709,18 +747,21 @@ def _apply_network_slow_command(seq, apply_id, key, value):
         if normalized is None:
             _send_slow_ack(_last_slow_sender_ip, seq, apply_id, key, 0)
             _clear_pending_network_push()
+            _clear_network_config_mode()
             return
         ok_apply, msg_apply = _apply_nic_config(normalized)
         if not ok_apply:
             print("Network push apply failed:", msg_apply)
             _send_slow_ack(_last_slow_sender_ip, seq, apply_id, key, 0)
             _clear_pending_network_push()
+            _clear_network_config_mode()
             return
         active_network_config = normalized
         _save_head_network_config(active_network_config)
         print("Network push applied:", active_network_config)
         _send_slow_ack(_last_slow_sender_ip, seq, apply_id, key, 1)
         _clear_pending_network_push()
+        _clear_network_config_mode()
         return
 
 
@@ -758,8 +799,14 @@ def apply_slow_command(cmd):
         SLOW_KEY_NETCFG_GW_LO,
         SLOW_KEY_NETCFG_PREFIX,
         SLOW_KEY_NETCFG_APPLY,
+        SLOW_KEY_NETCFG_ENTER,
+        SLOW_KEY_NETCFG_EXIT,
     ):
         _apply_network_slow_command(seq, apply_id, key, value)
+        return
+    if _network_config_mode_active():
+        # During config transaction, reject non-config slow keys to preserve deterministic apply.
+        _send_slow_ack(_last_slow_sender_ip, seq, apply_id, key, 0)
         return
     _send_slow_ack(_last_slow_sender_ip, seq, apply_id, key, 1)
     if key == SLOW_KEY_LENS_SELECT:
@@ -900,8 +947,11 @@ while True:
     _update_i2c_status_frame()
     if i2c_status_slave is not None:
         i2c_status_slave.poll()
-    _slow_cmd, _slow_addr = poll_slow_command_once()
-    if _slow_cmd:
+    slow_poll_budget = 8 if _network_config_mode_active() else 1
+    for _ in range(slow_poll_budget):
+        _slow_cmd, _slow_addr = poll_slow_command_once()
+        if not _slow_cmd:
+            break
         if _slow_addr:
             _last_slow_sender_ip = _slow_addr[0]
         apply_slow_command(_slow_cmd)

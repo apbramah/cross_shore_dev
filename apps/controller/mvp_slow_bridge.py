@@ -1040,6 +1040,13 @@ def _set_head_network_push_status(index: int, state_name: str, message: str, app
     }
 
 
+def _send_network_config_mode_packet(route_ip: str, port: int, apply_id: int, key_id: int, value: int) -> bool:
+    global slow_seq
+    slow_seq = (slow_seq + 1) & 0xFFFF
+    pkt = mvp_protocol.build_slow_cmd_packet(slow_seq, apply_id, int(key_id), int(value))
+    return mvp_protocol.send_udp_to(route_ip, port, pkt)
+
+
 def _push_head_network_config(index: int, config: dict[str, Any], route_ip_hint: str = "") -> tuple[bool, str]:
     global slow_seq, slow_apply_id
     if index < 0 or index >= len(heads):
@@ -1084,18 +1091,28 @@ def _push_head_network_config(index: int, config: dict[str, Any], route_ip_hint:
     apply_step = (mvp_protocol.SLOW_KEY_NETCFG_APPLY, int(index) + 1)
     any_send_ok = False
     for route_ip in valid_routes:
-        # UDP is lossy and unordered. Send two passes, and send APPLY twice per pass.
+        # Enter a dedicated head config mode so routine slow keys are quiesced.
+        for _ in range(2):
+            if _send_network_config_mode_packet(
+                route_ip,
+                port,
+                apply_id,
+                mvp_protocol.SLOW_KEY_NETCFG_ENTER,
+                1,
+            ):
+                any_send_ok = True
+            time.sleep(0.01)
+        # UDP is lossy and unordered. Send two paced field passes, then APPLY twice.
         for _ in range(2):
             for key_id, value in field_steps:
-                slow_seq = (slow_seq + 1) & 0xFFFF
-                pkt = mvp_protocol.build_slow_cmd_packet(slow_seq, apply_id, int(key_id), int(value))
-                if mvp_protocol.send_udp_to(route_ip, port, pkt):
+                if _send_network_config_mode_packet(route_ip, port, apply_id, int(key_id), int(value)):
                     any_send_ok = True
-            for _ in range(2):
-                slow_seq = (slow_seq + 1) & 0xFFFF
-                pkt = mvp_protocol.build_slow_cmd_packet(slow_seq, apply_id, int(apply_step[0]), int(apply_step[1]))
-                if mvp_protocol.send_udp_to(route_ip, port, pkt):
-                    any_send_ok = True
+                # Small pacing delay helps Pico receive queue keep up under bridge traffic.
+                time.sleep(0.008)
+        for _ in range(2):
+            if _send_network_config_mode_packet(route_ip, port, apply_id, int(apply_step[0]), int(apply_step[1])):
+                any_send_ok = True
+            time.sleep(0.01)
     if not any_send_ok:
         _set_head_network_push_status(index, "send_error", "slow_send_failed", apply_id=apply_id)
         return False, "slow_send_failed"
@@ -1103,6 +1120,8 @@ def _push_head_network_config(index: int, config: dict[str, Any], route_ip_hint:
         "index": index,
         "sent_at": time.time(),
         "config": dict(norm),
+        "routes": list(valid_routes),
+        "port": int(port),
     }
     _set_head_network_push_status(index, "awaiting_ack", f"sent_to_{','.join(valid_routes)}", apply_id=apply_id)
     return True, "head_network_push_sent"
@@ -1206,6 +1225,9 @@ async def slow_sender_task() -> None:
         await asyncio.sleep(SLOW_SEND_INTERVAL_S)
         if not heads:
             continue
+        # During network push handshake, avoid flooding head with routine slow keys.
+        if head_network_push_pending:
+            continue
         for key in mvp_protocol.SLOW_KEY_IDS.keys():
             # Never send lens_select: head detects lens at boot; controller must not override it.
             if key == "lens_select":
@@ -1252,6 +1274,17 @@ async def telemetry_receiver_task() -> None:
                             cfg = pending.get("config", {})
                             if isinstance(cfg, dict):
                                 _set_head_config(idx, cfg)
+                    if isinstance(pending, dict):
+                        routes = pending.get("routes", [])
+                        port = int(pending.get("port", mvp_protocol.SLOW_CMD_PORT))
+                        for route_ip in routes if isinstance(routes, list) else []:
+                            _send_network_config_mode_packet(
+                                str(route_ip).strip(),
+                                port,
+                                apply_id,
+                                mvp_protocol.SLOW_KEY_NETCFG_EXIT,
+                                0,
+                            )
                     if apply_id in head_network_push_pending:
                         del head_network_push_pending[apply_id]
                 continue
@@ -1418,6 +1451,16 @@ def _refresh_head_network_push_timeouts(timeout_s: float = 4.0) -> None:
         if (now - sent_at) < float(timeout_s):
             continue
         idx = int(pending.get("index", -1))
+        routes = pending.get("routes", [])
+        port = int(pending.get("port", mvp_protocol.SLOW_CMD_PORT))
+        for route_ip in routes if isinstance(routes, list) else []:
+            _send_network_config_mode_packet(
+                str(route_ip).strip(),
+                port,
+                int(apply_id),
+                mvp_protocol.SLOW_KEY_NETCFG_EXIT,
+                0,
+            )
         _set_head_network_push_status(idx, "timeout", "head_ack_timeout", apply_id=apply_id)
         stale_apply_ids.append(int(apply_id))
     for apply_id in stale_apply_ids:

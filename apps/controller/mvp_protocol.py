@@ -42,6 +42,8 @@ SLOW_KEY_NETCFG_GW_HI = 42
 SLOW_KEY_NETCFG_GW_LO = 43
 SLOW_KEY_NETCFG_PREFIX = 44
 SLOW_KEY_NETCFG_APPLY = 45
+SLOW_KEY_NETCFG_ENTER = 46
+SLOW_KEY_NETCFG_EXIT = 47
 
 SLOW_KEY_IDS = {
     "motors_on": SLOW_KEY_MOTORS_ON,
@@ -71,6 +73,8 @@ NETWORK_SLOW_KEY_IDS = {
     "netcfg_gw_lo": SLOW_KEY_NETCFG_GW_LO,
     "netcfg_prefix": SLOW_KEY_NETCFG_PREFIX,
     "netcfg_apply": SLOW_KEY_NETCFG_APPLY,
+    "netcfg_enter": SLOW_KEY_NETCFG_ENTER,
+    "netcfg_exit": SLOW_KEY_NETCFG_EXIT,
 }
 
 # Resolve heads.json relative to this file so it works from any CWD
