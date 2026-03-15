@@ -4,6 +4,27 @@ Simple diagram of `mvp_ui_3.html` structure for consistent naming when tweaking 
 
 ---
 
+## Recent updates (2026-03-15)
+
+- Added top action button `posDisplayBtn` (`Pos Display`) next to lockoff/motors actions.
+- Added Position Display overlay panel `#posDisplayPanel` that replaces surface+dock while open.
+- Position Display left panel now includes:
+  - telemetry readouts (`posDisplayPan`, `posDisplayTilt`, `posDisplayRoll`, `posDisplayZoom`, `posDisplayIris`, `posDisplayFocus`)
+  - heading offset slider (`posDisplayHeadingOffset`, `posDisplayHeadingOffsetVal`)
+  - sim mode toggle (`posDisplaySimMode`)
+- Position Display map area includes iframe `#posDisplayFrame` and close button `#posDisplayClose`.
+- Engineering page actions now include:
+  - Position map `lat, lon` input (`posDisplayLatLon`)
+  - what3words input/apply (`posDisplayW3WWords`, `posDisplayW3WApply`)
+  - what3words API key input (`posDisplayW3WKey`)
+  - Theme Lab panel with 8-color pickers, preset controls, and JSON import/export
+- Head config editor table now includes network push workflow UI:
+  - per-row `Push To Head` action
+  - per-row push status cell
+  - `Match Console LAN Subnet` helper action
+
+---
+
 ## App shell
 
 ```
@@ -11,7 +32,7 @@ Simple diagram of `mvp_ui_3.html` structure for consistent naming when tweaking 
 │  TOPBAR (class="topbar")                                                     │
 │  ├── head-selector-row    [Select Head]  <select id="heads" hidden>          │
 │  ├── connection-row       [connectionPill] Head: &lt;name&gt; Lens: &lt;name&gt; (status colours)   │
-│  └── top-actions-row      [Home] [Lockoff] [Motors ON] [Motors OFF]           │
+│  └── top-actions-row      [Pos Display] [Lockoff] [Motors On] [Motors Off]     │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  SURFACE (id="surfaceMain", class="surface")                                  │
 │  ┌───────────────────────────────────────────────────────────────────────┐   │
@@ -31,7 +52,7 @@ Simple diagram of `mvp_ui_3.html` structure for consistent naming when tweaking 
 |---------------------|------------------------|--------------------------------------|
 | **head-selector-row** | `headSelectorBtn`, `heads` | Select Head button (and hidden dropdown) |
 | **connection-row**    | `connectionPill` | Single pill: "Head: &lt;name&gt; Lens: &lt;name&gt;" (grey/yellow/green status) |
-| **top-actions-row**   | `lockoffBtn`, `touchMotorsOn`, `touchMotorsOff` | Lockoff, Motors ON, Motors OFF |
+| **top-actions-row**   | `posDisplayBtn`, `lockoffBtn`, `touchMotorsOn`, `touchMotorsOff` | Pos Display, Lockoff, Motors On, Motors Off |
 
 ---
 
@@ -142,14 +163,15 @@ Shown when **Control 2** is selected. Network, WiFi, and head config (moved from
 
 ### Page: Engineering / Input tests (`id="page-inputtests"`)
 
-Engineering actions (theme, brightness, calibrate).
+Engineering actions (theme, Theme Lab, position-map inputs, brightness, calibrate).
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │  PAGE: Engineering                                                          │
 │  ┌─ engineering-actions-card ───────────────────────────────────────────┐   │
 │  │  command-list-title "Engineering Actions"                              │   │
-│  │  input-test-controls: Theme, Screen Brightness, Calibrate Inputs     │   │
+│  │  input-test-controls: Theme, Theme Lab, Pos map coords, w3w,         │   │
+│  │                       Screen Brightness, Calibrate Inputs             │   │
 │  ├─ connection-state-card ──────────────────────────────────────────────┤   │
 │  │  connectionState (info)                                                │   │
 │  ├─ calibration-state-card ─────────────────────────────────────────────┤   │
@@ -161,7 +183,7 @@ Engineering actions (theme, brightness, calibrate).
 
 | Region name                   | ID / class               | Description                    |
 |------------------------------|---------------------------|--------------------------------|
-| **engineering-actions-card** | first `.stack-row-card`   | Theme, brightness, Open buttons, Calibrate |
+| **engineering-actions-card** | first `.stack-row-card`   | Theme, Theme Lab, position map coordinates/w3w, brightness, calibrate |
 | **connection-state-card**    | second `.stack-row-card`  | connectionState text          |
 | **calibration-state-card**   | third `.stack-row-card`   | calibrationState text         |
 | **screen-brightness-state-card** | fourth `.stack-row-card` | screenBrightnessState text    |
@@ -177,6 +199,7 @@ These sit above the app when open; they are not part of the surface/dock.
 | **keyboard-overlay** | `kbd`             | On-screen keyboard (kbdTargetLabel, kbdBuffer, kbdRows, kbdBack, kbdClear, kbdCancel, kbdOk) |
 | **head-picker**    | `headPicker`        | Head selector modal (headPickerClose, headPickerList, headPickerCancel) |
 | **head-config-editor** | `headConfigEditor` | Full-screen Head ID table (headConfigClose, headTableBodyEditor, headConfigDone) |
+| **position-display-panel** | `posDisplayPanel` | Full-screen content swap panel with telemetry + embedded map iframe |
 
 ---
 

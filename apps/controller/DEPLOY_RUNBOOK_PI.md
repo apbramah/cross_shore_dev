@@ -23,7 +23,7 @@ git pull --ff-only origin mvp-lite-devzone
 bash apps/controller/deploy-to-pi.sh
 ```
 
-**What the script does:** Copies `mvp_ui_3.html` and `mvp_ui_3_layout.js` to `/opt/ui/`, copies `mvp_slow_bridge.py` to `/opt/wsbridge/`, then restarts `wsbridge.service`, `kiosk.service`, and (if present) `controller.service` or `mvp_bridge_adc.service`. After that, the kiosk shows the latest UI and the WebSocket bridge (and ADC bridge, if run from repo) use the latest code.
+**What the script does:** Copies `mvp_ui_3.html`, `mvp_ui_3_layout.js`, and `position_map_standalone.html` to `/opt/ui/`, copies `mvp_slow_bridge.py` to `/opt/wsbridge/`, then restarts `wsbridge.service`, `kiosk.service`, and (if present) `controller.service` or `mvp_bridge_adc.service`. After that, the kiosk shows the latest UI and Position Display map assets, and the WebSocket bridge (and ADC bridge, if run from repo) use the latest code.
 
 **3. Ensure services start on boot (if not already):**
 
@@ -95,6 +95,7 @@ git pull --ff-only origin mvp-lite-devzone
 
 ```bash
 sudo install -m 644 apps/controller/mvp_ui_3.html /opt/ui/
+sudo install -m 644 apps/controller/position_map_standalone.html /opt/ui/ 2>/dev/null || true
 ```
 
 - `install -m 644` – copy file and set permissions (readable by kiosk).
@@ -147,9 +148,12 @@ Repo and runtime file should be identical:
 
 ```bash
 sha256sum ~/Dev/cross_shore_dev/apps/controller/mvp_ui_3.html /opt/ui/mvp_ui_3.html
+sha256sum ~/Dev/cross_shore_dev/apps/controller/position_map_standalone.html /opt/ui/position_map_standalone.html
 ```
 
-You should see **the same hash twice**. If they differ, re-run the deploy step 3b.
+You should see matching pairs (repo vs runtime) for each file. If they differ, re-run deploy step 3b.
+
+If Position Display opens but the map area is blank: verify `position_map_standalone.html` hash first; if it matches runtime, treat it as likely tile-network/CDN reachability on Pi and use the on-screen tile status diagnostics.
 
 **4b – Services running**
 
@@ -193,3 +197,27 @@ You should see a line number and `profileEditorOpen`. If not, the wrong file is 
 | 4    | Pi      | `sha256sum`, `systemctl is-active`, optional `grep` |
 
 Only then consider the deploy done.
+
+---
+
+## Current working status (2026-03-15)
+
+- Head IP programming flow is working with transaction-mode push and runtime verification.
+- Position map runtime is working with `position_map_standalone.html` deployed to `/opt/ui/`.
+
+### Additional verify probes (head IP programming)
+
+```bash
+python - <<'PY'
+from pathlib import Path
+checks = {
+  "/opt/wsbridge/mvp_protocol.py": ["SLOW_KEY_NETCFG_ENTER", "SLOW_KEY_NETCFG_EXIT"],
+  "/opt/wsbridge/mvp_slow_bridge.py": ["PUSH_HEAD_NETWORK_CONFIG", "head_ack_inferred", "Ignore duplicate/late APPLY ACKs"],
+  "/opt/ui/mvp_ui_3.html": ["Push To Head", "Match Console LAN Subnet"],
+}
+for p, toks in checks.items():
+    txt = Path(p).read_text(encoding="utf-8", errors="ignore")
+    miss = [t for t in toks if t not in txt]
+    print(p, "OK" if not miss else f"MISSING {miss}")
+PY
+```

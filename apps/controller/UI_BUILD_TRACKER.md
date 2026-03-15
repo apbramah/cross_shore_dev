@@ -116,3 +116,43 @@ Suggested handling pattern:
   - switch immediately
   - persist across refresh/restart
 
+## Completed (Last 24h)
+
+- Position Display panel restored and expanded:
+  - top-bar `Pos Display` action opens panel
+  - left telemetry block includes Pan/Tilt/Roll/Zoom/Iris/Focus
+  - heading offset slider integrated and persisted
+  - sim mode toggle from main UI into embedded map mode
+- Position map standalone behavior updates:
+  - heading indicator changed to circle + ray + moving triangle marker
+  - triangle position now driven by lens-reported zoom (`zoom_norm`) and measured from center
+  - bottom-left tilt/roll overlay instrument added (vertical rail + rotating indicator)
+  - map scale bar added and map-control visual darkening
+  - tile-provider failover chain + on-screen tile diagnostics added for Pi validation
+- Engineering page updates:
+  - Position map coordinate entry now supports what3words lookup (+ API key)
+  - Theme Lab (8-color) added to main UI with:
+    - live preview
+    - custom-theme enable/disable
+    - preset CRUD
+    - JSON export/import for cross-device sharing
+- Deployment/runtime hardening:
+  - `deploy-to-pi.sh` now copies `position_map_standalone.html` into `/opt/ui/`
+  - deploy script hash check includes standalone map file
+  - map iframe URL cache-busting version key added to force updated asset load on kiosk
+
+## Completed (Head IP programming + map validation)
+
+- Head ID Configuration now supports explicit per-row **Push To Head** for network config.
+- Validation gates added for legal IP inputs (IPv4 format, prefix bounds, subnet and gateway checks).
+- Slow-channel network push is now transaction-based:
+  - enter config mode
+  - send network fields
+  - apply
+  - exit config mode
+- Push status handling hardened:
+  - route transition handling
+  - duplicate late APPLY ACK guard
+  - inferred success when target IP becomes reachable after transition
+- Current runtime status: head IP programming working, map working.
+

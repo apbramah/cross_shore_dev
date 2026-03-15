@@ -1,5 +1,14 @@
 # Command Architecture: Toward a Clean, Scalable Design
 
+## Recent implementation notes (2026-03-15)
+
+- Last 24h work was mostly UI/runtime behavior and did **not** change the core command-contract model.
+- Position Display map now consumes extra telemetry fields over iframe message (`heading`, `tilt`, `roll`, `zoom_norm`, `sim_mode`) for visualization/sim behavior.
+- These additions are display/runtime-facing and should be treated as UI telemetry fields, not new slow/fast command IDs.
+- Deploy process now explicitly includes `position_map_standalone.html` runtime installation, which is required for map-based Position Display features on Pi.
+- Head network configuration now uses an explicit transaction concept on slow channel (`NETCFG_ENTER`, field updates, `NETCFG_APPLY`, `NETCFG_EXIT`) to isolate config writes from routine slow traffic.
+- Bridge-side push status handling now tolerates duplicate late APPLY ACKs and can infer successful apply when target IP becomes reachable after transition.
+
 ## Top-level architecture: three layers
 
 The system is best viewed as three layers, with the **head** further decomposed into three abstract subsystems:
