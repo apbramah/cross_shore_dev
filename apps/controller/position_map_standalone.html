@@ -102,6 +102,19 @@
     .sim-panel .packet-row { margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(var(--theme-border-rgb), 0.25); }
     .sim-panel .packet-row input { width: 100%; font-size: 10px; font-family: ui-monospace, monospace; }
     .sim-panel .packet-row button { margin-top: 4px; font-size: 11px; padding: 4px 8px; }
+    .tile-status {
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 6px 10px;
+      font-size: 11px;
+      color: #ffd9a3;
+      border-color: rgba(197,154,58,.55);
+      background: rgba(42, 32, 18, 0.86);
+      display: none;
+      pointer-events: none;
+    }
+    .tile-status.show { display: block; }
     body.minimal .app { grid-template-rows: 1fr; }
     body.minimal .topbar,
     body.minimal .sim-panel,
@@ -248,6 +261,7 @@
       </div>
     </div>
   </div>
+  <div id="tileStatus" class="overlay-panel tile-status">Loading map tiles...</div>
 
   <script>
     (function () {
@@ -273,6 +287,8 @@
       let indicatorZoomRatio = null;
       let latestTiltDeg = 0;
       let latestRollDeg = 0;
+      let tileLayer = null;
+      let tileProviderIndex = 0;
       const indicatorColor = "#9bd85a";
       const INDICATOR_DIAMETER_PX = 12;
       const INDICATOR_RADIUS_PX = INDICATOR_DIAMETER_PX / 2;
@@ -304,6 +320,13 @@
 
       function updateCompass(deg) {
         if (compassNeedle) compassNeedle.style.transform = "rotate(" + deg + "deg)";
+      }
+
+      function setTileStatus(msg, show) {
+        var el = document.getElementById("tileStatus");
+        if (!el) return;
+        if (msg != null) el.textContent = String(msg);
+        el.classList.toggle("show", !!show);
       }
 
       function updateAxisInstruments(pan, tilt, roll, zoomNorm, focusNorm) {
@@ -735,10 +758,46 @@
       });
 
       map = L.map("map", { zoomControl: true }).setView([defaultLat, defaultLon], 16);
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-        attribution: "&copy; OpenStreetMap, &copy; CARTO",
-        maxZoom: 19,
-      }).addTo(map);
+      var providers = [
+        { url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", attribution: "&copy; OpenStreetMap contributors" },
+        { url: "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png", attribution: "&copy; OpenStreetMap contributors" },
+        { url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", attribution: "&copy; OpenStreetMap contributors" },
+        { url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", attribution: "&copy; OpenStreetMap, &copy; CARTO" },
+      ];
+      function activateTileProvider(index) {
+        if (!map) return;
+        if (index >= providers.length) {
+          setTileStatus("No map tiles (network/CDN blocked on Pi).", true);
+          return;
+        }
+        tileProviderIndex = index;
+        if (tileLayer) {
+          try { map.removeLayer(tileLayer); } catch (e) {}
+          tileLayer = null;
+        }
+        var p = providers[index];
+        var loadedAny = false;
+        var errorCount = 0;
+        setTileStatus("Loading map tiles...", true);
+        tileLayer = L.tileLayer(p.url, {
+          attribution: p.attribution,
+          maxZoom: 19,
+          crossOrigin: true,
+        });
+        tileLayer.on("tileload", function () {
+          loadedAny = true;
+          setTileStatus("", false);
+        });
+        tileLayer.on("tileerror", function () {
+          errorCount += 1;
+          if (!loadedAny && errorCount >= 4) activateTileProvider(index + 1);
+        });
+        tileLayer.addTo(map);
+        setTimeout(function () {
+          if (!loadedAny && tileProviderIndex === index) activateTileProvider(index + 1);
+        }, 3500);
+      }
+      activateTileProvider(0);
       map.attributionControl.setPrefix("");
       L.control.scale({ position: "bottomright", metric: true, imperial: false, maxWidth: 120 }).addTo(map);
       map.on("zoomend", apply);

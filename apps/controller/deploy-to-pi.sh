@@ -11,6 +11,7 @@ echo "Deploying from repo: $REPO_ROOT"
 # UI: kiosk loads from /opt/ui/
 sudo install -m 644 apps/controller/mvp_ui_3.html /opt/ui/
 [ -f apps/controller/mvp_ui_3_layout.js ] && sudo install -m 644 apps/controller/mvp_ui_3_layout.js /opt/ui/ || true
+[ -f apps/controller/position_map_standalone.html ] && sudo install -m 644 apps/controller/position_map_standalone.html /opt/ui/ || true
 
 # Bridge: wsbridge runs from /opt/wsbridge/
 sudo install -m 644 apps/controller/mvp_slow_bridge.py /opt/wsbridge/
@@ -27,3 +28,4 @@ done
 
 echo "Done. Verify hashes match:"
 sha256sum apps/controller/mvp_ui_3.html /opt/ui/mvp_ui_3.html
+[ -f /opt/ui/position_map_standalone.html ] && sha256sum apps/controller/position_map_standalone.html /opt/ui/position_map_standalone.html || true
