@@ -28,6 +28,7 @@ import mvp_protocol
 WS_PORT = 8766
 SLOW_SEND_INTERVAL_S = 0.5
 STATUS_PUBLISH_INTERVAL_S = 1.0
+HEAD_REACHABILITY_PROBE_INTERVAL_S = 1.0
 HEAD_CONNECTED_TIMEOUT_S = 2.5
 IFCONFIG_REFRESH_INTERVAL_S = 2.5
 
@@ -406,6 +407,11 @@ head_feedback: dict[str, Any] = {"slow": {}, "lens": {}, "bgc": {}, "updated_at"
 # Zoom normalization: track observed lens zoom range, expose zoom_norm in [0, 1].
 _zoom_raw_min: float = 0.0
 _zoom_raw_max: float = 1.0
+head_reachability: list[dict[str, Any]] = [
+    {"ok": None, "last_checked": 0.0, "ip": ""}
+    for _ in range(15)
+]
+_head_reachability_probe_index = 0
 connection_status: dict[str, Any] = {
     "physical_link": {"eth0_up": False},
     "head": {"state": "disconnected", "last_telem_age_s": None, "last_send_ok": False},
@@ -673,6 +679,14 @@ def _apply_network_user_to_heads() -> None:
         )
     heads = updated
     _safe_save_json(HEADS_FILE, heads)
+    # Keep per-head availability cache aligned with current head IP mapping.
+    for i in range(15):
+        ip = str(updated[i].get("ip", "")).strip() if i < len(updated) else ""
+        entry = head_reachability[i]
+        if str(entry.get("ip", "")).strip() != ip:
+            entry["ok"] = None
+            entry["last_checked"] = 0.0
+        entry["ip"] = ip
 
 
 def _build_adc_profile_file_path() -> str:
@@ -944,6 +958,7 @@ def _state_payload() -> dict[str, Any]:
         "shaping": dict(shaping_state),
         "defaults": {"factory": copy.deepcopy(factory_defaults), "user": copy.deepcopy(user_defaults)},
         "head_feedback": copy.deepcopy(head_feedback),
+        "head_reachability": copy.deepcopy(head_reachability),
         "connection_status": copy.deepcopy(connection_status),
         "network_config": copy.deepcopy(network_user),
         "wifi_status": copy.deepcopy(wifi_status),
@@ -1175,6 +1190,21 @@ async def status_publish_task() -> None:
         _write_zoom_feedback_runtime()
         await _publish_state()
         await asyncio.sleep(STATUS_PUBLISH_INTERVAL_S)
+
+
+async def head_reachability_probe_task() -> None:
+    global _head_reachability_probe_index
+    while True:
+        count = min(15, len(heads))
+        if count > 0:
+            idx = _head_reachability_probe_index % count
+            ok, ip, _ = await asyncio.to_thread(_ping_head, idx)
+            now = time.time()
+            head_reachability[idx]["ok"] = bool(ok)
+            head_reachability[idx]["last_checked"] = now
+            head_reachability[idx]["ip"] = str(ip or "").strip()
+            _head_reachability_probe_index = (idx + 1) % count
+        await asyncio.sleep(HEAD_REACHABILITY_PROBE_INTERVAL_S)
 
 
 def _ping_head(index: int) -> tuple[bool, str, str]:
@@ -1491,6 +1521,7 @@ async def main() -> None:
     asyncio.create_task(slow_sender_task())
     asyncio.create_task(telemetry_receiver_task())
     asyncio.create_task(status_publish_task())
+    asyncio.create_task(head_reachability_probe_task())
     async with websockets.serve(handler, "0.0.0.0", WS_PORT):
         await asyncio.Future()
 

@@ -396,6 +396,17 @@
     .table-wrap { max-height:360px; overflow:auto; border:1px solid var(--border); border-radius:8px; }
     table { width:100%; border-collapse:collapse; font-size:13px; }
     th, td { border-bottom:1px solid #2f3e57; padding:6px; text-align:left; }
+    #page-ipconfig td.ping-status-cell {
+      font-size:12px;
+      font-weight:600;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      max-width:260px;
+    }
+    #page-ipconfig td.ping-status-cell.ping-ok { color:#7ddf9d; }
+    #page-ipconfig td.ping-status-cell.ping-fail { color:#f2b0a8; }
+    #page-ipconfig td.ping-status-cell.ping-pending { color:#b8c5d8; }
     .input-test-controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
     #page-inputtests .input-test-controls { display:grid; gap:8px; }
     #page-inputtests .slider-assign-grid { grid-template-columns:1fr; gap:8px; margin:0; }
@@ -684,7 +695,12 @@
     .head-picker-head { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-shrink:0; }
     .head-picker-title { margin:0; font-size:16px; color:#dbe8ff; }
     .head-picker-grid { display:grid; grid-template-columns:repeat(5,1fr); grid-template-rows:repeat(3,1fr); gap:10px; flex:1; min-height:0; overflow:hidden; }
-    .head-picker-grid .head-option { height:100%; min-height:64px; border-radius:10px; border:2px solid #465b7f; background:#243349; color:#e8f2ff; font-weight:700; font-size:clamp(14px, 3.2vw, 20px); display:flex; align-items:center; justify-content:center; padding:8px; text-align:center; }
+    .head-picker-grid .head-option { height:100%; min-height:64px; border-radius:10px; border:2px solid #465b7f; background:#243349; color:#e8f2ff; font-weight:700; font-size:clamp(14px, 3.2vw, 20px); display:flex; align-items:center; justify-content:center; padding:8px; text-align:center; position:relative; }
+    .head-picker-grid .head-option .head-option-label { display:block; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .head-picker-grid .head-option .head-availability { position:absolute; top:8px; right:8px; width:10px; height:10px; border-radius:50%; border:1px solid rgba(255,255,255,.45); background:#6f7e95; }
+    .head-picker-grid .head-option .head-availability.avail-ok { background:#4ad97a; box-shadow:0 0 8px rgba(74,217,122,.45); }
+    .head-picker-grid .head-option .head-availability.avail-fail { background:#f07a7a; box-shadow:0 0 8px rgba(240,122,122,.35); }
+    .head-picker-grid .head-option .head-availability.avail-unknown { background:#8a95a8; opacity:.75; }
     .head-picker-grid .head-option.active { border-color:var(--accent); box-shadow:0 0 0 2px rgba(87,167,255,.35) inset; background:#284362; }
     .head-picker-grid .head-option.empty { opacity:0.5; cursor:default; }
     .head-picker-actions { display:flex; justify-content:flex-end; gap:8px; flex-shrink:0; }
@@ -1321,6 +1337,7 @@ let state = {
   wifi_status: {},
   calibration: {},
   ui_config: {},
+  head_reachability: [],
 };
 let activeColumn = null;
 let mode = "position";
@@ -3590,6 +3607,16 @@ function openProfileEditor(){
   send({ type: "LIST_USER_PROFILES" });
 }
 
+function headAvailabilityState(i){
+  const rows = Array.isArray(state.head_reachability) ? state.head_reachability : [];
+  const r = rows[i] || {};
+  const checked = Number(r.last_checked || 0);
+  const ageS = checked > 0 ? (Date.now() / 1000) - checked : Number.POSITIVE_INFINITY;
+  if (r.ok === true && ageS <= 20) return { cls: "avail-ok", label: "reachable" };
+  if (r.ok === false && ageS <= 20) return { cls: "avail-fail", label: "unreachable" };
+  return { cls: "avail-unknown", label: "unknown" };
+}
+
 function renderHeadPickerList(){
   const grid = $("headPickerList");
   if (!grid) return;
@@ -3600,7 +3627,15 @@ function renderHeadPickerList(){
     const b = document.createElement("button");
     b.type = "button";
     b.className = "head-option" + (selected === i ? " active" : "") + (i >= headCount ? " empty" : "");
-    b.textContent = getHeadLabel(i);
+    const label = document.createElement("span");
+    label.className = "head-option-label";
+    label.textContent = getHeadLabel(i);
+    const avail = headAvailabilityState(i);
+    const dot = document.createElement("span");
+    dot.className = `head-availability ${avail.cls}`;
+    dot.title = `Head ${i + 1}: ${avail.label}`;
+    b.appendChild(label);
+    b.appendChild(dot);
     b.onclick = () => {
       $("heads").value = String(i);
       requestHeadSelection(i);
@@ -4071,6 +4106,40 @@ function applyInputToNetworkDraft(inputId, value){
   markNetworkDraftDirtyForInput(inputId);
 }
 
+function summarizePingMessage(raw){
+  const msg = String(raw || "").split("\n")[0].trim();
+  if (!msg) return "no details";
+  const lower = msg.toLowerCase();
+  if (lower.includes("100% packet loss")) return "no reply";
+  if (lower.includes("name or service not known")) return "invalid host";
+  if (lower.includes("network is unreachable")) return "network unreachable";
+  if (lower.includes("destination host unreachable")) return "host unreachable";
+  if (lower.includes("temporary failure in name resolution")) return "dns failure";
+  if (lower.includes("missing_ip")) return "missing IP";
+  return msg.length > 36 ? `${msg.slice(0, 36)}...` : msg;
+}
+
+function setPingStatus(index, text, tone="pending"){
+  pingStatusByHead[index] = { text, tone };
+  const cell = $(`h_ping_status_${index}`);
+  if (!cell) return;
+  cell.className = "ping-status-cell";
+  if (tone === "ok") cell.classList.add("ping-ok");
+  else if (tone === "fail") cell.classList.add("ping-fail");
+  else if (tone === "pending") cell.classList.add("ping-pending");
+  cell.textContent = text || "-";
+}
+
+function pingStatusLabel(index){
+  const entry = pingStatusByHead[index];
+  return entry && entry.text ? entry.text : "-";
+}
+
+function pingStatusTone(index){
+  const entry = pingStatusByHead[index];
+  return entry && entry.tone ? entry.tone : "";
+}
+
 function renderIpConfigTable(){
   syncNetworkDraftFromState();
   const pi = networkDraft?.pi_lan || {};
@@ -4091,10 +4160,13 @@ function renderIpConfigTable(){
       <td><input id="h_prefix_${i}" readonly value="${h.prefix ?? 24}" /></td>
       <td><input id="h_gw_${i}" readonly value="${h.gateway || ""}" /></td>
       <td><button id="h_ping_${i}">Ping Now</button></td>
-      <td id="h_ping_status_${i}">${pingStatusByHead[i] || "-"}</td>
+      <td id="h_ping_status_${i}" class="ping-status-cell">${pingStatusLabel(i)}</td>
       <td><button id="h_save_${i}">Save</button></td>
     `;
     body.appendChild(tr);
+    if (pingStatusTone(i) === "ok") $(`h_ping_status_${i}`).classList.add("ping-ok");
+    else if (pingStatusTone(i) === "fail") $(`h_ping_status_${i}`).classList.add("ping-fail");
+    else if (pingStatusTone(i) === "pending") $(`h_ping_status_${i}`).classList.add("ping-pending");
     ["name","ip","prefix","gw"].forEach(k => {
       const id = k === "gw" ? `h_gw_${i}` : `h_${k}_${i}`;
       $(id).onclick = () => openKeyboard($(id));
@@ -4115,9 +4187,7 @@ function renderIpConfigTable(){
     };
     $(`h_ping_${i}`).onclick = () => {
       const ip = $(`h_ip_${i}`).value || "(no ip)";
-      pingStatusByHead[i] = "pending...";
-      const statusCell = $(`h_ping_status_${i}`);
-      if (statusCell) statusCell.textContent = pingStatusByHead[i];
+      setPingStatus(i, "PENDING", "pending");
       setEvent(`ping head #${i+1} ${ip}...`);
       send({ type: "PING_HEAD", index: i });
     };
@@ -4166,9 +4236,8 @@ function connectWs(){
         const firstLine = String(msg.message || "").split("\n")[0];
         const idx = Number(msg.index);
         if (Number.isFinite(idx) && idx >= 0){
-          pingStatusByHead[idx] = `${msg.ok ? "ok" : "fail"}${firstLine ? `: ${firstLine}` : ""}`;
-          const statusCell = $(`h_ping_status_${idx}`);
-          if (statusCell) statusCell.textContent = pingStatusByHead[idx];
+          if (msg.ok) setPingStatus(idx, "OK", "ok");
+          else setPingStatus(idx, `FAIL: ${summarizePingMessage(firstLine)}`, "fail");
         }
         setEvent(`PING_HEAD #${(Number(msg.index) || 0) + 1} ${msg.ip || ""}: ${msg.ok ? "ok" : "fail"} ${firstLine}`);
       } else if (msg.type === "LIST_USER_PROFILES_RESULT"){
