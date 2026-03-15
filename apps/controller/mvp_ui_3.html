@@ -316,11 +316,11 @@
     .card { border:0; border-radius:10px; background:#0f1722; padding:10px; display:grid; gap:8px; align-content:start; box-shadow:none; }
     .card h3 { margin:0; font-size:15px; color:#d6e4fa; letter-spacing:.008em; text-transform:none; font-weight:600; }
     .card-desc { margin:0 0 8px 0; font-size:12px; line-height:1.45; color:var(--muted); }
-    .page, .surface, .info, .table-wrap, .head-picker-list, .head-config-body { scrollbar-color: var(--border) var(--card2); scrollbar-width: thin; }
-    .page::-webkit-scrollbar, .surface::-webkit-scrollbar, .info::-webkit-scrollbar, .table-wrap::-webkit-scrollbar, .head-picker-list::-webkit-scrollbar, .head-config-body::-webkit-scrollbar { width:10px; height:10px; }
-    .page::-webkit-scrollbar-track, .surface::-webkit-scrollbar-track, .info::-webkit-scrollbar-track, .table-wrap::-webkit-scrollbar-track, .head-picker-list::-webkit-scrollbar-track, .head-config-body::-webkit-scrollbar-track { background:var(--card2); border-radius:4px; }
-    .page::-webkit-scrollbar-thumb, .surface::-webkit-scrollbar-thumb, .info::-webkit-scrollbar-thumb, .table-wrap::-webkit-scrollbar-thumb, .head-picker-list::-webkit-scrollbar-thumb, .head-config-body::-webkit-scrollbar-thumb { background:var(--border); border-radius:4px; }
-    .page::-webkit-scrollbar-thumb:hover, .surface::-webkit-scrollbar-thumb:hover, .info::-webkit-scrollbar-thumb:hover, .table-wrap::-webkit-scrollbar-thumb:hover, .head-picker-list::-webkit-scrollbar-thumb:hover, .head-config-body::-webkit-scrollbar-thumb:hover { background:var(--accent); }
+    .page, .surface, .info, .table-wrap, .head-picker-grid, .head-config-body { scrollbar-color: var(--border) var(--card2); scrollbar-width: thin; }
+    .page::-webkit-scrollbar, .surface::-webkit-scrollbar, .info::-webkit-scrollbar, .table-wrap::-webkit-scrollbar, .head-picker-grid::-webkit-scrollbar, .head-config-body::-webkit-scrollbar { width:10px; height:10px; }
+    .page::-webkit-scrollbar-track, .surface::-webkit-scrollbar-track, .info::-webkit-scrollbar-track, .table-wrap::-webkit-scrollbar-track, .head-picker-grid::-webkit-scrollbar-track, .head-config-body::-webkit-scrollbar-track { background:var(--card2); border-radius:4px; }
+    .page::-webkit-scrollbar-thumb, .surface::-webkit-scrollbar-thumb, .info::-webkit-scrollbar-thumb, .table-wrap::-webkit-scrollbar-thumb, .head-picker-grid::-webkit-scrollbar-thumb, .head-config-body::-webkit-scrollbar-thumb { background:var(--border); border-radius:4px; }
+    .page::-webkit-scrollbar-thumb:hover, .surface::-webkit-scrollbar-thumb:hover, .info::-webkit-scrollbar-thumb:hover, .table-wrap::-webkit-scrollbar-thumb:hover, .head-picker-grid::-webkit-scrollbar-thumb:hover, .head-config-body::-webkit-scrollbar-thumb:hover { background:var(--accent); }
     .info { font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:12px; color:var(--muted); border:1px solid var(--border); border-radius:8px; padding:8px; background:rgba(16,24,36,.65); overflow:auto; max-height:170px; white-space:pre-wrap; }
     .dock { position:relative; --dock-pad-y:8px; padding:var(--dock-pad-y) 8px; overflow:visible; }
     .dock::before {
@@ -677,15 +677,16 @@
     .kbd-row { display:flex; gap:6px; flex-wrap:wrap; }
     .kbd-key { min-width:42px; height:42px; border-radius:6px; border:1px solid #465b7f; background:#243349; color:#e8f2ff; font-weight:700; }
     .kbd-actions { display:flex; gap:8px; justify-content:flex-end; }
-    .head-picker { position:fixed; inset:0; background:rgba(0,0,0,.65); display:none; align-items:center; justify-content:center; z-index:22; }
-    .head-picker.open { display:flex; }
-    .head-picker-card { width:min(680px,96vw); max-height:90vh; border:1px solid #4a5b7f; border-radius:12px; background:#1a2232; padding:10px; display:grid; grid-template-rows:auto 1fr auto; gap:8px; }
-    .head-picker-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+    .head-picker { position:fixed; inset:0; background:rgba(0,0,0,.75); display:none; align-items:stretch; justify-content:center; z-index:22; padding:12px; box-sizing:border-box; }
+    .head-picker.open { display:flex; flex-direction:column; }
+    .head-picker-card { width:100%; max-width:96vw; flex:1; min-height:0; border:1px solid #4a5b7f; border-radius:12px; background:#1a2232; padding:12px; display:grid; grid-template-rows:auto 1fr auto; gap:10px; }
+    .head-picker-head { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-shrink:0; }
     .head-picker-title { margin:0; font-size:16px; color:#dbe8ff; }
-    .head-picker-list { overflow:auto; border:1px solid #34435d; border-radius:8px; padding:8px; display:grid; gap:8px; align-content:start; }
-    .head-option { height:56px; border-radius:8px; border:1px solid #465b7f; background:#243349; color:#e8f2ff; font-weight:700; font-size:16px; text-align:left; padding:0 14px; }
-    .head-option.active { border-color:var(--accent); box-shadow:0 0 0 2px rgba(87,167,255,.25) inset; background:#284362; }
-    .head-picker-actions { display:flex; justify-content:flex-end; gap:8px; }
+    .head-picker-grid { display:grid; grid-template-columns:repeat(5,1fr); grid-template-rows:repeat(3,1fr); gap:10px; flex:1; min-height:0; overflow:hidden; }
+    .head-picker-grid .head-option { height:100%; min-height:64px; border-radius:10px; border:2px solid #465b7f; background:#243349; color:#e8f2ff; font-weight:700; font-size:clamp(14px, 3.2vw, 20px); display:flex; align-items:center; justify-content:center; padding:8px; text-align:center; }
+    .head-picker-grid .head-option.active { border-color:var(--accent); box-shadow:0 0 0 2px rgba(87,167,255,.35) inset; background:#284362; }
+    .head-picker-grid .head-option.empty { opacity:0.5; cursor:default; }
+    .head-picker-actions { display:flex; justify-content:flex-end; gap:8px; flex-shrink:0; }
     .head-config-editor { position:fixed; inset:0; background:rgba(0,0,0,.7); display:none; align-items:center; justify-content:center; z-index:18; }
     .head-config-editor.open { display:flex; }
     .head-config-card { width:min(1000px,98vw); height:min(94vh,760px); border:1px solid #4a5b7f; border-radius:12px; background:#1a2232; padding:10px; display:grid; grid-template-rows:auto 1fr auto; gap:8px; }
@@ -713,7 +714,7 @@
     .kbd-card,
     .kbd-key,
     .head-picker-card,
-    .head-picker-list,
+    .head-picker-grid,
     .head-option,
     .head-config-card,
     .head-config-body,
@@ -1031,7 +1032,8 @@
       .pos-display-map { min-height:0; }
       .head-picker-card { width:96vw; max-height:92vh; }
       .head-picker-title { font-size:14px; }
-      .head-option { height:52px; font-size:14px; }
+      .head-picker-grid { gap:8px; }
+      .head-picker-grid .head-option { min-height:56px; font-size:14px; }
       .head-config-card { width:98vw; height:94vh; }
       .head-config-title { font-size:14px; }
     }
@@ -1265,7 +1267,7 @@
         <h3 class="head-picker-title">Head Selector</h3>
         <button id="headPickerClose" type="button">Close</button>
       </div>
-      <div id="headPickerList" class="head-picker-list"></div>
+      <div id="headPickerList" class="head-picker-grid"></div>
       <div class="head-picker-actions">
         <button id="headPickerCancel" type="button">Cancel</button>
       </div>
@@ -3592,20 +3594,22 @@ function openProfileEditor(){
 }
 
 function renderHeadPickerList(){
-  const list = $("headPickerList");
-  if (!list) return;
-  list.innerHTML = "";
-  for (let i = 0; i < state.heads.length; i++){
+  const grid = $("headPickerList");
+  if (!grid) return;
+  grid.innerHTML = "";
+  const selected = Number(state.selected) || 0;
+  const headCount = state.heads.length || 0;
+  for (let i = 0; i < 15; i++){
     const b = document.createElement("button");
     b.type = "button";
-    b.className = "head-option" + ((Number(state.selected) || 0) === i ? " active" : "");
+    b.className = "head-option" + (selected === i ? " active" : "") + (i >= headCount ? " empty" : "");
     b.textContent = getHeadLabel(i);
     b.onclick = () => {
       $("heads").value = String(i);
       requestHeadSelection(i);
       closeHeadPicker();
     };
-    list.appendChild(b);
+    grid.appendChild(b);
   }
 }
 
