@@ -712,15 +712,22 @@
       }
 
       function setMapStyle(style, persist) {
-        tileStyle = normalizeTileStyle(style);
-        var baseProviders = (tileStyles[tileStyle] || tileStyles.color);
-        // Keep dark mode visually stable; do not fall through to light/color providers.
-        providers = (tileStyle === "dark") ? baseProviders.slice() : baseProviders.concat(osmFallbackProviders);
-        tileProviderIndex = 0;
+        var nextStyle = normalizeTileStyle(style);
+        var styleChanged = nextStyle !== tileStyle;
+        tileStyle = nextStyle;
         setMapStyleButtonLabel();
         if (persist) {
           try { localStorage.setItem(TILE_STYLE_STORAGE_KEY, tileStyle); } catch (e) {}
         }
+        // Prevent tile layer churn/flicker when parent sends frequent updates
+        // with the same map_style value.
+        if (!styleChanged && providers.length && tileLayer) {
+          return;
+        }
+        var baseProviders = (tileStyles[tileStyle] || tileStyles.color);
+        // Keep dark mode visually stable; do not fall through to light/color providers.
+        providers = (tileStyle === "dark") ? baseProviders.slice() : baseProviders.concat(osmFallbackProviders);
+        tileProviderIndex = 0;
         activateTileProvider(0);
       }
 
