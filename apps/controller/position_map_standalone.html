@@ -41,6 +41,16 @@
       background: rgba(14, 20, 30, 0.95) !important;
       color: var(--theme-text) !important;
     }
+    body.minimal .leaflet-top.leaflet-left {
+      left: 12px;
+      right: auto;
+      top: 12px;
+      transform: none;
+    }
+    body.minimal .leaflet-top.leaflet-left .leaflet-control-zoom {
+      margin-top: 0 !important;
+      margin-left: 0 !important;
+    }
     .leaflet-control-attribution {
       background: rgba(8, 12, 18, 0.86) !important;
       color: var(--theme-muted) !important;
@@ -82,6 +92,19 @@
       background: transparent;
       border-color: transparent;
       backdrop-filter: none;
+    }
+    body.minimal .tilt-roll-wrap {
+      left: auto;
+      right: 12px;
+      top: 50%;
+      bottom: auto;
+      transform: translateY(-50%);
+      width: 84px;
+      height: 234px;
+    }
+    body.minimal .tilt-roll-wrap .tilt-roll-svg {
+      width: 58px;
+      height: 203px;
     }
     .tilt-roll-svg { width: 44px; height: 156px; }
     .tilt-roll-rail { stroke: rgba(155,216,90,0.8); stroke: var(--theme-accent); stroke-width: 1.4; }
@@ -329,7 +352,7 @@
         ],
         dark: [
           { url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", attribution: "&copy; OpenStreetMap, &copy; CARTO" },
-          { url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", attribution: "&copy; OpenStreetMap, &copy; CARTO" },
+          { url: "https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png", attribution: "&copy; OpenStreetMap, &copy; CARTO" },
         ],
       };
       const osmFallbackProviders = [
@@ -338,7 +361,7 @@
         { url: "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png", attribution: "&copy; OpenStreetMap contributors" },
         { url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", attribution: "&copy; OpenStreetMap contributors" },
       ];
-      let tileStyle = "color";
+      let tileStyle = "dark";
       let providers = [];
       const indicatorColor = "#9bd85a";
       const INDICATOR_DIAMETER_PX = 12;
@@ -580,7 +603,7 @@
 
       function normalizeTileStyle(style) {
         var s = String(style || "").toLowerCase();
-        return TILE_STYLE_ORDER.indexOf(s) >= 0 ? s : "color";
+        return TILE_STYLE_ORDER.indexOf(s) >= 0 ? s : "dark";
       }
 
       function setMapStyleButtonLabel() {
@@ -599,7 +622,9 @@
 
       function setMapStyle(style, persist) {
         tileStyle = normalizeTileStyle(style);
-        providers = (tileStyles[tileStyle] || tileStyles.color).concat(osmFallbackProviders);
+        var baseProviders = (tileStyles[tileStyle] || tileStyles.color);
+        // Keep dark mode visually stable; do not fall through to light/color providers.
+        providers = (tileStyle === "dark") ? baseProviders.slice() : baseProviders.concat(osmFallbackProviders);
         tileProviderIndex = 0;
         setMapStyleButtonLabel();
         if (persist) {
@@ -835,9 +860,7 @@
       var mapStyleToggleBtn = document.getElementById("mapStyleToggle");
       if (mapStyleToggleBtn) mapStyleToggleBtn.addEventListener("click", cycleMapStyle);
       var styleFromQuery = normalizeTileStyle(qs.get("mapStyle"));
-      var styleFromStorage = "color";
-      try { styleFromStorage = normalizeTileStyle(localStorage.getItem(TILE_STYLE_STORAGE_KEY)); } catch (e) {}
-      setMapStyle(qs.has("mapStyle") ? styleFromQuery : styleFromStorage, false);
+      setMapStyle(qs.has("mapStyle") ? styleFromQuery : "dark", false);
       function activateTileProvider(index) {
         if (!map) return;
         if (index >= providers.length) {

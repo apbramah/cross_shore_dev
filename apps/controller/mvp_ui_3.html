@@ -112,8 +112,6 @@
     #posDisplayPanel {
       grid-row:2 / 4;
       display:none;
-      grid-template-columns:minmax(240px,1fr) minmax(0,2fr);
-      gap:8px;
       padding:10px;
       border-radius:12px;
       background:#0d141f;
@@ -121,32 +119,45 @@
     }
     .app.pos-display #surfaceMain,
     .app.pos-display #dockMain { display:none; }
-    .app.pos-display #posDisplayPanel { display:grid; }
-    .pos-display-left {
-      border:1px solid transparent;
+    .app.pos-display #posDisplayPanel { display:block; }
+    .pos-overlay-values {
+      --posOverlayWidth: 130px;
+      position:absolute;
+      left:10px;
+      top:10px;
+      bottom:10px;
+      z-index:3;
+      width:var(--posOverlayWidth);
+      padding:10px 8px;
       border-radius:10px;
-      background:#121a27;
-      padding:10px;
+      border:1px solid transparent;
+      background:transparent;
       display:grid;
-      align-content:start;
-      gap:8px;
-    }
-    .pos-display-left h3 {
-      margin:0;
-      font-size:13px;
-      color:#d6e4fa;
-      font-weight:600;
-      letter-spacing:.008em;
-    }
-    .pos-display-grid {
-      display:grid;
-      grid-template-columns:auto 1fr;
-      gap:8px 10px;
-      align-items:center;
+      grid-template-columns:1fr;
+      grid-auto-rows:auto;
+      align-content:end;
+      gap:2px;
+      overflow:hidden;
+      backdrop-filter:none;
       font-variant-numeric:tabular-nums;
     }
-    .pos-display-grid .k { color:#8ea0ba; font-size:12px; }
-    .pos-display-grid .v { color:#dce8fb; font-size:14px; font-weight:600; text-align:right; }
+    .pos-overlay-values .row {
+      display:grid;
+      grid-template-columns:minmax(0,1fr) auto;
+      gap:6px;
+      align-items:center;
+      min-width:0;
+    }
+    .pos-overlay-values .k,
+    .pos-overlay-values .v {
+      font-size:12px;
+      line-height:1.15;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .pos-overlay-values .k { color:var(--accent); font-weight:500; }
+    .pos-overlay-values .v { color:var(--accent); font-weight:500; text-align:right; min-width:1.8em; }
     .pos-display-map {
       border:1px solid transparent;
       border-radius:10px;
@@ -154,8 +165,19 @@
       overflow:hidden;
       min-width:0;
       position:relative;
+      width:100%;
+      height:100%;
+      min-height:0;
     }
-    #posDisplayFrame { width:100%; height:100%; border:0; background:#0a0e14; }
+    #posDisplayFrame {
+      position:absolute;
+      inset:0;
+      width:100%;
+      height:100%;
+      border:0;
+      background:#0a0e14;
+      z-index:1;
+    }
     .pos-display-close {
       position:absolute;
       top:8px;
@@ -172,17 +194,30 @@
       letter-spacing:.006em;
       padding:0 10px;
     }
+    .pos-overlay-bottom {
+      position:absolute;
+      left:calc(var(--posOverlayWidth) + 20px);
+      right:90px;
+      bottom:10px;
+      z-index:3;
+      display:grid;
+      gap:8px;
+      padding:8px;
+      border-radius:10px;
+      border:1px solid transparent;
+      background:transparent;
+      backdrop-filter:none;
+      overflow:hidden;
+    }
     .pos-display-offset {
-      margin-top:2px;
       display:grid;
       gap:4px;
     }
     .pos-display-sim {
-      margin-top:2px;
       display:flex;
       align-items:center;
       gap:8px;
-      color:#8ea0ba;
+      color:var(--accent);
       font-size:12px;
     }
     .pos-display-sim input[type="checkbox"] {
@@ -192,19 +227,20 @@
       cursor:pointer;
     }
     .pos-display-sim-row {
-      margin-top:2px;
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:8px;
+      display:grid;
+      grid-template-columns:1fr;
+      gap:6px;
+      margin-top:6px;
+      margin-bottom:8px;
     }
     .pos-display-map-style-btn {
-      height:30px;
-      min-width:86px;
+      height:28px;
+      min-width:0;
+      width:100%;
       border-radius:8px;
-      border:1px solid #32445f;
-      background:rgba(16,24,36,.84);
-      color:#dce8fb;
+      border:1px solid rgba(155,216,90,.55);
+      background:rgba(16,24,36,.32);
+      color:var(--accent);
       font-size:11px;
       font-weight:600;
       letter-spacing:.01em;
@@ -212,13 +248,14 @@
     }
     .pos-display-offset-head {
       display:flex;
-      justify-content:space-between;
+      justify-content:flex-start;
       align-items:center;
+      gap:8px;
       font-size:12px;
-      color:#8ea0ba;
+      color:var(--accent);
     }
     #posDisplayHeadingOffsetVal {
-      color:#dce8fb;
+      color:var(--accent);
       font-weight:600;
       font-variant-numeric:tabular-nums;
     }
@@ -980,11 +1017,9 @@
       .topbar > .row.actions { gap:6px; }
       .topbar > .row.actions button { min-width:0; width:100%; }
       .logo-pill { font-size:11px; padding:0 8px; }
-      #posDisplayPanel {
-        grid-template-columns:minmax(220px,0.95fr) minmax(0,1.65fr);
-        grid-template-rows:minmax(0,1fr);
-      }
-      .pos-display-left { max-height:none; min-height:0; overflow:auto; }
+      #posDisplayPanel { min-height:0; }
+      .pos-overlay-values { width:min(var(--posOverlayWidth), 32vw); }
+      .pos-overlay-bottom { gap:4px; padding:6px; }
       .pos-display-map { min-height:0; }
       .head-picker-card { width:96vw; max-height:92vh; }
       .head-picker-title { font-size:14px; }
@@ -1168,32 +1203,31 @@
       </div>
     </div>
     <div id="posDisplayPanel">
-      <div class="pos-display-left">
-        <h3>Position Display</h3>
-        <div class="pos-display-grid">
-          <span class="k">Pan</span><span class="v" id="posDisplayPan">—</span>
-          <span class="k">Tilt</span><span class="v" id="posDisplayTilt">—</span>
-          <span class="k">Roll</span><span class="v" id="posDisplayRoll">—</span>
-          <span class="k">Zoom</span><span class="v" id="posDisplayZoom">—</span>
-          <span class="k">Iris</span><span class="v" id="posDisplayIris">—</span>
-          <span class="k">Focus</span><span class="v" id="posDisplayFocus">—</span>
-        </div>
-        <div class="pos-display-offset">
-          <div class="pos-display-offset-head">
-            <span>Heading Offset</span>
-            <span id="posDisplayHeadingOffsetVal">0°</span>
+      <div id="posDisplayMapWrap" class="pos-display-map">
+        <div class="pos-overlay-values" aria-label="Position Display telemetry">
+          <div class="row"><span class="k">Pan</span><span class="v" id="posDisplayPan">—</span></div>
+          <div class="row"><span class="k">Tilt</span><span class="v" id="posDisplayTilt">—</span></div>
+          <div class="row"><span class="k">Roll</span><span class="v" id="posDisplayRoll">—</span></div>
+          <div class="row"><span class="k">Zoom</span><span class="v" id="posDisplayZoom">—</span></div>
+          <div class="row"><span class="k">Iris</span><span class="v" id="posDisplayIris">—</span></div>
+          <div class="row"><span class="k">Focus</span><span class="v" id="posDisplayFocus">—</span></div>
+          <div class="pos-display-sim-row">
+            <label class="pos-display-sim" title="Use browser gamepad input for map simulation">
+              <input id="posDisplaySimMode" type="checkbox" />
+              <span>Sim mode</span>
+            </label>
+            <button id="posDisplayMapStyleBtn" class="pos-display-map-style-btn" type="button">Map: Dark</button>
           </div>
-          <input id="posDisplayHeadingOffset" type="range" min="-180" max="180" step="1" value="0" />
         </div>
-        <div class="pos-display-sim-row">
-          <label class="pos-display-sim" title="Use browser gamepad input for map simulation">
-            <input id="posDisplaySimMode" type="checkbox" />
-            <span>Sim mode</span>
-          </label>
-          <button id="posDisplayMapStyleBtn" class="pos-display-map-style-btn" type="button">Map: Color</button>
+        <div class="pos-overlay-bottom">
+          <div class="pos-display-offset">
+            <div class="pos-display-offset-head">
+              <span>Heading Offset</span>
+              <span id="posDisplayHeadingOffsetVal">0°</span>
+            </div>
+            <input id="posDisplayHeadingOffset" type="range" min="-180" max="180" step="1" value="0" />
+          </div>
         </div>
-      </div>
-      <div class="pos-display-map">
         <button id="posDisplayClose" class="pos-display-close" type="button">Close</button>
         <iframe id="posDisplayFrame" title="Position display map" src="about:blank"></iframe>
       </div>
@@ -1325,7 +1359,7 @@ const POS_DISPLAY_MAP_ASSET_VERSION = "20260315a";
 let posDisplayCoords = { lat: DEFAULT_POS_DISPLAY_LAT, lon: DEFAULT_POS_DISPLAY_LON };
 let posDisplayHeadingOffsetDeg = 0;
 let posDisplaySimMode = false;
-let posDisplayMapStyle = "color";
+let posDisplayMapStyle = "dark";
 const THEME_LAB_DEFAULT_PRESET_NAME = "Default";
 const THEME_LAB_DEFAULT_PRESET = {
   bg: "#070b11",
@@ -3070,7 +3104,7 @@ function sanitizeW3WWords(raw){
 function normalizePosDisplayMapStyle(raw){
   const s = String(raw || "").trim().toLowerCase();
   if (s === "mono" || s === "dark") return s;
-  return "color";
+  return "dark";
 }
 
 function getPosDisplayMapStyleLabel(style){
@@ -3113,7 +3147,7 @@ function loadPosDisplayCoords(){
   let savedSim = "0";
   try { savedSim = String(localStorage.getItem(POS_DISPLAY_SIM_MODE_STORAGE_KEY) || "0"); } catch {}
   posDisplaySimMode = savedSim === "1";
-  try { posDisplayMapStyle = normalizePosDisplayMapStyle(localStorage.getItem(POS_DISPLAY_MAP_STYLE_STORAGE_KEY) || "color"); } catch { posDisplayMapStyle = "color"; }
+  posDisplayMapStyle = "dark";
   if ($("posDisplayHeadingOffset")) {
     $("posDisplayHeadingOffset").value = String(posDisplayHeadingOffsetDeg);
     $("posDisplayHeadingOffset").style.setProperty("--posOffsetPct", `${((posDisplayHeadingOffsetDeg + 180) / 360) * 100}%`);
@@ -3272,6 +3306,15 @@ function postPosDisplayMapUpdate(){
   }, "*");
 }
 
+function updatePosDisplayOverlayLayout(){
+  const mapWrap = $("posDisplayMapWrap");
+  const btn = $("posDisplayBtn");
+  if (!mapWrap || !btn) return;
+  const wRaw = Math.round(btn.getBoundingClientRect().width || 0);
+  const w = Math.max(72, Math.round(wRaw * 0.85));
+  mapWrap.style.setProperty("--posOverlayWidth", `${w}px`);
+}
+
 function togglePosDisplay(forceOpen){
   const app = document.querySelector(".app");
   const btn = $("posDisplayBtn");
@@ -3281,6 +3324,7 @@ function togglePosDisplay(forceOpen){
   app.classList.toggle("pos-display", open);
   btn.classList.toggle("active", open);
   if (open) {
+    updatePosDisplayOverlayLayout();
     updatePosDisplayMapFrame();
     postPosDisplayMapUpdate();
   }
@@ -4146,6 +4190,7 @@ function bindUI(){
   if ($("posDisplayBtn")) $("posDisplayBtn").onclick = () => togglePosDisplay();
   if ($("posDisplayClose")) $("posDisplayClose").onclick = () => togglePosDisplay(false);
   if ($("posDisplayFrame")) $("posDisplayFrame").onload = () => postPosDisplayMapUpdate();
+  window.addEventListener("resize", () => updatePosDisplayOverlayLayout());
   $("lockoffBtn").onclick = () => {
     deadAheadCfg.enabled = !deadAheadCfg.enabled;
     saveDeadAheadCfg();
@@ -4366,6 +4411,7 @@ function init(){
   updateHeadIdStatus(state.connection_status || {});
   renderKeyboard();
   bindUI();
+  updatePosDisplayOverlayLayout();
   initDeadAheadControls();
   buildControlQuickButtons();
   renderControlQuickButtons();
