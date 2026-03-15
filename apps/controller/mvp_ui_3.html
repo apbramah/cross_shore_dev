@@ -49,10 +49,11 @@
     button { border-color:#212d40; }
     input { width:100%; min-width:0; }
     #heads { width:24ch; min-width:24ch; }
-    .head-select-trigger { text-align:center; position:relative; padding-right:1.5em; }
+    .head-select-trigger { text-align:center; position:relative; padding-right:1.5em; cursor:pointer; }
     .head-select-trigger::after { content:" ▾"; font-size:1.5em; opacity:0.9; position:absolute; right:6px; top:50%; transform:translateY(-50%); pointer-events:none; }
     #headSelectorBtn { min-width:0; width:100%; }
-    #headSelectorBtn.head-alert {
+    #headSelectorBtn.head-alert,
+    #connectionPill.head-alert {
       border-color:#d6a04f;
       background:#2a2218;
       color:#ffe6bf;
@@ -1044,11 +1045,10 @@
     <div class="topbar">
       <div class="row">
         <div class="logo-pill"><span class="brand">HydraVision</span><span class="tag">- intelligent multi cam control</span></div>
-        <button id="headSelectorBtn" class="head-select-trigger" type="button">Select Head</button>
         <select id="heads" style="display:none"></select>
       </div>
       <div class="row" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-        <div id="connectionPill" class="connection-pill status-off" title="Head and lens connection status">Head: none Lens: none</div>
+        <div id="connectionPill" class="connection-pill head-select-trigger status-off" title="Head and lens connection status">Head: none Lens: none</div>
       </div>
       <div class="row actions">
         <button id="posDisplayBtn" class="top-action-btn" type="button">Pos Display</button>
@@ -2887,7 +2887,6 @@ function adjustEngineeringItem(dir){
 
 function updateHeadIdStatus(connectionStatus){
   const pill = $("connectionPill");
-  const headBtn = $("headSelectorBtn");
   if (!pill) return;
   const cs = connectionStatus || {};
   const phys = !!(((cs.physical_link || {}).eth0_up));
@@ -2899,8 +2898,8 @@ function updateHeadIdStatus(connectionStatus){
   } else if (phys){
     cls = "status-warn";
   }
-  pill.className = `connection-pill ${cls}`;
-  if (headBtn) headBtn.classList.toggle("head-alert", !headConnected);
+  pill.className = `connection-pill head-select-trigger ${cls}`;
+  pill.classList.toggle("head-alert", !headConnected);
   updateConnectionPillContent();
 }
 
@@ -3531,10 +3530,7 @@ function getHeadLabel(i){
 }
 
 function refreshHeadSelectorButton(){
-  const btn = $("headSelectorBtn");
-  if (!btn) return;
-  const idx = Math.max(0, Math.min(state.heads.length - 1, Number(state.selected) || 0));
-  btn.textContent = state.heads.length ? getHeadLabel(idx) : "No Heads";
+  updateConnectionPillContent();
 }
 
 function closeHeadPicker(){ $("headPicker").classList.remove("open"); }
@@ -4200,7 +4196,17 @@ function connectWs(){
 
 function bindUI(){
   $("heads").onchange = (e) => requestHeadSelection(parseInt(e.target.value, 10) || 0);
-  $("headSelectorBtn").onclick = openHeadPicker;
+  if ($("connectionPill")) {
+    $("connectionPill").onclick = openHeadPicker;
+    $("connectionPill").onkeydown = (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        openHeadPicker();
+      }
+    };
+    $("connectionPill").setAttribute("role", "button");
+    $("connectionPill").setAttribute("tabindex", "0");
+  }
   if ($("posDisplayBtn")) $("posDisplayBtn").onclick = () => togglePosDisplay();
   if ($("posDisplayClose")) $("posDisplayClose").onclick = () => togglePosDisplay(false);
   if ($("posDisplayFrame")) $("posDisplayFrame").onload = () => postPosDisplayMapUpdate();
