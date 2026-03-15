@@ -125,10 +125,10 @@
       position:absolute;
       left:10px;
       top:10px;
-      bottom:10px;
+      bottom:0;
       z-index:3;
       width:var(--posOverlayWidth);
-      padding:10px 8px;
+      padding:10px 8px 0 8px;
       border-radius:10px;
       border:1px solid transparent;
       background:transparent;
@@ -198,7 +198,7 @@
       position:absolute;
       left:calc(var(--posOverlayWidth) + 20px);
       right:90px;
-      bottom:10px;
+      bottom:0;
       z-index:3;
       display:grid;
       gap:8px;
@@ -230,8 +230,9 @@
       display:grid;
       grid-template-columns:1fr;
       gap:6px;
-      margin-top:6px;
-      margin-bottom:8px;
+      margin-top:2px;
+      margin-bottom:0;
+      transform:translateY(-12px);
     }
     .pos-display-map-style-btn {
       height:28px;
@@ -262,6 +263,7 @@
     #posDisplayHeadingOffset {
       width:100%;
       height:28px;
+      margin-top:2px;
       -webkit-appearance:none;
       appearance:none;
       background:transparent;

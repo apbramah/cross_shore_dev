@@ -51,6 +51,14 @@
       margin-top: 0 !important;
       margin-left: 0 !important;
     }
+    body.minimal .leaflet-top.leaflet-right .leaflet-control-attribution {
+      margin-top: 42px !important;
+      margin-right: 0 !important;
+    }
+    body.minimal .leaflet-bottom.leaflet-right .leaflet-control-scale {
+      margin-bottom: 14px !important;
+      margin-right: 12px !important;
+    }
     .leaflet-control-attribution {
       background: rgba(8, 12, 18, 0.86) !important;
       color: var(--theme-muted) !important;
@@ -58,6 +66,8 @@
       border-left: 1px solid rgba(58, 74, 98, 0.55);
       border-top-left-radius: 6px;
       padding: 2px 6px !important;
+      font-size: 10px;
+      opacity: 0.92;
     }
     .leaflet-control-attribution a {
       color: var(--theme-text) !important;
@@ -165,6 +175,11 @@
       filter: brightness(0.95);
     }
     body.minimal .app { grid-template-rows: 1fr; }
+    body.minimal .leaflet-control-attribution {
+      font-size: 8px !important;
+      padding: 1px 4px !important;
+      opacity: 0.85;
+    }
     body.minimal .topbar,
     body.minimal .sim-panel,
     body.minimal .position-readouts,
@@ -343,23 +358,23 @@
       const TILE_STYLE_ORDER = ["color", "mono", "dark"];
       const tileStyles = {
         color: [
-          { url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", attribution: "&copy; OpenStreetMap, &copy; CARTO" },
-          { url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", attribution: "&copy; OpenStreetMap, &copy; CARTO" },
+          { url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", attribution: "&copy; OSM, &copy; CARTO" },
+          { url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", attribution: "&copy; OSM, &copy; CARTO" },
         ],
         mono: [
-          { url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", attribution: "&copy; OpenStreetMap, &copy; CARTO" },
-          { url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", attribution: "&copy; OpenStreetMap, &copy; CARTO" },
+          { url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", attribution: "&copy; OSM, &copy; CARTO" },
+          { url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", attribution: "&copy; OSM, &copy; CARTO" },
         ],
         dark: [
-          { url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", attribution: "&copy; OpenStreetMap, &copy; CARTO" },
-          { url: "https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png", attribution: "&copy; OpenStreetMap, &copy; CARTO" },
+          { url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", attribution: "&copy; OSM, &copy; CARTO" },
+          { url: "https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png", attribution: "&copy; OSM, &copy; CARTO" },
         ],
       };
       const osmFallbackProviders = [
         // Keep OSM endpoints as final fallback. Some environments block file:// origins by referer policy.
-        { url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", attribution: "&copy; OpenStreetMap contributors" },
-        { url: "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png", attribution: "&copy; OpenStreetMap contributors" },
-        { url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", attribution: "&copy; OpenStreetMap contributors" },
+        { url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", attribution: "&copy; OSM contributors" },
+        { url: "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png", attribution: "&copy; OSM contributors" },
+        { url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", attribution: "&copy; OSM contributors" },
       ];
       let tileStyle = "dark";
       let providers = [];
@@ -896,6 +911,9 @@
       }
       activateTileProvider(0);
       map.attributionControl.setPrefix("");
+      if (minimalMode && map.attributionControl && map.attributionControl.setPosition) {
+        map.attributionControl.setPosition("topright");
+      }
       L.control.scale({ position: "bottomright", metric: true, imperial: false, maxWidth: 120 }).addTo(map);
       map.on("zoomend", apply);
 
