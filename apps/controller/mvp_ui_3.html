@@ -961,7 +961,12 @@
       .topbar > .row.actions { gap:6px; }
       .topbar > .row.actions button { min-width:0; width:100%; }
       .logo-pill { font-size:11px; padding:0 8px; }
-      #posDisplayPanel { grid-template-columns:1fr; }
+      #posDisplayPanel {
+        grid-template-columns:1fr;
+        grid-template-rows:auto minmax(0,1fr);
+      }
+      .pos-display-left { max-height:42vh; overflow:auto; }
+      .pos-display-map { min-height:0; }
       .head-picker-card { width:96vw; max-height:92vh; }
       .head-picker-title { font-size:14px; }
       .head-option { height:52px; font-size:14px; }
@@ -1293,6 +1298,7 @@ const CONTROL_SLIDER_COUNT = 6;
 const CONTROL_QUICK_BUTTON_COUNT = 5;
 const DEFAULT_POS_DISPLAY_LAT = 50.56478249783015;
 const DEFAULT_POS_DISPLAY_LON = -2.449499288081317;
+const POS_DISPLAY_MAP_ASSET_VERSION = "20260315a";
 let posDisplayCoords = { lat: DEFAULT_POS_DISPLAY_LAT, lon: DEFAULT_POS_DISPLAY_LON };
 let posDisplayHeadingOffsetDeg = 0;
 let posDisplaySimMode = false;
@@ -3147,7 +3153,7 @@ function getPosDisplayMapUrl(){
   const lon = Number(posDisplayCoords.lon);
   const safeLat = Number.isFinite(lat) ? lat : DEFAULT_POS_DISPLAY_LAT;
   const safeLon = Number.isFinite(lon) ? lon : DEFAULT_POS_DISPLAY_LON;
-  return `position_map_standalone.html?minimal=1&lat=${encodeURIComponent(String(safeLat))}&lon=${encodeURIComponent(String(safeLon))}&heading=0`;
+  return `position_map_standalone.html?minimal=1&lat=${encodeURIComponent(String(safeLat))}&lon=${encodeURIComponent(String(safeLon))}&heading=0&v=${encodeURIComponent(POS_DISPLAY_MAP_ASSET_VERSION)}`;
 }
 
 function updatePosDisplayMapFrame(forceReload=false){
