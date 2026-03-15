@@ -140,6 +140,7 @@
       overflow:hidden;
       backdrop-filter:none;
       font-variant-numeric:tabular-nums;
+      pointer-events:none;
     }
     .pos-overlay-values .row {
       display:grid;
@@ -220,12 +221,14 @@
       gap:8px;
       color:var(--accent);
       font-size:12px;
+      pointer-events:auto;
     }
     .pos-display-sim input[type="checkbox"] {
       width:16px;
       height:16px;
       accent-color:#9bd85a;
       cursor:pointer;
+      pointer-events:auto;
     }
     .pos-display-sim-row {
       display:grid;
@@ -234,6 +237,7 @@
       margin-top:2px;
       margin-bottom:0;
       transform:translateY(-12px);
+      pointer-events:none;
     }
     .pos-display-map-style-btn {
       height:28px;
@@ -247,6 +251,7 @@
       font-weight:600;
       letter-spacing:.01em;
       padding:0 10px;
+      pointer-events:auto;
     }
     .pos-display-offset-head {
       display:flex;

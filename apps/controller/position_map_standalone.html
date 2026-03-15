@@ -483,33 +483,98 @@
         return Math.max(0, Math.min(1, (z - ARROW_ZOOM_MIN) / (ARROW_ZOOM_MAX - ARROW_ZOOM_MIN)));
       }
 
-      function getArrowLengthMeters(latDeg, lonDeg, headingDeg) {
-        const z = map ? Number(map.getZoom()) : ARROW_ZOOM_MIN;
-        const fallbackPx = INDICATOR_DIAMETER_PX * 5;
-        if (!map) return fallbackPx * metersPerPixelAtLatZoom(latDeg, z);
-        const size = map.getSize();
-        const origin = map.latLngToContainerPoint([latDeg, lonDeg]);
+      function getRayEdgeHit(origin, headingDeg, size) {
         const r = (headingDeg * Math.PI) / 180;
         const dx = Math.sin(r);
         const dy = -Math.cos(r);
         const eps = 1e-6;
-        const ts = [];
-        if (Math.abs(dx) > eps){
-          ts.push((0 - origin.x) / dx);
-          ts.push((size.x - origin.x) / dx);
+        const hits = [];
+        if (Math.abs(dx) > eps) {
+          const tLeft = (0 - origin.x) / dx;
+          const yLeft = origin.y + (dy * tLeft);
+          if (tLeft > 0 && yLeft >= -0.5 && yLeft <= size.y + 0.5) hits.push({ t: tLeft, edge: "left", x: 0, y: Math.max(0, Math.min(size.y, yLeft)) });
+          const tRight = (size.x - origin.x) / dx;
+          const yRight = origin.y + (dy * tRight);
+          if (tRight > 0 && yRight >= -0.5 && yRight <= size.y + 0.5) hits.push({ t: tRight, edge: "right", x: size.x, y: Math.max(0, Math.min(size.y, yRight)) });
         }
-        if (Math.abs(dy) > eps){
-          ts.push((0 - origin.y) / dy);
-          ts.push((size.y - origin.y) / dy);
+        if (Math.abs(dy) > eps) {
+          const tTop = (0 - origin.y) / dy;
+          const xTop = origin.x + (dx * tTop);
+          if (tTop > 0 && xTop >= -0.5 && xTop <= size.x + 0.5) hits.push({ t: tTop, edge: "top", x: Math.max(0, Math.min(size.x, xTop)), y: 0 });
+          const tBottom = (size.y - origin.y) / dy;
+          const xBottom = origin.x + (dx * tBottom);
+          if (tBottom > 0 && xBottom >= -0.5 && xBottom <= size.x + 0.5) hits.push({ t: tBottom, edge: "bottom", x: Math.max(0, Math.min(size.x, xBottom)), y: size.y });
         }
-        const tPos = ts.filter(t => Number.isFinite(t) && t > 0);
-        const edgeDistPx = tPos.length ? Math.min(...tPos) : fallbackPx;
-        return Math.max(0, edgeDistPx) * metersPerPixelAtLatZoom(latDeg, z);
+        if (!hits.length) {
+          return {
+            edge: "top",
+            point: { x: origin.x, y: 0 },
+          };
+        }
+        hits.sort((a, b) => a.t - b.t);
+        const hit = hits[0];
+        return {
+          edge: hit.edge,
+          point: { x: hit.x, y: hit.y },
+        };
       }
 
       function getHorizontalFovDeg() {
         const r = getZoomRatio();
         return H_FOV_MAX_DEG - ((H_FOV_MAX_DEG - H_FOV_MIN_DEG) * r);
+      }
+
+      function nextEdge(edge, clockwise) {
+        if (clockwise) {
+          if (edge === "top") return "right";
+          if (edge === "right") return "bottom";
+          if (edge === "bottom") return "left";
+          return "top";
+        }
+        if (edge === "top") return "left";
+        if (edge === "left") return "bottom";
+        if (edge === "bottom") return "right";
+        return "top";
+      }
+
+      function cornerAfter(edge, clockwise, size) {
+        if (clockwise) {
+          if (edge === "top") return { x: size.x, y: 0 };
+          if (edge === "right") return { x: size.x, y: size.y };
+          if (edge === "bottom") return { x: 0, y: size.y };
+          return { x: 0, y: 0 };
+        }
+        if (edge === "top") return { x: 0, y: 0 };
+        if (edge === "left") return { x: 0, y: size.y };
+        if (edge === "bottom") return { x: size.x, y: size.y };
+        return { x: size.x, y: 0 };
+      }
+
+      function buildBoundaryPath(startHit, endHit, size, clockwise) {
+        const pts = [];
+        let edge = startHit.edge;
+        let guard = 0;
+        while (edge !== endHit.edge && guard < 8) {
+          pts.push(cornerAfter(edge, clockwise, size));
+          edge = nextEdge(edge, clockwise);
+          guard += 1;
+        }
+        pts.push(endHit.point);
+        return pts;
+      }
+
+      function pointInPolygon(point, polygon) {
+        let inside = false;
+        for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+          const xi = polygon[i].x;
+          const yi = polygon[i].y;
+          const xj = polygon[j].x;
+          const yj = polygon[j].y;
+          const intersects = ((yi > point.y) !== (yj > point.y)) &&
+            (point.x < ((xj - xi) * (point.y - yi)) / ((yj - yi) || 1e-9) + xi);
+          if (intersects) inside = !inside;
+        }
+        return inside;
       }
 
       function renderHeadingIndicator(lat, lon, headingDeg) {
@@ -527,14 +592,16 @@
           headMarker.setLatLng([lat, lon]);
         }
 
+        const centerPx = map.latLngToContainerPoint([lat, lon]);
+        const size = map.getSize();
         const fovDeg = getHorizontalFovDeg();
         const halfFov = fovDeg * 0.5;
         const leftHeading = headingDeg - halfFov;
         const rightHeading = headingDeg + halfFov;
-        const leftLen = getArrowLengthMeters(lat, lon, leftHeading);
-        const rightLen = getArrowLengthMeters(lat, lon, rightHeading);
-        const leftEnd = projectHeading(lat, lon, leftHeading, leftLen);
-        const rightEnd = projectHeading(lat, lon, rightHeading, rightLen);
+        const leftHit = getRayEdgeHit(centerPx, leftHeading, size);
+        const rightHit = getRayEdgeHit(centerPx, rightHeading, size);
+        const leftEnd = map.containerPointToLatLng(leftHit.point);
+        const rightEnd = map.containerPointToLatLng(rightHit.point);
 
         if (!headingLeftRay) {
           headingLeftRay = L.polyline([[lat, lon], leftEnd], {
@@ -558,8 +625,20 @@
           headingRightRay.setStyle({ color: indicatorColor, weight: 1.5, opacity: 0.95 });
         }
 
+        const cwPath = buildBoundaryPath(leftHit, rightHit, size, true);
+        const ccwPath = buildBoundaryPath(leftHit, rightHit, size, false);
+        const forwardHit = getRayEdgeHit(centerPx, headingDeg, size);
+        const testPoint = {
+          x: centerPx.x + ((forwardHit.point.x - centerPx.x) * 0.75),
+          y: centerPx.y + ((forwardHit.point.y - centerPx.y) * 0.75),
+        };
+        const cwPolyPx = [centerPx, leftHit.point].concat(cwPath);
+        const ccwPolyPx = [centerPx, leftHit.point].concat(ccwPath);
+        const fillPolyPx = pointInPolygon(testPoint, cwPolyPx) ? cwPolyPx : ccwPolyPx;
+        const fillPolyLatLng = fillPolyPx.map((p) => map.containerPointToLatLng(p));
+
         if (!headingFovFill) {
-          headingFovFill = L.polygon([[lat, lon], leftEnd, rightEnd], {
+          headingFovFill = L.polygon(fillPolyLatLng, {
             color: indicatorColor,
             weight: 0,
             opacity: 0,
@@ -567,7 +646,7 @@
             fillOpacity: 0.14,
           }).addTo(map);
         } else {
-          headingFovFill.setLatLngs([[lat, lon], leftEnd, rightEnd]);
+          headingFovFill.setLatLngs(fillPolyLatLng);
           headingFovFill.setStyle({
             color: indicatorColor,
             weight: 0,
