@@ -1453,6 +1453,16 @@ def _refresh_head_network_push_timeouts(timeout_s: float = 4.0) -> None:
         if (now - sent_at) < float(timeout_s):
             continue
         idx = int(pending.get("index", -1))
+        cfg = pending.get("config", {})
+        inferred_ok = False
+        if isinstance(cfg, dict):
+            target_ip = str(cfg.get("ip", "")).strip()
+            if target_ip:
+                ping_ok, _ = _ping_ip_once(target_ip, timeout_s=1)
+                if ping_ok:
+                    inferred_ok = True
+                    _set_head_network_push_status(idx, "confirmed", "head_ack_inferred", apply_id=apply_id)
+                    _set_head_config(idx, cfg)
         routes = pending.get("routes", [])
         port = int(pending.get("port", mvp_protocol.SLOW_CMD_PORT))
         for route_ip in routes if isinstance(routes, list) else []:
@@ -1463,7 +1473,8 @@ def _refresh_head_network_push_timeouts(timeout_s: float = 4.0) -> None:
                 mvp_protocol.SLOW_KEY_NETCFG_EXIT,
                 0,
             )
-        _set_head_network_push_status(idx, "timeout", "head_ack_timeout", apply_id=apply_id)
+        if not inferred_ok:
+            _set_head_network_push_status(idx, "timeout", "head_ack_timeout", apply_id=apply_id)
         stale_apply_ids.append(int(apply_id))
     for apply_id in stale_apply_ids:
         head_network_push_pending.pop(apply_id, None)
@@ -1520,6 +1531,29 @@ def _ping_head(index: int) -> tuple[bool, str, str]:
         return ok, ip, msg
     except Exception as e:
         return False, ip, str(e)
+
+
+def _ping_ip_once(ip: str, timeout_s: int = 1) -> tuple[bool, str]:
+    ip_s = str(ip or "").strip()
+    if not ip_s:
+        return False, "missing_ip"
+    try:
+        p = subprocess.run(
+            ["ping", "-c", "1", "-W", str(max(1, int(timeout_s))), ip_s],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=max(2, int(timeout_s) + 2),
+        )
+        ok = p.returncode == 0
+        out = (p.stdout or "").strip()
+        err = (p.stderr or "").strip()
+        msg = out if out else err
+        if not msg:
+            msg = "ping_ok" if ok else "ping_failed"
+        return ok, msg
+    except Exception as e:
+        return False, str(e)
 
 
 def _set_head_config(index: int, config: dict[str, Any]) -> tuple[bool, str]:
