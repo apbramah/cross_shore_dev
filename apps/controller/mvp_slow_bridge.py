@@ -1099,7 +1099,11 @@ def _push_head_network_config(index: int, config: dict[str, Any], route_ip_hint:
     if not any_send_ok:
         _set_head_network_push_status(index, "send_error", "slow_send_failed", apply_id=apply_id)
         return False, "slow_send_failed"
-    head_network_push_pending[apply_id] = {"index": index, "sent_at": time.time()}
+    head_network_push_pending[apply_id] = {
+        "index": index,
+        "sent_at": time.time(),
+        "config": dict(norm),
+    }
     _set_head_network_push_status(index, "awaiting_ack", f"sent_to_{','.join(valid_routes)}", apply_id=apply_id)
     return True, "head_network_push_sent"
 
@@ -1230,6 +1234,7 @@ async def telemetry_receiver_task() -> None:
             if key_id in mvp_protocol.NETWORK_SLOW_KEY_IDS.values():
                 if key_id == mvp_protocol.SLOW_KEY_NETCFG_APPLY:
                     idx = -1
+                    pending = None
                     pending = head_network_push_pending.get(apply_id)
                     if isinstance(pending, dict):
                         idx = int(pending.get("index", -1))
@@ -1243,6 +1248,10 @@ async def telemetry_receiver_task() -> None:
                             "head_ack_ok" if ok_state else "head_ack_reject",
                             apply_id=apply_id,
                         )
+                        if ok_state and isinstance(pending, dict):
+                            cfg = pending.get("config", {})
+                            if isinstance(cfg, dict):
+                                _set_head_config(idx, cfg)
                     if apply_id in head_network_push_pending:
                         del head_network_push_pending[apply_id]
                 continue
@@ -1710,9 +1719,7 @@ async def handler(websocket: Any) -> None:
                 idx = int(data.get("index", -1))
                 cfg = data.get("value", {}) or {}
                 route_ip_hint = str(data.get("route_ip_hint", "")).strip()
-                ok, msg = _set_head_config(idx, cfg)
-                if ok:
-                    ok, msg = _push_head_network_config(idx, cfg, route_ip_hint=route_ip_hint)
+                ok, msg = _push_head_network_config(idx, cfg, route_ip_hint=route_ip_hint)
                 await websocket.send(json.dumps({"type": "PUSH_HEAD_NETWORK_RESULT", "index": idx, "ok": ok, "message": msg}))
             elif msg_type == "APPLY_NETWORK_CONFIG":
                 ok, msg = _apply_pi_lan_config()
