@@ -14,6 +14,12 @@ CMD_MOTORS_ON = 77
 CMD_BEEP_SOUND = 89
 CMD_MOTORS_OFF = 109
 ADJ_VAR_ID_GYRO_HEADING_CORRECTION = 0x26
+ADJ_VAR_ID_ACC_LIMITER_ROLL = 39
+ADJ_VAR_ID_ACC_LIMITER_PITCH = 40
+ADJ_VAR_ID_ACC_LIMITER_YAW = 41
+ADJ_VAR_ID_PID_GAIN_ROLL = 42
+ADJ_VAR_ID_PID_GAIN_PITCH = 43
+ADJ_VAR_ID_PID_GAIN_YAW = 44
 
 
 def hexdump(data: bytes) -> str:
@@ -107,11 +113,19 @@ class BGC:
 
     # === High-level helpers corresponding to specific CMD_ values ===
 
-    def set_gyro_heading_adjustment(self, value_raw: int = 0x00001500):
-        # CMD_SET_ADJ_VARS_VAL (#31): NUM_PARAMS=1, PARAM_ID=0x26, PARAM_VALUE=int32 (LE)
-        payload = bytearray(struct.pack("<BBi", 1, ADJ_VAR_ID_GYRO_HEADING_CORRECTION, int(value_raw)))
-        print("BGC gyro_heading_correction payload:", hexdump(payload))
+    def _set_adj_var_int(self, var_id: int, value_raw: int, *, debug_label: str = ""):
+        # CMD_SET_ADJ_VARS_VAL (#31): NUM_PARAMS=1, PARAM_ID=<u8>, PARAM_VALUE=<int32 LE>
+        payload = bytearray(struct.pack("<BBi", 1, int(var_id) & 0xFF, int(value_raw)))
+        if debug_label:
+            print(f"BGC set {debug_label} id={int(var_id)} value={int(value_raw)} payload:", hexdump(payload))
         self.send_cmd(CMD_SET_ADJ_VARS_VAL, payload)
+
+    def set_gyro_heading_adjustment(self, value_raw: int = 0x00001500):
+        self._set_adj_var_int(
+            ADJ_VAR_ID_GYRO_HEADING_CORRECTION,
+            int(value_raw),
+            debug_label="gyro_heading_correction",
+        )
 
     def set_gyro_heading_correction(self, value_raw: int):
         self.set_gyro_heading_adjustment(value_raw)
@@ -174,7 +188,13 @@ class BGC:
             v = 0
         if v > 255:
             v = 255
-        print(f"BGC axis accel requested: axis={axis_name} value={v} (TODO: map to BGC accel adj-var ID)")
+        var_id_by_axis = {
+            "roll": ADJ_VAR_ID_ACC_LIMITER_ROLL,
+            "pitch": ADJ_VAR_ID_ACC_LIMITER_PITCH,
+            "yaw": ADJ_VAR_ID_ACC_LIMITER_YAW,
+        }
+        var_id = int(var_id_by_axis[axis_name])
+        self._set_adj_var_int(var_id, v, debug_label=f"{axis_name}_acc_limiter")
 
     def set_axis_gain(self, axis: str, value_raw: int):
         axis_name = str(axis or "").strip().lower()
@@ -184,7 +204,13 @@ class BGC:
             v = 0
         if v > 255:
             v = 255
-        print(f"BGC axis gain requested: axis={axis_name} value={v} (TODO: map to BGC gain adj-var ID)")
+        var_id_by_axis = {
+            "roll": ADJ_VAR_ID_PID_GAIN_ROLL,
+            "pitch": ADJ_VAR_ID_PID_GAIN_PITCH,
+            "yaw": ADJ_VAR_ID_PID_GAIN_YAW,
+        }
+        var_id = int(var_id_by_axis[axis_name])
+        self._set_adj_var_int(var_id, v, debug_label=f"{axis_name}_pid_gain")
 
 
 def _decode_lens_control(ctrl0: int, ctrl1: int):
