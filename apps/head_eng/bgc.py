@@ -26,12 +26,16 @@ ADJ_VAR_ID_PID_GAIN_PITCH = 43
 ADJ_VAR_ID_PID_GAIN_YAW = 44
 BGC_ANGLE_COUNT_TO_DEG = 0.02197265625  # 360 / 16384
 RT4_IMU_OFFSET = 32
-RT3_BAT_LEVEL_OFFSET = 50
+# Nominal RT3 BAT_LEVEL offset inside RT4 payload. Some fw builds appear shifted;
+# keep a small fallback scan window in parser.
+RT3_BAT_LEVEL_OFFSET = 57
 IMU_DEBUG = True
 IMU_DEBUG_INTERVAL_MS = 500
 RT4_POLL_INTERVAL_MS = 40
 GET_ANGLES_FALLBACK_TIMEOUT_MS = 500
 GET_ANGLES_REQUEST_INTERVAL_MS = 200
+# Battery smoothing (heavy low-pass to calm small RT jitter).
+BATTERY_FILTER_ALPHA = 0.08
 
 
 def hexdump(data: bytes) -> str:
@@ -197,17 +201,49 @@ class BGC:
                         )
                     )
         self._update_imu_angles(raw_roll, raw_pitch, raw_yaw, "CMD_REALTIME_DATA_4")
-        # RT4 begins with full RT3 payload; BAT_LEVEL is a RT3 field at offset 50.
-        # Units are 0.01V per count.
-        if len(payload) >= (RT3_BAT_LEVEL_OFFSET + 2):
-            try:
-                bat_raw = struct.unpack("<H", payload[RT3_BAT_LEVEL_OFFSET : RT3_BAT_LEVEL_OFFSET + 2])[0]
-                bat_v = float(bat_raw) / 100.0
-                if 0.0 < bat_v < 100.0:
+        # RT4 begins with full RT3 payload. BAT_LEVEL units: 0.01V.
+        # Some firmwares appear to shift this field by a couple of bytes, so
+        # probe a tight window and pick the most plausible value.
+        try:
+            candidates = []
+            for off in (RT3_BAT_LEVEL_OFFSET, 56, 55, 58, 54, 59):
+                if len(payload) < (off + 2):
+                    continue
+                raw = struct.unpack("<H", payload[off : off + 2])[0]
+                v = float(raw) / 100.0
+                # Reject obvious non-voltage values (e.g. flags packed as u16).
+                if 6.0 <= v <= 60.0:
+                    candidates.append((off, raw, v))
+            if candidates:
+                if self._last_battery_voltage_v is not None:
+                    best = min(candidates, key=lambda c: abs(c[2] - float(self._last_battery_voltage_v)))
+                else:
+                    # Prefer nominal offset when first locking, otherwise first plausible.
+                    best = candidates[0]
+                    for c in candidates:
+                        if c[0] == RT3_BAT_LEVEL_OFFSET:
+                            best = c
+                            break
+                off, bat_raw, bat_v = best
+                if self._last_battery_voltage_v is None:
                     self._last_battery_voltage_v = bat_v
-                    self._last_battery_update_ms = int(time.ticks_ms())
-            except Exception:
-                pass
+                else:
+                    prev = float(self._last_battery_voltage_v)
+                    a = float(BATTERY_FILTER_ALPHA)
+                    if a < 0.01:
+                        a = 0.01
+                    if a > 1.0:
+                        a = 1.0
+                    self._last_battery_voltage_v = prev + (a * (bat_v - prev))
+                self._last_battery_update_ms = int(time.ticks_ms())
+                if IMU_DEBUG:
+                    now = int(time.ticks_ms())
+                    if time.ticks_diff(now, self._last_imu_debug_ms) >= IMU_DEBUG_INTERVAL_MS:
+                        self._last_imu_debug_ms = now
+                        dbg = ", ".join(["{}:{:.2f}V".format(c[0], c[2]) for c in candidates])
+                        print("[IMU_DEBUG][RT4][BAT] sel_off=", off, "raw=", bat_raw, "v=", bat_v, "cands=", dbg)
+        except Exception:
+            pass
         return True
 
     def _parse_get_angles_payload(self, payload: bytes, source_cmd: str) -> bool:

@@ -19,6 +19,10 @@
     },
     "fuji_lens.py": {
     },
+    "i2c_status_payload.py": {
+    },
+    "i2c_status_slave.py": {
+    },
     "logging.py": {
       "path": "libs/logging.py"
     },

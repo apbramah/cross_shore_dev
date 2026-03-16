@@ -11,7 +11,7 @@
     html, body { width:100vw; height:100vh; margin:0; overflow:hidden; background:#060a10; color:var(--text); font-family:Inter, "Segoe UI", system-ui, -apple-system, sans-serif; letter-spacing:.005em; line-height:1.35; text-rendering:optimizeLegibility; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
     .app { width:100vw; height:100vh; padding:12px; display:grid; grid-template-rows:124px 1fr 76px; gap:10px; background:linear-gradient(180deg,#0a111a 0%,#060a10 100%); }
     .topbar,.tabs,.surface,.dock { border:0; border-radius:12px; background:#0d141f; box-shadow:none; }
-    .topbar { display:grid; grid-template-columns:minmax(0,1.35fr) minmax(0,1fr); grid-template-rows:auto auto; align-items:center; gap:8px; padding:8px; }
+    .topbar { display:grid; grid-template-columns:minmax(0,1.15fr) minmax(0,1.25fr); grid-template-rows:auto auto; align-items:center; gap:8px; padding:8px; }
     .topbar > .row:nth-of-type(1) { grid-column:1; grid-row:1; min-width:0; }
     .topbar > .row:nth-of-type(2) { grid-column:2; grid-row:1; min-width:0; }
     .topbar > .row.actions { grid-column:1 / -1; grid-row:2; display:grid; grid-template-columns:0.8fr 1fr 1fr 1fr; gap:6px; align-items:center; }
@@ -32,9 +32,9 @@
     }
     .logo-pill .brand { font-weight:650; color:#dbe4f2; }
     .logo-pill .tag { color:#95a3b8; margin-left:6px; }
-    .connection-pill { height:46px; width:100%; font-weight:500; font-size:12px; letter-spacing:.006em; text-align:center; border:3px solid #5b6880; padding:0 12px; border-radius:8px; white-space:nowrap; min-width:0; display:flex; align-items:center; justify-content:center; gap:6px; line-height:1.2; }
+    .connection-pill { height:46px; width:100%; font-weight:500; font-size:12px; letter-spacing:.006em; text-align:center; border:3px solid #5b6880; padding:0 2.4em 0 10px; border-radius:8px; white-space:nowrap; min-width:0; display:flex; align-items:center; justify-content:flex-start; gap:6px; line-height:1.2; overflow:hidden; }
     .connection-pill .k { color:#8e9bb0; font-weight:500; }
-    .connection-pill .v { color:inherit; font-weight:600; }
+    .connection-pill .v { color:inherit; font-weight:600; display:inline-block; max-width:11ch; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .connection-pill .sep { color:#6f7e95; opacity:.85; }
     .connection-pill.status-off { border-color:#5b6880; box-shadow:0 0 0 2px rgba(91,104,128,.18), 0 0 10px rgba(91,104,128,.16); color:#9fb0cb; }
     .connection-pill.status-warn { border-color:#c59a3a; box-shadow:0 0 0 2px rgba(197,154,58,.2), 0 0 12px rgba(197,154,58,.18); color:#e8d4a0; }
@@ -50,7 +50,7 @@
     input { width:100%; min-width:0; }
     #heads { width:24ch; min-width:24ch; }
     .head-select-trigger { text-align:center; position:relative; padding-right:1.5em; cursor:pointer; }
-    .head-select-trigger::after { content:" ▾"; font-size:1.5em; opacity:0.9; position:absolute; right:6px; top:50%; transform:translateY(-50%); pointer-events:none; }
+    .head-select-trigger::after { content:" ▾"; font-size:1.5em; opacity:0.9; position:absolute; right:8px; top:50%; transform:translateY(-50%); pointer-events:none; z-index:2; }
     #headSelectorBtn { min-width:0; width:100%; }
     #headSelectorBtn.head-alert,
     #connectionPill.head-alert {
@@ -1016,7 +1016,7 @@
     /* Step 1: 800x480 typography/control sizing pass (no layout reflow) */
     @media (max-width: 900px) and (max-height: 520px) {
       .app { grid-template-rows:124px 1fr 76px; }
-      .topbar { grid-template-columns:minmax(0,1.2fr) minmax(0,1fr); gap:6px; padding:6px; }
+      .topbar { grid-template-columns:minmax(0,1.05fr) minmax(0,1.35fr); gap:6px; padding:6px; }
       .connection-pill { width:100%; min-width:0; }
       .connection-pill, .logo-pill { height:36px; }
       .tab { font-size:13px; }
@@ -3502,18 +3502,27 @@ function updateConnectionPillContent(){
   const headName = connected ? (getHeadLabel(Number(state.selected) || 0) || "none") : "none";
   const lens = (state.head_feedback || {}).lens || {};
   const bgc = (((state.head_feedback || {}).bgc) || {});
+  const shortText = (v, maxLen=11) => {
+    const s = String(v || "").trim();
+    if (!s) return "—";
+    if (s.length <= maxLen) return s;
+    return `${s.slice(0, Math.max(1, maxLen - 1))}…`;
+  };
   const lensId = lens.lens_id || "-";
   const lensFull = lens.lens_full_name || "(unknown)";
   const lensName = (lensFull && lensFull !== "(unknown)") ? lensFull : (lensId !== "-" ? lensId : "none");
   const vRaw = Number(bgc.battery_voltage_v);
-  const voltageText = Number.isFinite(vRaw) && vRaw > 0 ? `${vRaw.toFixed(2)}V` : "—";
+  const voltageText = Number.isFinite(vRaw) && vRaw > 0 ? `${vRaw.toFixed(1)}V` : "—";
+  const headShort = shortText(headName, 12);
+  const lensShort = shortText(lensName, 12);
   pill.innerHTML = "";
+  pill.title = `Head: ${headName} | Lens: ${lensName} | Voltage: ${voltageText}`;
   const headKey = document.createElement("span");
   headKey.className = "k";
   headKey.textContent = "Head";
   const headVal = document.createElement("span");
   headVal.className = "v";
-  headVal.textContent = headName;
+  headVal.textContent = headShort;
   const sep = document.createElement("span");
   sep.className = "sep";
   sep.textContent = "•";
@@ -3522,7 +3531,7 @@ function updateConnectionPillContent(){
   lensKey.textContent = "Lens";
   const lensVal = document.createElement("span");
   lensVal.className = "v";
-  lensVal.textContent = lensName;
+  lensVal.textContent = lensShort;
   const sep2 = document.createElement("span");
   sep2.className = "sep";
   sep2.textContent = "•";

@@ -3,6 +3,7 @@ import time
 from lens_serial import LensSerial
 from canon_lens import CanonLens
 from fuji_lens_from_calibration import FujiLens
+import lens_detect
 
 LENS_CANON = "canon"
 LENS_FUJI = "fuji"
@@ -17,6 +18,16 @@ class LensController:
         self.active_lens = None
         self.active_lens_type = None
         self.set_lens_type(default_lens_type)
+
+    def detect_and_switch_lens_type(self):
+        """Probe transport for Fuji then Canon; if Canon responds, switch to Canon. Returns True if fuji or canon detected, False if none."""
+        result = lens_detect.detect_lens(self.transport)
+        if result == "canon":
+            self.set_lens_type(LENS_CANON)
+            return True
+        if result == "fuji":
+            return True
+        return False
 
     def get_lens_type(self):
         return self.active_lens_type

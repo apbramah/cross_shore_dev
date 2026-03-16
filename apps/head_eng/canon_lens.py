@@ -26,6 +26,9 @@ ZOOM_DELTA_SCALE = 10
 ZOOM_DEADBAND = 1
 AXIS_HOLD_THRESHOLD = 120
 
+# Set True from main to log zoom/focus/iris when we send to the lens (like Fuji FOCUS debug).
+CANON_DEBUG = False
+
 
 class CanonLens:
     baud = 19200
@@ -45,7 +48,25 @@ class CanonLens:
         self._rx_buf = bytearray()
 
     def on_activate(self):
+        # Match tester order: CTRL_CMD then FINISH_INIT then source switch (keepalive runs in periodic).
+        self.transport.write(CTRL_CMD)
+        try:
+            import time
+            if hasattr(time, "sleep_ms"):
+                time.sleep_ms(50)
+            else:
+                time.sleep(0.05)
+        except Exception:
+            pass
         self.transport.write(FINISH_INIT)
+        try:
+            import time
+            if hasattr(time, "sleep_ms"):
+                time.sleep_ms(80)
+            else:
+                time.sleep(0.08)
+        except Exception:
+            pass
         self._apply_all_sources()
         self._next_keepalive_ms = 0
         self._next_source_refresh_ms = 0
@@ -76,6 +97,8 @@ class CanonLens:
             return
         self.zoom = _clamp_u16_60000(self.zoom + (d * ZOOM_DELTA_SCALE))
         self.transport.write(build_type_b(CMD_ZOOM_POS, SUBCMD_C0, self.zoom))
+        if CANON_DEBUG:
+            print("[LENS][Canon] TX zoom=%d" % self.zoom)
 
     def set_focus_input(self, raw_value):
         if self.axis_sources["focus"] != SOURCE_PC:
@@ -85,6 +108,8 @@ class CanonLens:
             return
         self.focus = v
         self.transport.write(build_type_b(CMD_FOCUS_POS, SUBCMD_C0, self.focus))
+        if CANON_DEBUG:
+            print("[LENS][Canon] set_focus_input raw=%d norm=%d" % (int(raw_value), self.focus))
 
     def set_iris_input(self, raw_value):
         if self.axis_sources["iris"] != SOURCE_PC:
@@ -94,6 +119,8 @@ class CanonLens:
             return
         self.iris = v
         self.transport.write(build_type_b(CMD_IRIS_POS, SUBCMD_C0, self.iris))
+        if CANON_DEBUG:
+            print("[LENS][Canon] set_iris_input raw=%d norm=%d" % (int(raw_value), self.iris))
 
     def periodic(self, now_ms):
         if _time_after(now_ms, self._next_keepalive_ms):
