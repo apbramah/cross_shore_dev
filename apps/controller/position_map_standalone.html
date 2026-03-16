@@ -494,9 +494,11 @@
         const railBottom = 144;
         const railCenterX = 22;
         const baseHalfLen = 14;
-        const t = Math.max(-180, Math.min(180, toSigned180(tiltDeg)));
+        // Use a tighter displayed tilt span for better readability around level.
+        // Full rail now represents -45..+45 degrees.
+        const t = Math.max(-45, Math.min(45, toSigned180(tiltDeg)));
         const r = Math.max(-180, Math.min(180, toSigned180(rollDeg)));
-        const yNorm = (t + 180) / 360;
+        const yNorm = (t + 45) / 90;
         const y = railTop + ((1 - yNorm) * (railBottom - railTop));
         const rr = (r * Math.PI) / 180;
         const dx = Math.cos(rr) * baseHalfLen;
