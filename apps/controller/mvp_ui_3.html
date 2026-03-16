@@ -3278,9 +3278,17 @@ function updatePosDisplayMapFrame(forceReload=false){
 }
 
 function getPosDisplayHeadingDeg(){
+  const imu = (((state.head_feedback || {}).bgc || {}).imu_attitude) || {};
+  const headingFromImu = Number(imu.heading_deg);
+  if (!posDisplaySimMode && Number.isFinite(headingFromImu)){
+    return norm360Deg(headingFromImu + Number(posDisplayHeadingOffsetDeg || 0));
+  }
+  if (!posDisplaySimMode){
+    return norm360Deg(Number(posDisplayHeadingOffsetDeg || 0));
+  }
   const yawNorm = clamp(Number(readLiveAxisSignal("yaw")) || 0, -1, 1);
-  const baseHeading = ((yawNorm * 180) + 360) % 360;
-  return ((baseHeading + Number(posDisplayHeadingOffsetDeg || 0)) % 360 + 360) % 360;
+  const simHeading = ((yawNorm * 180) + 360) % 360;
+  return norm360Deg(simHeading + Number(posDisplayHeadingOffsetDeg || 0));
 }
 
 function getPosDisplayLensZoomNorm(){
@@ -3298,7 +3306,39 @@ function getPosDisplayLensZoomNorm(){
   return clamp((cmdNorm + 1) * 0.5, 0, 1);
 }
 
+function norm360Deg(x){
+  const v = Number(x);
+  if (!Number.isFinite(v)) return 0;
+  return ((v % 360) + 360) % 360;
+}
+
+function roundDisplayDeg(x){
+  const n = norm360Deg(x);
+  const r = Math.round(n * 10) / 10;
+  return r >= 360 ? 0 : r;
+}
+
+function wrapSafeStep(oldValue, newValue){
+  const oldV = norm360Deg(oldValue);
+  const newV = norm360Deg(newValue);
+  let delta = newV - oldV;
+  if (delta > 180) delta -= 360;
+  if (delta < -180) delta += 360;
+  return norm360Deg(oldV + delta);
+}
+
 function getPosDisplayAttitudeDeg(){
+  const imu = (((state.head_feedback || {}).bgc || {}).imu_attitude) || {};
+  if (!posDisplaySimMode){
+    const heading = Number(imu.heading_deg);
+    const tilt = Number(imu.tilt_deg);
+    const roll = Number(imu.roll_deg);
+    return {
+      pan: Number.isFinite(heading) ? norm360Deg(heading) : null,
+      tilt: Number.isFinite(tilt) ? norm360Deg(tilt) : null,
+      roll: Number.isFinite(roll) ? norm360Deg(roll) : null,
+    };
+  }
   const lens = ((state.head_feedback || {}).lens) || {};
   const pos = lens.positions || {};
   const panNorm = clamp(Number(readLiveAxisSignal("yaw")) || 0, -1, 1);
@@ -3327,8 +3367,8 @@ function postPosDisplayMapUpdate(){
     lat: safeLat,
     lon: safeLon,
     heading: getPosDisplayHeadingDeg(),
-    tilt: att.tilt,
-    roll: att.roll,
+    tilt: Number.isFinite(att.tilt) ? att.tilt : 0,
+    roll: Number.isFinite(att.roll) ? att.roll : 0,
     zoom_norm: getPosDisplayLensZoomNorm(),
     sim_mode: !!posDisplaySimMode,
     map_style: normalizePosDisplayMapStyle(posDisplayMapStyle),
@@ -3360,6 +3400,25 @@ function togglePosDisplay(forceOpen){
 }
 
 function updatePosDisplayTelemetry(){
+  const imu = (((state.head_feedback || {}).bgc || {}).imu_attitude) || {};
+  if (!posDisplaySimMode){
+    const panImu = Number(imu.heading_deg);
+    const tiltImu = Number(imu.tilt_deg);
+    const rollImu = Number(imu.roll_deg);
+    if ($("posDisplayPan")) $("posDisplayPan").textContent = Number.isFinite(panImu) ? roundDisplayDeg(panImu).toFixed(1) : "—";
+    if ($("posDisplayTilt")) $("posDisplayTilt").textContent = Number.isFinite(tiltImu) ? roundDisplayDeg(tiltImu).toFixed(1) : "—";
+    if ($("posDisplayRoll")) $("posDisplayRoll").textContent = Number.isFinite(rollImu) ? roundDisplayDeg(rollImu).toFixed(1) : "—";
+    const lens = (state.head_feedback || {}).lens || {};
+    const pos = lens.positions || {};
+    const z = (pos.zoom !== undefined ? pos.zoom : lens.zoom_position);
+    const i = (pos.iris !== undefined ? pos.iris : lens.iris_position);
+    const f = (pos.focus !== undefined ? pos.focus : lens.focus_position);
+    if ($("posDisplayZoom")) $("posDisplayZoom").textContent = z !== undefined && z !== null ? String(z) : "—";
+    if ($("posDisplayIris")) $("posDisplayIris").textContent = i !== undefined && i !== null ? String(i) : "—";
+    if ($("posDisplayFocus")) $("posDisplayFocus").textContent = f !== undefined && f !== null ? String(f) : "—";
+    postPosDisplayMapUpdate();
+    return;
+  }
   const lens = (state.head_feedback || {}).lens || {};
   const pos = lens.positions || {};
   const panNorm = clamp(Number(readLiveAxisSignal("yaw")) || 0, -1, 1);

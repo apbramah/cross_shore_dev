@@ -1,5 +1,6 @@
 from machine import UART, Pin
 import struct
+import time
 
 UART_ID = 1           # 0 or 1
 UART_BAUD = 115200
@@ -8,6 +9,9 @@ BUFFER_SIZE = 1024
 PACKET_START = 0x24
 
 CMD_SET_ADJ_VARS_VAL = 31
+CMD_REALTIME_DATA_4 = 25
+CMD_GET_ANGLES_EXT = 61
+CMD_GET_ANGLES = 73
 CMD_API_VIRT_CH_CONTROL = 45
 CMD_CONTROL = 67
 CMD_MOTORS_ON = 77
@@ -20,6 +24,7 @@ ADJ_VAR_ID_ACC_LIMITER_YAW = 41
 ADJ_VAR_ID_PID_GAIN_ROLL = 42
 ADJ_VAR_ID_PID_GAIN_PITCH = 43
 ADJ_VAR_ID_PID_GAIN_YAW = 44
+BGC_ANGLE_COUNT_TO_DEG = 0.02197265625  # 360 / 16384
 
 
 def hexdump(data: bytes) -> str:
@@ -32,6 +37,18 @@ class BGC:
 
     def __init__(self):
         self.uart = UART(UART_ID, UART_BAUD, tx=Pin(8), rx=Pin(9))
+        self._rx_buf = bytearray()
+        self._last_imu = None
+        self._last_rt4_req_ms = 0
+        self._last_get_angles_req_ms = 0
+        self._last_imu_update_ms = 0
+        # Fixed install corrections (can be tuned later if needed).
+        self._yaw_sign = 1.0
+        self._pitch_sign = 1.0
+        self._roll_sign = 1.0
+        self._yaw_offset_deg = 0.0
+        self._pitch_offset_deg = 0.0
+        self._roll_offset_deg = 0.0
 
     def write_raw(self, data: bytes):
         # The "FCB Control Software" application discovers the correct COM port by sending data to all the COM ports.
@@ -110,6 +127,123 @@ class BGC:
         crc_bytes = bytearray([crc & 0xFF, (crc >> 8) & 0xFF])
         packet = bytearray([PACKET_START]) + header_and_payload + crc_bytes
         self.write_raw(packet)
+
+    @staticmethod
+    def _norm360(v: float) -> float:
+        out = float(v) % 360.0
+        if out < 0.0:
+            out += 360.0
+        return out
+
+    def _update_imu_angles(self, raw_roll: int, raw_pitch: int, raw_yaw: int, source: str):
+        roll_deg = float(raw_roll) * BGC_ANGLE_COUNT_TO_DEG
+        pitch_deg = float(raw_pitch) * BGC_ANGLE_COUNT_TO_DEG
+        yaw_deg = float(raw_yaw) * BGC_ANGLE_COUNT_TO_DEG
+
+        corrected_roll = (self._roll_sign * roll_deg) + self._roll_offset_deg
+        corrected_pitch = (self._pitch_sign * pitch_deg) + self._pitch_offset_deg
+        corrected_yaw = (self._yaw_sign * yaw_deg) + self._yaw_offset_deg
+
+        self._last_imu = {
+            "source": str(source),
+            "raw_roll": int(raw_roll),
+            "raw_pitch": int(raw_pitch),
+            "raw_yaw": int(raw_yaw),
+            "roll_deg": self._norm360(corrected_roll),
+            "tilt_deg": self._norm360(corrected_pitch),
+            "heading_deg": self._norm360(corrected_yaw),
+            "updated_at_ms": int(time.ticks_ms()),
+        }
+        self._last_imu_update_ms = int(self._last_imu["updated_at_ms"])
+
+    def _parse_rt4_payload(self, payload: bytes) -> bool:
+        # RT4 includes IMU_ANGLE[3]. For this integration we read the first 3 int16
+        # values as roll/pitch/yaw in protocol order IMU_ANGLE[0..2].
+        if not payload or len(payload) < 6:
+            return False
+        try:
+            raw_roll, raw_pitch, raw_yaw = struct.unpack("<hhh", payload[:6])
+        except Exception:
+            return False
+        self._update_imu_angles(raw_roll, raw_pitch, raw_yaw, "CMD_REALTIME_DATA_4")
+        return True
+
+    def _parse_get_angles_payload(self, payload: bytes, source_cmd: str) -> bool:
+        if not payload or len(payload) < 6:
+            return False
+        try:
+            raw_roll, raw_pitch, raw_yaw = struct.unpack("<hhh", payload[:6])
+        except Exception:
+            return False
+        self._update_imu_angles(raw_roll, raw_pitch, raw_yaw, source_cmd)
+        return True
+
+    def _drain_uart_packets(self):
+        data = self.read_raw(BUFFER_SIZE)
+        if data:
+            self._rx_buf.extend(data)
+        packets = []
+        buf = self._rx_buf
+        n = len(buf)
+        i = 0
+        while (n - i) >= 6:
+            # Find packet start without mutating buffer in-place.
+            while i < n and buf[i] != PACKET_START:
+                i += 1
+            if (n - i) < 6:
+                break
+            cmd_id = int(buf[i + 1])
+            payload_size = int(buf[i + 2])
+            header_ck = int(buf[i + 3])
+            if ((cmd_id + payload_size) & 0xFF) != header_ck:
+                i += 1
+                continue
+            total = 1 + 3 + payload_size + 2
+            if (n - i) < total:
+                break
+            body_start = i + 1
+            body_end = body_start + 3 + payload_size
+            body = bytes(buf[body_start:body_end])
+            rx_crc_l = int(buf[body_end])
+            rx_crc_h = int(buf[body_end + 1])
+            rx_crc = rx_crc_l | (rx_crc_h << 8)
+            calc_crc = self.crc16_calculate(body)
+            if calc_crc != rx_crc:
+                i += 1
+                continue
+            payload_start = i + 4
+            payload_end = payload_start + payload_size
+            payload = bytes(buf[payload_start:payload_end])
+            packets.append((cmd_id, payload))
+            i += total
+        # Keep any trailing partial bytes for next poll cycle.
+        if i > 0:
+            self._rx_buf = bytearray(buf[i:])
+        return packets
+
+    def poll_imu_attitude(self):
+        now = int(time.ticks_ms())
+        if time.ticks_diff(now, self._last_rt4_req_ms) >= 80:
+            self._last_rt4_req_ms = now
+            self.send_cmd(CMD_REALTIME_DATA_4, bytearray())
+        # Fallback angle request if RT4 response is absent.
+        if time.ticks_diff(now, self._last_imu_update_ms) >= 500 and time.ticks_diff(now, self._last_get_angles_req_ms) >= 200:
+            self._last_get_angles_req_ms = now
+            self.send_cmd(CMD_GET_ANGLES, bytearray())
+
+        for cmd_id, payload in self._drain_uart_packets():
+            if cmd_id == CMD_REALTIME_DATA_4:
+                self._parse_rt4_payload(payload)
+            elif cmd_id == CMD_GET_ANGLES:
+                self._parse_get_angles_payload(payload, "CMD_GET_ANGLES")
+            elif cmd_id == CMD_GET_ANGLES_EXT:
+                self._parse_get_angles_payload(payload, "CMD_GET_ANGLES_EXT")
+        return self.get_imu_attitude()
+
+    def get_imu_attitude(self):
+        if not isinstance(self._last_imu, dict):
+            return None
+        return dict(self._last_imu)
 
     # === High-level helpers corresponding to specific CMD_ values ===
 

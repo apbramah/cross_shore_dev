@@ -353,6 +353,7 @@
       let indicatorZoomRatio = null;
       let latestTiltDeg = 0;
       let latestRollDeg = 0;
+      let latestHeadingDeg = defaultHeading;
       let tileLayer = null;
       let tileProviderIndex = 0;
       const TILE_STYLE_STORAGE_KEY = "position_map_tile_style_v1";
@@ -399,10 +400,32 @@
         return Number.isFinite(v) ? ((v % 360) + 360) % 360 : defaultHeading;
       }
 
+      function norm360(v) {
+        const n = Number(v);
+        if (!Number.isFinite(n)) return 0;
+        return ((n % 360) + 360) % 360;
+      }
+
+      function displayDeg(v) {
+        const n = norm360(v);
+        let r = Math.round(n * 10) / 10;
+        if (r >= 360) r = 0;
+        return r.toFixed(1);
+      }
+
+      function wrapSafeStep(oldValue, newValue) {
+        const oldV = norm360(oldValue);
+        const newV = norm360(newValue);
+        let delta = newV - oldV;
+        if (delta > 180) delta -= 360;
+        if (delta < -180) delta += 360;
+        return norm360(oldV + delta);
+      }
+
       function updateReadouts(pan, tilt, roll, zoom, focus) {
-        document.getElementById("valPan").textContent = pan != null ? String(pan) : "—";
-        document.getElementById("valTilt").textContent = tilt != null ? String(tilt) : "—";
-        document.getElementById("valRoll").textContent = roll != null ? String(roll) : "—";
+        document.getElementById("valPan").textContent = Number.isFinite(Number(pan)) ? displayDeg(Number(pan)) : "—";
+        document.getElementById("valTilt").textContent = Number.isFinite(Number(tilt)) ? displayDeg(Number(tilt)) : "—";
+        document.getElementById("valRoll").textContent = Number.isFinite(Number(roll)) ? displayDeg(Number(roll)) : "—";
         document.getElementById("valZoom").textContent = zoom != null ? String(zoom) : "—";
         document.getElementById("valFocus").textContent = focus != null ? String(focus) : "—";
       }
@@ -419,9 +442,9 @@
       }
 
       function updateAxisInstruments(pan, tilt, roll, zoomNorm, focusNorm) {
-        const panDeg = Number.isFinite(pan) ? pan : 0;
-        const tiltDeg = Number.isFinite(tilt) ? tilt : 0;
-        const rollDeg = Number.isFinite(roll) ? roll : 0;
+        const panDeg = Number.isFinite(pan) ? norm360(pan) : 0;
+        const tiltDeg = Number.isFinite(tilt) ? norm360(tilt) : 0;
+        const rollDeg = Number.isFinite(roll) ? norm360(roll) : 0;
         const zoom = Number.isFinite(zoomNorm) ? Math.max(0, Math.min(100, zoomNorm)) : 0;
         const focus = Number.isFinite(focusNorm) ? Math.max(0, Math.min(100, focusNorm)) : 0;
 
@@ -446,8 +469,8 @@
         if (zoomFill) zoomFill.setAttribute("width", (104 * zoom / 100));
         if (focusFill) focusFill.setAttribute("width", (104 * focus / 100));
 
-        document.getElementById("axisPanTiltVal").textContent = (Number.isFinite(pan) ? Math.round(pan) + "°" : "—") + " / " + (Number.isFinite(tilt) ? Math.round(tilt) + "°" : "—");
-        document.getElementById("axisRollVal").textContent = Number.isFinite(roll) ? Math.round(roll) + "°" : "—";
+        document.getElementById("axisPanTiltVal").textContent = (Number.isFinite(pan) ? displayDeg(pan) + "°" : "—") + " / " + (Number.isFinite(tilt) ? displayDeg(tilt) + "°" : "—");
+        document.getElementById("axisRollVal").textContent = Number.isFinite(roll) ? displayDeg(roll) + "°" : "—";
         document.getElementById("axisZoomVal").textContent = Number.isFinite(zoomNorm) ? Math.round(zoom) + "%" : "—";
         document.getElementById("axisFocusVal").textContent = Number.isFinite(focusNorm) ? Math.round(focus) + "%" : "—";
       }
@@ -944,7 +967,8 @@
           if (!Number.isFinite(lat) || !Number.isFinite(lon) || !Number.isFinite(heading)) return;
           document.getElementById("lat").value = String(lat);
           document.getElementById("lon").value = String(lon);
-          document.getElementById("heading").value = String(((heading % 360) + 360) % 360);
+          latestHeadingDeg = wrapSafeStep(latestHeadingDeg, heading);
+          document.getElementById("heading").value = String(latestHeadingDeg);
           if (Number.isFinite(tilt)) latestTiltDeg = tilt;
           if (Number.isFinite(roll)) latestRollDeg = roll;
           if (Number.isFinite(zoomNorm)) indicatorZoomRatio = Math.max(0, Math.min(1, zoomNorm));

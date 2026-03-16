@@ -265,6 +265,7 @@ _last_fast_debug_ms = 0
 _last_slow_sender_ip = None
 _last_telem_ms = 0
 _lens_name_last_try_ms = 0
+_last_bgc_imu_attitude = None
 pending_network_push = {
     "ip_hi": None,
     "ip_lo": None,
@@ -547,7 +548,7 @@ def _update_i2c_status_frame():
 
 
 def _send_slow_telem():
-    global _last_telem_ms, _lens_name_last_try_ms
+    global _last_telem_ms, _lens_name_last_try_ms, _last_bgc_imu_attitude
     if not _last_slow_sender_ip:
         return
     now = time.ticks_ms()
@@ -581,6 +582,16 @@ def _send_slow_telem():
             iris_pos = 0
             lens_id = "disabled"
 
+        bgc_payload = {
+            "power_level_main": None,
+            "power_level_aux": None,
+        }
+        imu_att = bgc.get_imu_attitude()
+        if isinstance(imu_att, dict):
+            _last_bgc_imu_attitude = dict(imu_att)
+        if isinstance(_last_bgc_imu_attitude, dict):
+            bgc_payload["imu_attitude"] = dict(_last_bgc_imu_attitude)
+
         payload = {
             "slow": {
                 "motors_on": 1 if slow_motors_on else 0,
@@ -602,10 +613,7 @@ def _send_slow_telem():
                 "focus_position": focus_pos,
                 "iris_position": iris_pos,
             },
-            "bgc": {
-                "power_level_main": None,
-                "power_level_aux": None,
-            },
+            "bgc": bgc_payload,
             "i2c_status": {
                 "enabled": bool(i2c_status_slave is not None),
                 "available": bool(i2c_status_slave and i2c_status_slave.available),
@@ -944,6 +952,7 @@ def apply_slow_command(cmd):
 # ---------- Main Loop ----------
 while True:
     pulse_update()
+    bgc.poll_imu_attitude()
     _update_i2c_status_frame()
     if i2c_status_slave is not None:
         i2c_status_slave.poll()
