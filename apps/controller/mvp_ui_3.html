@@ -3347,8 +3347,9 @@ function getPosDisplayAttitudeDeg(){
     const roll = Number(imu.roll_deg);
     return {
       pan: Number.isFinite(heading) ? norm360Deg(heading) : null,
-      tilt: Number.isFinite(tilt) ? toSigned180Deg(tilt) : null,
-      roll: Number.isFinite(roll) ? toSigned180Deg(roll) : null,
+      // Invert displayed attitude directions to match physical/UI convention.
+      tilt: Number.isFinite(tilt) ? toSigned180Deg(-tilt) : null,
+      roll: Number.isFinite(roll) ? toSigned180Deg(-roll) : null,
     };
   }
   const lens = ((state.head_feedback || {}).lens) || {};
@@ -3418,8 +3419,8 @@ function updatePosDisplayTelemetry(){
     const tiltImu = Number(imu.tilt_deg);
     const rollImu = Number(imu.roll_deg);
     if ($("posDisplayPan")) $("posDisplayPan").textContent = Number.isFinite(panImu) ? roundDisplayDeg(panImu).toFixed(1) : "—";
-    if ($("posDisplayTilt")) $("posDisplayTilt").textContent = Number.isFinite(tiltImu) ? roundSignedDisplayDeg(tiltImu).toFixed(1) : "—";
-    if ($("posDisplayRoll")) $("posDisplayRoll").textContent = Number.isFinite(rollImu) ? roundSignedDisplayDeg(rollImu).toFixed(1) : "—";
+    if ($("posDisplayTilt")) $("posDisplayTilt").textContent = Number.isFinite(tiltImu) ? roundSignedDisplayDeg(-tiltImu).toFixed(1) : "—";
+    if ($("posDisplayRoll")) $("posDisplayRoll").textContent = Number.isFinite(rollImu) ? roundSignedDisplayDeg(-rollImu).toFixed(1) : "—";
     const lens = (state.head_feedback || {}).lens || {};
     const pos = lens.positions || {};
     const z = (pos.zoom !== undefined ? pos.zoom : lens.zoom_position);
