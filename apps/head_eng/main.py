@@ -266,6 +266,7 @@ _last_slow_sender_ip = None
 _last_telem_ms = 0
 _lens_name_last_try_ms = 0
 _last_bgc_imu_attitude = None
+SLOW_TELEM_INTERVAL_MS = 50
 pending_network_push = {
     "ip_hi": None,
     "ip_lo": None,
@@ -552,7 +553,7 @@ def _send_slow_telem():
     if not _last_slow_sender_ip:
         return
     now = time.ticks_ms()
-    if time.ticks_diff(now, _last_telem_ms) < 500:
+    if time.ticks_diff(now, _last_telem_ms) < SLOW_TELEM_INTERVAL_MS:
         return
     _last_telem_ms = now
     try:

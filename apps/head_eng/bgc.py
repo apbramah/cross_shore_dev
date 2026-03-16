@@ -28,6 +28,9 @@ BGC_ANGLE_COUNT_TO_DEG = 0.02197265625  # 360 / 16384
 RT4_IMU_OFFSET = 32
 IMU_DEBUG = True
 IMU_DEBUG_INTERVAL_MS = 500
+RT4_POLL_INTERVAL_MS = 40
+GET_ANGLES_FALLBACK_TIMEOUT_MS = 500
+GET_ANGLES_REQUEST_INTERVAL_MS = 200
 
 
 def hexdump(data: bytes) -> str:
@@ -263,11 +266,14 @@ class BGC:
 
     def poll_imu_attitude(self):
         now = int(time.ticks_ms())
-        if time.ticks_diff(now, self._last_rt4_req_ms) >= 80:
+        if time.ticks_diff(now, self._last_rt4_req_ms) >= RT4_POLL_INTERVAL_MS:
             self._last_rt4_req_ms = now
             self.send_cmd(CMD_REALTIME_DATA_4, bytearray())
         # Fallback angle request if RT4 response is absent.
-        if time.ticks_diff(now, self._last_imu_update_ms) >= 500 and time.ticks_diff(now, self._last_get_angles_req_ms) >= 200:
+        if (
+            time.ticks_diff(now, self._last_imu_update_ms) >= GET_ANGLES_FALLBACK_TIMEOUT_MS
+            and time.ticks_diff(now, self._last_get_angles_req_ms) >= GET_ANGLES_REQUEST_INTERVAL_MS
+        ):
             self._last_get_angles_req_ms = now
             self.send_cmd(CMD_GET_ANGLES, bytearray())
 

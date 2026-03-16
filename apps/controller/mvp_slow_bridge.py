@@ -27,7 +27,7 @@ import mvp_protocol
 
 WS_PORT = 8766
 SLOW_SEND_INTERVAL_S = 0.5
-STATUS_PUBLISH_INTERVAL_S = 1.0
+STATUS_PUBLISH_INTERVAL_S = 0.2
 HEAD_REACHABILITY_PROBE_INTERVAL_S = 1.0
 HEAD_CONNECTED_TIMEOUT_S = 2.5
 IFCONFIG_REFRESH_INTERVAL_S = 2.5
@@ -1313,6 +1313,8 @@ async def telemetry_receiver_task() -> None:
             head_feedback["lens"] = _normalize_lens_feedback(telem.get("lens", {}))
             head_feedback["bgc"] = telem.get("bgc", {})
             head_feedback["updated_at"] = time.time()
+            # Push UI updates immediately on new telemetry to minimize operator delay.
+            await _publish_state()
 
 
 def _refresh_connection_status() -> None:
