@@ -266,6 +266,7 @@ _last_slow_sender_ip = None
 _last_telem_ms = 0
 _lens_name_last_try_ms = 0
 _last_bgc_imu_attitude = None
+_last_bgc_battery_voltage_v = None
 SLOW_TELEM_INTERVAL_MS = 50
 pending_network_push = {
     "ip_hi": None,
@@ -549,7 +550,7 @@ def _update_i2c_status_frame():
 
 
 def _send_slow_telem():
-    global _last_telem_ms, _lens_name_last_try_ms, _last_bgc_imu_attitude
+    global _last_telem_ms, _lens_name_last_try_ms, _last_bgc_imu_attitude, _last_bgc_battery_voltage_v
     if not _last_slow_sender_ip:
         return
     now = time.ticks_ms()
@@ -592,6 +593,11 @@ def _send_slow_telem():
             _last_bgc_imu_attitude = dict(imu_att)
         if isinstance(_last_bgc_imu_attitude, dict):
             bgc_payload["imu_attitude"] = dict(_last_bgc_imu_attitude)
+        bat_v = bgc.get_battery_voltage_v()
+        if bat_v is not None:
+            _last_bgc_battery_voltage_v = float(bat_v)
+        if _last_bgc_battery_voltage_v is not None:
+            bgc_payload["battery_voltage_v"] = float(_last_bgc_battery_voltage_v)
 
         payload = {
             "slow": {

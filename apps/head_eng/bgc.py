@@ -26,6 +26,7 @@ ADJ_VAR_ID_PID_GAIN_PITCH = 43
 ADJ_VAR_ID_PID_GAIN_YAW = 44
 BGC_ANGLE_COUNT_TO_DEG = 0.02197265625  # 360 / 16384
 RT4_IMU_OFFSET = 32
+RT3_BAT_LEVEL_OFFSET = 50
 IMU_DEBUG = True
 IMU_DEBUG_INTERVAL_MS = 500
 RT4_POLL_INTERVAL_MS = 40
@@ -48,6 +49,8 @@ class BGC:
         self._last_rt4_req_ms = 0
         self._last_get_angles_req_ms = 0
         self._last_imu_update_ms = 0
+        self._last_battery_voltage_v = None
+        self._last_battery_update_ms = 0
         # Fixed install corrections (can be tuned later if needed).
         self._yaw_sign = 1.0
         self._pitch_sign = 1.0
@@ -194,6 +197,17 @@ class BGC:
                         )
                     )
         self._update_imu_angles(raw_roll, raw_pitch, raw_yaw, "CMD_REALTIME_DATA_4")
+        # RT4 begins with full RT3 payload; BAT_LEVEL is a RT3 field at offset 50.
+        # Units are 0.01V per count.
+        if len(payload) >= (RT3_BAT_LEVEL_OFFSET + 2):
+            try:
+                bat_raw = struct.unpack("<H", payload[RT3_BAT_LEVEL_OFFSET : RT3_BAT_LEVEL_OFFSET + 2])[0]
+                bat_v = float(bat_raw) / 100.0
+                if 0.0 < bat_v < 100.0:
+                    self._last_battery_voltage_v = bat_v
+                    self._last_battery_update_ms = int(time.ticks_ms())
+            except Exception:
+                pass
         return True
 
     def _parse_get_angles_payload(self, payload: bytes, source_cmd: str) -> bool:
@@ -290,6 +304,11 @@ class BGC:
         if not isinstance(self._last_imu, dict):
             return None
         return dict(self._last_imu)
+
+    def get_battery_voltage_v(self):
+        if self._last_battery_voltage_v is None:
+            return None
+        return float(self._last_battery_voltage_v)
 
     # === High-level helpers corresponding to specific CMD_ values ===
 

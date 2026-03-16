@@ -102,6 +102,7 @@
     .page { width:100%; height:100%; display:none; overflow:auto; gap:10px; position:relative; z-index:1; }
     .page.active { display:grid; grid-template-columns:1fr 1fr; }
     #page-control.page.active { grid-template-columns:1fr; }
+    #page-ipconfig.page.active { grid-template-columns:1fr; }
     #page-slow.page.active, #page-fast.page.active, #page-inputtests.page.active { grid-template-columns:1fr; }
     #page-slow .slow-sliders-card { grid-column:1 / -1; width:100%; height:100%; padding:4px; gap:2px; }
     #page-slow .slow-sliders-card > :not(#slowSliderGrid):not(#slowQuickButtonRow) { display:none; }
@@ -705,11 +706,22 @@
     .head-picker-actions { display:flex; justify-content:flex-end; gap:8px; flex-shrink:0; }
     .head-config-editor { position:fixed; inset:0; background:rgba(0,0,0,.7); display:none; align-items:center; justify-content:center; z-index:18; }
     .head-config-editor.open { display:flex; }
-    .head-config-card { width:min(1000px,98vw); height:min(94vh,760px); border:1px solid #4a5b7f; border-radius:12px; background:#1a2232; padding:10px; display:grid; grid-template-rows:auto 1fr auto; gap:8px; }
+    .head-config-card { width:min(1280px,99vw); height:min(97vh,900px); border:1px solid #4a5b7f; border-radius:12px; background:#1a2232; padding:10px; display:grid; grid-template-rows:auto auto 1fr auto; gap:8px; }
     .head-config-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
     .head-config-title { margin:0; font-size:16px; color:#dbe8ff; }
-    .head-config-body { border:1px solid #34435d; border-radius:8px; padding:8px; overflow:auto; }
+    .head-config-tabs { display:flex; gap:8px; }
+    .head-config-tabs button { flex:1; }
+    .head-config-tabs button.active { box-shadow:0 0 0 1px rgba(155,216,90,.45) inset; border-color:rgba(155,216,90,.75); }
+    .head-config-body { border:1px solid #34435d; border-radius:8px; padding:8px; overflow-y:auto; overflow-x:hidden; }
     .head-config-actions { display:flex; justify-content:flex-end; gap:8px; }
+    .network-pane { display:none; }
+    .network-pane.active { display:grid; gap:8px; align-content:start; }
+    .head-ids-table { width:100%; table-layout:fixed; font-size:12px; }
+    .head-ids-table th, .head-ids-table td { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding:6px 4px; }
+    .head-ids-table input { width:100%; min-width:0; height:30px; font-size:12px; padding:0 6px; }
+    .head-ids-table .compact-btn { height:30px; min-width:0; width:100%; font-size:11px; padding:0 4px; }
+    #networkPaneHeads { overflow-x:hidden; }
+    #networkPaneHeads .table-wrap { overflow-x:hidden; }
     .profile-editor { position:fixed; inset:0; background:rgba(0,0,0,.7); display:none; align-items:center; justify-content:center; z-index:19; }
     .profile-editor.open { display:flex; }
     .profile-card { width:min(760px,96vw); max-height:92vh; border:1px solid #4a5b7f; border-radius:12px; background:#1a2232; padding:10px; display:grid; grid-template-rows:auto auto 1fr auto; gap:8px; }
@@ -1092,52 +1104,23 @@
         </div>
       </div>
       <div id="page-ipconfig" class="page">
-        <div class="card">
-          <h3 class="card-title">LAN settings</h3>
-          <p class="card-desc">Ethernet (eth0): address, prefix, gateway.</p>
-          <div class="row"><label>Address</label><input id="piAddress" readonly /></div>
-          <div class="row"><label>Prefix</label><input id="piPrefix" readonly /></div>
-          <div class="row"><label>Gateway</label><input id="piGateway" readonly /></div>
-          <div class="row">
-            <button id="savePiLan">Set Console LAN IP</button>
-            <button id="applyNetwork">Apply Network</button>
-            <button id="factoryResetNetwork">Factory Default</button>
+        <div class="card stack-row-card">
+          <div class="command-list-title">Network Setup</div>
+          <p class="card-desc">Open each section in full-screen mode for easier setup.</p>
+          <div class="command-row-list">
+            <div class="command-row">
+              <div class="command-row-name">LAN</div>
+              <button id="openLanConfigEditor" type="button">Open</button>
+            </div>
+            <div class="command-row">
+              <div class="command-row-name">WiFi</div>
+              <button id="openWifiConfigEditor" type="button">Open</button>
+            </div>
+            <div class="command-row">
+              <div class="command-row-name">Head IDs</div>
+              <button id="openHeadConfigEditor" type="button">Open</button>
+            </div>
           </div>
-          <div id="networkInfo" class="info">Network: -</div>
-          <div id="networkDefaultHint" class="info">Derived defaults: -</div>
-          <div class="cmd-window" style="margin-top:8px;">
-            <div class="cmd-title">$ ifconfig eth0</div>
-            <pre id="ifconfigEth" class="cmd-body">-</pre>
-          </div>
-        </div>
-        <div class="card">
-          <h3 class="card-title">WiFi</h3>
-          <p class="card-desc">Wireless (wlan0): SSID, password, scan and connect.</p>
-          <div class="row"><label>SSID</label><input id="wifiSsid" readonly /></div>
-          <div class="row"><label>Password</label><input id="wifiPassword" readonly /></div>
-          <div class="row">
-            <button id="wifiScan">Scan</button>
-            <button id="wifiConnect">Connect</button>
-            <button id="wifiDisconnect">Disconnect</button>
-          </div>
-          <div id="wifiStatus" class="info">WiFi: -</div>
-          <div class="table-wrap" style="margin-top:8px;">
-            <table>
-              <thead><tr><th>SSID</th><th>Signal</th><th>Security</th><th>Use</th></tr></thead>
-              <tbody id="wifiTableBody"></tbody>
-            </table>
-          </div>
-          <div class="cmd-window" style="margin-top:8px;">
-            <div class="cmd-title">$ ifconfig wlan0</div>
-            <pre id="ifconfigWifi" class="cmd-body">-</pre>
-          </div>
-          <div id="ifconfigDump" class="info" style="display:none;">ifconfig: -</div>
-        </div>
-        <div class="card head-config-full-width">
-          <div class="row">
-            <button id="openHeadConfigEditor" type="button">Edit Head IDs (Full Screen)</button>
-          </div>
-          <div class="info">Open full-screen editor for Head ID table data entry.</div>
         </div>
       </div>
       <div id="page-inputtests" class="page">
@@ -1292,15 +1275,71 @@
   <div id="headConfigEditor" class="head-config-editor">
     <div class="head-config-card">
       <div class="head-config-head">
-        <h3 class="head-config-title">Head ID Configuration</h3>
+        <h3 class="head-config-title">Network Configuration</h3>
         <button id="headConfigClose" type="button">Close</button>
       </div>
+      <div class="head-config-tabs">
+        <button id="networkTabLan" type="button">LAN</button>
+        <button id="networkTabWifi" type="button">WiFi</button>
+        <button id="networkTabHeads" type="button">Head IDs</button>
+      </div>
       <div class="head-config-body">
-        <div class="table-wrap" style="max-height:none;">
-          <table>
-            <thead><tr><th>#</th><th>Name</th><th>IP</th><th>Prefix</th><th>Gateway</th><th>Ping</th><th>Ping Status</th><th>Push Status</th><th>Save</th><th>Push</th></tr></thead>
-            <tbody id="headTableBodyEditor"></tbody>
-          </table>
+        <div id="networkPaneLan" class="network-pane">
+          <div class="row"><label>Address</label><input id="piAddress" readonly /></div>
+          <div class="row"><label>Prefix</label><input id="piPrefix" readonly /></div>
+          <div class="row"><label>Gateway</label><input id="piGateway" readonly /></div>
+          <div class="row">
+            <button id="savePiLan">Set Console LAN IP</button>
+            <button id="applyNetwork">Apply Network</button>
+            <button id="factoryResetNetwork">Factory Default</button>
+          </div>
+          <div id="networkInfo" class="info">Network: -</div>
+          <div id="networkDefaultHint" class="info">Derived defaults: -</div>
+          <div class="cmd-window" style="margin-top:8px;">
+            <div class="cmd-title">$ ifconfig eth0</div>
+            <pre id="ifconfigEth" class="cmd-body">-</pre>
+          </div>
+        </div>
+        <div id="networkPaneWifi" class="network-pane">
+          <div class="row"><label>SSID</label><input id="wifiSsid" readonly /></div>
+          <div class="row"><label>Password</label><input id="wifiPassword" readonly /></div>
+          <div class="row">
+            <button id="wifiScan">Scan</button>
+            <button id="wifiConnect">Connect</button>
+            <button id="wifiDisconnect">Disconnect</button>
+          </div>
+          <div id="wifiStatus" class="info">WiFi: -</div>
+          <div class="table-wrap" style="margin-top:8px;">
+            <table>
+              <thead><tr><th>SSID</th><th>Signal</th><th>Security</th><th>Use</th></tr></thead>
+              <tbody id="wifiTableBody"></tbody>
+            </table>
+          </div>
+          <div class="cmd-window" style="margin-top:8px;">
+            <div class="cmd-title">$ ifconfig wlan0</div>
+            <pre id="ifconfigWifi" class="cmd-body">-</pre>
+          </div>
+          <div id="ifconfigDump" class="info" style="display:none;">ifconfig: -</div>
+        </div>
+        <div id="networkPaneHeads" class="network-pane">
+          <div class="table-wrap" style="max-height:none;">
+            <table class="head-ids-table">
+              <colgroup>
+                <col style="width:4%;" />
+                <col style="width:22%;" />
+                <col style="width:16%;" />
+                <col style="width:5%;" />
+                <col style="width:15%;" />
+                <col style="width:7%;" />
+                <col style="width:10%;" />
+                <col style="width:11%;" />
+                <col style="width:5%;" />
+                <col style="width:5%;" />
+              </colgroup>
+              <thead><tr><th>#</th><th>Name</th><th>IP</th><th>Prefix</th><th>Gateway</th><th>Ping</th><th>Ping Status</th><th>Push Status</th><th>Save</th><th>Push</th></tr></thead>
+              <tbody id="headTableBodyEditor"></tbody>
+            </table>
+          </div>
         </div>
       </div>
       <div class="head-config-actions">
@@ -3462,9 +3501,12 @@ function updateConnectionPillContent(){
   const connected = String(((cs.head || {}).state || "")).toLowerCase() === "connected";
   const headName = connected ? (getHeadLabel(Number(state.selected) || 0) || "none") : "none";
   const lens = (state.head_feedback || {}).lens || {};
+  const bgc = (((state.head_feedback || {}).bgc) || {});
   const lensId = lens.lens_id || "-";
   const lensFull = lens.lens_full_name || "(unknown)";
   const lensName = (lensFull && lensFull !== "(unknown)") ? lensFull : (lensId !== "-" ? lensId : "none");
+  const vRaw = Number(bgc.battery_voltage_v);
+  const voltageText = Number.isFinite(vRaw) && vRaw > 0 ? `${vRaw.toFixed(2)}V` : "—";
   pill.innerHTML = "";
   const headKey = document.createElement("span");
   headKey.className = "k";
@@ -3481,11 +3523,23 @@ function updateConnectionPillContent(){
   const lensVal = document.createElement("span");
   lensVal.className = "v";
   lensVal.textContent = lensName;
+  const sep2 = document.createElement("span");
+  sep2.className = "sep";
+  sep2.textContent = "•";
+  const voltKey = document.createElement("span");
+  voltKey.className = "k";
+  voltKey.textContent = "Voltage";
+  const voltVal = document.createElement("span");
+  voltVal.className = "v";
+  voltVal.textContent = voltageText;
   pill.appendChild(headKey);
   pill.appendChild(headVal);
   pill.appendChild(sep);
   pill.appendChild(lensKey);
   pill.appendChild(lensVal);
+  pill.appendChild(sep2);
+  pill.appendChild(voltKey);
+  pill.appendChild(voltVal);
 }
 
 function updateHeadIdBox(){
@@ -3634,10 +3688,34 @@ function openHeadPicker(){
 
 function closeHeadConfigEditor(){ $("headConfigEditor").classList.remove("open"); }
 
-function openHeadConfigEditor(){
+function setNetworkEditorTab(tab){
+  const t = (tab === "wifi" || tab === "heads") ? tab : "lan";
+  const tabs = {
+    lan: $("networkTabLan"),
+    wifi: $("networkTabWifi"),
+    heads: $("networkTabHeads"),
+  };
+  const panes = {
+    lan: $("networkPaneLan"),
+    wifi: $("networkPaneWifi"),
+    heads: $("networkPaneHeads"),
+  };
+  Object.keys(tabs).forEach((k) => {
+    if (tabs[k]) tabs[k].classList.toggle("active", k === t);
+    if (panes[k]) panes[k].classList.toggle("active", k === t);
+  });
+  if ($("matchConsoleLanSubnetBtn")) $("matchConsoleLanSubnetBtn").style.display = (t === "heads") ? "" : "none";
+}
+
+function openHeadConfigEditor(tab = "heads"){
   renderIpConfigTable();
+  setNetworkEditorTab(tab);
   $("headConfigEditor").classList.add("open");
 }
+
+function openLanConfigEditor(){ openHeadConfigEditor("lan"); }
+
+function openWifiConfigEditor(){ openHeadConfigEditor("wifi"); }
 
 function closeProfileEditor(){ const el = $("profileEditor"); if (el) el.classList.remove("open"); }
 
@@ -4190,13 +4268,21 @@ function summarizePingMessage(raw){
   return msg.length > 36 ? `${msg.slice(0, 36)}...` : msg;
 }
 
+function compactStatusText(text, maxLen=11){
+  const s = String(text || "-").trim() || "-";
+  if (s.length <= maxLen) return s;
+  return `${s.slice(0, Math.max(1, maxLen - 1))}…`;
+}
+
 function applyStatusCell(cell, text, tone="pending"){
   if (!cell) return;
   cell.className = "status-cell";
   if (tone === "ok") cell.classList.add("status-ok");
   else if (tone === "fail") cell.classList.add("status-fail");
   else if (tone === "pending") cell.classList.add("status-pending");
-  cell.textContent = text || "-";
+  const fullText = String(text || "-");
+  cell.title = fullText;
+  cell.textContent = compactStatusText(fullText, 11);
 }
 
 function setPingStatus(index, text, tone="pending"){
@@ -4338,11 +4424,11 @@ function renderIpConfigTable(){
       <td><input id="h_ip_${i}" readonly value="${h.ip || ""}" /></td>
       <td><input id="h_prefix_${i}" readonly value="${h.prefix ?? 24}" /></td>
       <td><input id="h_gw_${i}" readonly value="${h.gateway || ""}" /></td>
-      <td><button id="h_ping_${i}">Ping Now</button></td>
+      <td><button id="h_ping_${i}" class="compact-btn">Ping</button></td>
       <td id="h_ping_status_${i}" class="status-cell">${pingStatusLabel(i)}</td>
       <td id="h_push_status_${i}" class="status-cell">${pushStatusLabel(i)}</td>
-      <td><button id="h_save_${i}">Save</button></td>
-      <td><button id="h_push_${i}">Push To Head</button></td>
+      <td><button id="h_save_${i}" class="compact-btn">Save</button></td>
+      <td><button id="h_push_${i}" class="compact-btn">Push</button></td>
     `;
     body.appendChild(tr);
     applyStatusCell($(`h_ping_status_${i}`), pingStatusLabel(i), pingStatusTone(i) || "");
@@ -4523,10 +4609,15 @@ function bindUI(){
   $("headPickerClose").onclick = closeHeadPicker;
   $("headPickerCancel").onclick = closeHeadPicker;
   $("headPicker").onclick = (e) => { if (e.target === $("headPicker")) closeHeadPicker(); };
-  $("openHeadConfigEditor").onclick = openHeadConfigEditor;
+  $("openLanConfigEditor").onclick = openLanConfigEditor;
+  $("openWifiConfigEditor").onclick = openWifiConfigEditor;
+  $("openHeadConfigEditor").onclick = () => openHeadConfigEditor("heads");
   $("headConfigClose").onclick = closeHeadConfigEditor;
   $("headConfigDone").onclick = closeHeadConfigEditor;
   $("headConfigEditor").onclick = (e) => { if (e.target === $("headConfigEditor")) closeHeadConfigEditor(); };
+  if ($("networkTabLan")) $("networkTabLan").onclick = () => setNetworkEditorTab("lan");
+  if ($("networkTabWifi")) $("networkTabWifi").onclick = () => setNetworkEditorTab("wifi");
+  if ($("networkTabHeads")) $("networkTabHeads").onclick = () => setNetworkEditorTab("heads");
   $("touchMotorsOn").onclick = () => send({ type: "SET_SLOW_CONTROL", key: "motors_on", value: 1 });
   $("touchMotorsOff").onclick = () => send({ type: "SET_SLOW_CONTROL", key: "motors_on", value: 0 });
   if ($("touchGyroSend")) $("touchGyroSend").onclick = () => send({ type: "SET_SLOW_CONTROL", key: "gyro_heading_correction", value: parseInt($("touchGyroValue").value, 10) || 0 });
