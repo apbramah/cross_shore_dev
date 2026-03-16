@@ -406,10 +406,22 @@
         return ((n % 360) + 360) % 360;
       }
 
-      function displayDeg(v) {
+      function toSigned180(v) {
+        const n = norm360(v);
+        return n > 180 ? (n - 360) : n;
+      }
+
+      function displayHeadingDeg(v) {
         const n = norm360(v);
         let r = Math.round(n * 10) / 10;
         if (r >= 360) r = 0;
+        return r.toFixed(1);
+      }
+
+      function displaySignedDeg(v) {
+        const s = toSigned180(v);
+        let r = Math.round(s * 10) / 10;
+        if (Object.is(r, -0)) r = 0;
         return r.toFixed(1);
       }
 
@@ -423,9 +435,9 @@
       }
 
       function updateReadouts(pan, tilt, roll, zoom, focus) {
-        document.getElementById("valPan").textContent = Number.isFinite(Number(pan)) ? displayDeg(Number(pan)) : "—";
-        document.getElementById("valTilt").textContent = Number.isFinite(Number(tilt)) ? displayDeg(Number(tilt)) : "—";
-        document.getElementById("valRoll").textContent = Number.isFinite(Number(roll)) ? displayDeg(Number(roll)) : "—";
+        document.getElementById("valPan").textContent = Number.isFinite(Number(pan)) ? displayHeadingDeg(Number(pan)) : "—";
+        document.getElementById("valTilt").textContent = Number.isFinite(Number(tilt)) ? displaySignedDeg(Number(tilt)) : "—";
+        document.getElementById("valRoll").textContent = Number.isFinite(Number(roll)) ? displaySignedDeg(Number(roll)) : "—";
         document.getElementById("valZoom").textContent = zoom != null ? String(zoom) : "—";
         document.getElementById("valFocus").textContent = focus != null ? String(focus) : "—";
       }
@@ -443,8 +455,8 @@
 
       function updateAxisInstruments(pan, tilt, roll, zoomNorm, focusNorm) {
         const panDeg = Number.isFinite(pan) ? norm360(pan) : 0;
-        const tiltDeg = Number.isFinite(tilt) ? norm360(tilt) : 0;
-        const rollDeg = Number.isFinite(roll) ? norm360(roll) : 0;
+        const tiltDeg = Number.isFinite(tilt) ? toSigned180(tilt) : 0;
+        const rollDeg = Number.isFinite(roll) ? toSigned180(roll) : 0;
         const zoom = Number.isFinite(zoomNorm) ? Math.max(0, Math.min(100, zoomNorm)) : 0;
         const focus = Number.isFinite(focusNorm) ? Math.max(0, Math.min(100, focusNorm)) : 0;
 
@@ -469,8 +481,8 @@
         if (zoomFill) zoomFill.setAttribute("width", (104 * zoom / 100));
         if (focusFill) focusFill.setAttribute("width", (104 * focus / 100));
 
-        document.getElementById("axisPanTiltVal").textContent = (Number.isFinite(pan) ? displayDeg(pan) + "°" : "—") + " / " + (Number.isFinite(tilt) ? displayDeg(tilt) + "°" : "—");
-        document.getElementById("axisRollVal").textContent = Number.isFinite(roll) ? displayDeg(roll) + "°" : "—";
+        document.getElementById("axisPanTiltVal").textContent = (Number.isFinite(pan) ? displayHeadingDeg(pan) + "°" : "—") + " / " + (Number.isFinite(tilt) ? displaySignedDeg(tilt) + "°" : "—");
+        document.getElementById("axisRollVal").textContent = Number.isFinite(roll) ? displaySignedDeg(roll) + "°" : "—";
         document.getElementById("axisZoomVal").textContent = Number.isFinite(zoomNorm) ? Math.round(zoom) + "%" : "—";
         document.getElementById("axisFocusVal").textContent = Number.isFinite(focusNorm) ? Math.round(focus) + "%" : "—";
       }
@@ -482,8 +494,8 @@
         const railBottom = 144;
         const railCenterX = 22;
         const baseHalfLen = 14;
-        const t = Math.max(-180, Math.min(180, Number(tiltDeg) || 0));
-        const r = Math.max(-180, Math.min(180, Number(rollDeg) || 0));
+        const t = Math.max(-180, Math.min(180, toSigned180(tiltDeg)));
+        const r = Math.max(-180, Math.min(180, toSigned180(rollDeg)));
         const yNorm = (t + 180) / 360;
         const y = railTop + ((1 - yNorm) * (railBottom - railTop));
         const rr = (r * Math.PI) / 180;
@@ -704,7 +716,7 @@
         updateCompass(heading);
         updateReadouts(heading, latestTiltDeg, latestRollDeg, "—", "—");
         updateTiltRollIndicator(latestTiltDeg, latestRollDeg);
-        updateAxisInstruments(heading, 0, 0, 50, 50);
+        updateAxisInstruments(heading, latestTiltDeg, latestRollDeg, 50, 50);
       }
 
       applyBtn.addEventListener("click", apply);
@@ -969,8 +981,8 @@
           document.getElementById("lon").value = String(lon);
           latestHeadingDeg = wrapSafeStep(latestHeadingDeg, heading);
           document.getElementById("heading").value = String(latestHeadingDeg);
-          if (Number.isFinite(tilt)) latestTiltDeg = tilt;
-          if (Number.isFinite(roll)) latestRollDeg = roll;
+          if (Number.isFinite(tilt)) latestTiltDeg = toSigned180(tilt);
+          if (Number.isFinite(roll)) latestRollDeg = toSigned180(roll);
           if (Number.isFinite(zoomNorm)) indicatorZoomRatio = Math.max(0, Math.min(1, zoomNorm));
           if (typeof simMode === "boolean") setSimModeEnabled(simMode);
           if (typeof mapStyle === "string") setMapStyle(mapStyle, false);

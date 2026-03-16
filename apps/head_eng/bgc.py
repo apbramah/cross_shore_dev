@@ -25,6 +25,9 @@ ADJ_VAR_ID_PID_GAIN_ROLL = 42
 ADJ_VAR_ID_PID_GAIN_PITCH = 43
 ADJ_VAR_ID_PID_GAIN_YAW = 44
 BGC_ANGLE_COUNT_TO_DEG = 0.02197265625  # 360 / 16384
+RT4_IMU_OFFSET = 32
+IMU_DEBUG = True
+IMU_DEBUG_INTERVAL_MS = 500
 
 
 def hexdump(data: bytes) -> str:
@@ -49,6 +52,7 @@ class BGC:
         self._yaw_offset_deg = 0.0
         self._pitch_offset_deg = 0.0
         self._roll_offset_deg = 0.0
+        self._last_imu_debug_ms = 0
 
     def write_raw(self, data: bytes):
         # The "FCB Control Software" application discovers the correct COM port by sending data to all the COM ports.
@@ -157,14 +161,35 @@ class BGC:
         self._last_imu_update_ms = int(self._last_imu["updated_at_ms"])
 
     def _parse_rt4_payload(self, payload: bytes) -> bool:
-        # RT4 includes IMU_ANGLE[3]. For this integration we read the first 3 int16
-        # values as roll/pitch/yaw in protocol order IMU_ANGLE[0..2].
-        if not payload or len(payload) < 6:
+        # RT4 payload begins with full REALTIME_DATA_3 structure.
+        # IMU_ANGLE[3] starts at byte offset 32 (2s*3, order ROLL,PITCH,YAW).
+        if not payload or len(payload) < (RT4_IMU_OFFSET + 6):
             return False
         try:
-            raw_roll, raw_pitch, raw_yaw = struct.unpack("<hhh", payload[:6])
+            raw_roll, raw_pitch, raw_yaw = struct.unpack("<hhh", payload[RT4_IMU_OFFSET : RT4_IMU_OFFSET + 6])
         except Exception:
             return False
+        if IMU_DEBUG:
+            now = int(time.ticks_ms())
+            if time.ticks_diff(now, self._last_imu_debug_ms) >= IMU_DEBUG_INTERVAL_MS:
+                self._last_imu_debug_ms = now
+                print("[IMU_DEBUG][RT4] len=", len(payload), "off=", RT4_IMU_OFFSET, "head=", hexdump(payload[:24]))
+                # Show candidate triplets around expected IMU region.
+                for off in (24, 26, 28, 30, 32, 34, 36, 38, 40):
+                    if (off + 6) > len(payload):
+                        break
+                    try:
+                        c0, c1, c2 = struct.unpack("<hhh", payload[off : off + 6])
+                    except Exception:
+                        continue
+                    d0 = c0 * BGC_ANGLE_COUNT_TO_DEG
+                    d1 = c1 * BGC_ANGLE_COUNT_TO_DEG
+                    d2 = c2 * BGC_ANGLE_COUNT_TO_DEG
+                    print(
+                        "[IMU_DEBUG][RT4][off={}] raw=({},{},{}) deg=({:.2f},{:.2f},{:.2f})".format(
+                            off, c0, c1, c2, d0, d1, d2
+                        )
+                    )
         self._update_imu_angles(raw_roll, raw_pitch, raw_yaw, "CMD_REALTIME_DATA_4")
         return True
 
@@ -175,6 +200,21 @@ class BGC:
             raw_roll, raw_pitch, raw_yaw = struct.unpack("<hhh", payload[:6])
         except Exception:
             return False
+        if IMU_DEBUG:
+            now = int(time.ticks_ms())
+            if time.ticks_diff(now, self._last_imu_debug_ms) >= IMU_DEBUG_INTERVAL_MS:
+                self._last_imu_debug_ms = now
+                print(
+                    "[IMU_DEBUG][{}] raw=({},{},{}) deg=({:.2f},{:.2f},{:.2f})".format(
+                        source_cmd,
+                        raw_roll,
+                        raw_pitch,
+                        raw_yaw,
+                        raw_roll * BGC_ANGLE_COUNT_TO_DEG,
+                        raw_pitch * BGC_ANGLE_COUNT_TO_DEG,
+                        raw_yaw * BGC_ANGLE_COUNT_TO_DEG,
+                    )
+                )
         self._update_imu_angles(raw_roll, raw_pitch, raw_yaw, source_cmd)
         return True
 
