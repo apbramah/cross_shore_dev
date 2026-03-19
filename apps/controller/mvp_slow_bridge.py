@@ -1028,6 +1028,25 @@ def _selected_head_ip() -> str:
     return ""
 
 
+def _should_accept_head_packet(src_ip: str) -> bool:
+    """
+    Accept packets from selected head IP by default.
+    If selected head is stale/disconnected, allow fallback from any known head IP
+    so UI can recover from row/IP drift without staying in a permanent 'none' state.
+    """
+    src = str(src_ip or "").strip()
+    want = _selected_head_ip()
+    if not src or not want:
+        return True
+    if src == want:
+        return True
+    ts = float(head_feedback.get("updated_at", 0.0) or 0.0)
+    age_s = (time.time() - ts) if ts > 0.0 else 1e9
+    if age_s < HEAD_CONNECTED_TIMEOUT_S:
+        return False
+    return _resolve_head_index_by_ip(src) >= 0
+
+
 def _resolve_head_index_by_ip(ip: str) -> int:
     ip_s = str(ip or "").strip()
     if not ip_s:
@@ -1299,9 +1318,8 @@ async def telemetry_receiver_task() -> None:
                     if apply_id in head_network_push_pending:
                         del head_network_push_pending[apply_id]
                 continue
-            want_ip = _selected_head_ip()
-            # Bind regular slow key feedback to selected head only.
-            if want_ip and src_ip and src_ip != want_ip:
+            # Prefer selected head, but allow stale fallback from known head IPs.
+            if not _should_accept_head_packet(src_ip):
                 continue
             key = next((k for k, kid in mvp_protocol.SLOW_KEY_IDS.items() if kid == key_id), None)
             if key:
@@ -1314,9 +1332,8 @@ async def telemetry_receiver_task() -> None:
             continue
         telem = mvp_protocol.decode_slow_telem_packet(data)
         if telem:
-            want_ip = _selected_head_ip()
-            # Bind telemetry to selected head only so runtime status flips correctly.
-            if want_ip and src_ip and src_ip != want_ip:
+            # Prefer selected head, but allow stale fallback from known head IPs.
+            if not _should_accept_head_packet(src_ip):
                 continue
             head_feedback["slow"] = telem.get("slow", {})
             head_feedback["lens"] = _normalize_lens_feedback(telem.get("lens", {}))
