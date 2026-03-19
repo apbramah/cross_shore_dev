@@ -1801,7 +1801,7 @@ function sliderCommandMeta(mode, key){
     if (key === "lens_select") return { type:"enum", values:["fuji","canon"], labels:["Fuji","Canon"] };
     if (key === "source_zoom" || key === "source_focus" || key === "source_iris") return { type:"enum", values:["pc","camera","off"], labels:["PC","Camera","Off"] };
     if (key === "filter_num" || key === "filter_den") return { type:"enum", values:[1,2,4,8,16], labels:["1","2","4","8","16"] };
-    if (key === "gyro_heading_correction") return { min:-8192, max:8192, step:256 };
+    if (key === "gyro_heading_correction") return { min:-8192, max:8192, step:64 };
     if (key === "wash_wipe") return { type:"enum", values:["parked","wiping"], labels:["Wash park","Wash wipe"] };
     if (key === "pan_accel" || key === "tilt_accel" || key === "roll_accel") return { min:0, max:255, step:1 };
     if (key === "pan_gain" || key === "tilt_gain" || key === "roll_gain") return { min:0, max:255, step:1 };
@@ -2317,11 +2317,13 @@ function renderSlowSliders(forceBuild){
     if (!key || key === "none"){
       name.textContent = "(unassigned)";
       slider.value = "0";
+      slider.step = "1";
       slider.disabled = true;
       setRangeFillFromValue(slider, "--controlSliderPct");
       val.textContent = "-";
       continue;
     }
+    slider.step = String(sliderUiPercentStep("slow", key));
     slider.disabled = false;
     const readback = getSliderReadbackValue("slow", key);
     const valueText = formatSliderValue("slow", key, readback);
@@ -2337,7 +2339,7 @@ function renderSlowSliders(forceBuild){
         ui.appliedUntil = Date.now() + 900;
       } else {
         card.classList.add("pending");
-        slider.value = String(Math.round(ui.pending.targetPercent));
+        slider.value = sliderUiPercentString("slow", key, ui.pending.targetPercent);
         setRangeFillFromValue(slider, "--controlSliderPct");
         val.textContent = `${formatSliderValue("slow", key, ui.pending.targetValue)} (pending)`;
         name.textContent = sliderDisplayLabel(key) + "  " + val.textContent;
@@ -2345,7 +2347,7 @@ function renderSlowSliders(forceBuild){
       }
     }
     const pct = commandValueToPercent("slow", key, readback);
-    slider.value = String(Math.round(pct));
+    slider.value = sliderUiPercentString("slow", key, pct);
     setRangeFillFromValue(slider, "--controlSliderPct");
     val.textContent = formatSliderValue("slow", key, readback);
     name.textContent = sliderDisplayLabel(key) + "  " + val.textContent;
@@ -2429,6 +2431,19 @@ function setRangeFillFromValue(el, cssVarName){
   }
   const pct = Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100));
   el.style.setProperty(cssVarName, `${pct}%`);
+}
+
+function sliderUiPercentStep(mode, key){
+  // Pan Trim needs finer touch resolution.
+  if (mode === "slow" && key === "gyro_heading_correction") return 0.1;
+  return 1;
+}
+
+function sliderUiPercentString(mode, key, pct){
+  const step = sliderUiPercentStep(mode, key);
+  const n = clamp(Number(pct) || 0, 0, 100);
+  if (step < 1) return n.toFixed(1);
+  return String(Math.round(n));
 }
 
 function normalizeAxisValue(raw){
@@ -2626,12 +2641,14 @@ function renderControlSliders(forceBuild=false){
     if (!mode || mode === "none" || !key || key === "none"){
       name.textContent = "(unassigned)";
       slider.value = "0";
+      slider.step = "1";
       slider.disabled = true;
       setRangeFillFromValue(slider, "--controlSliderPct");
       val.textContent = "-";
       safeRenderSliderLiveBar(i, "");
       continue;
     }
+    slider.step = String(sliderUiPercentStep(mode, key));
     slider.disabled = false;
     const readbackVal = getSliderReadbackValue(mode, key);
     const valueText = formatSliderValue(mode, key, readbackVal);
@@ -2650,7 +2667,7 @@ function renderControlSliders(forceBuild=false){
         ui.appliedUntil = Date.now() + 900;
       } else {
         card.classList.add("pending");
-        slider.value = String(Math.round(targetPct));
+        slider.value = sliderUiPercentString(mode, key, targetPct);
         setRangeFillFromValue(slider, "--controlSliderPct");
         val.textContent = `${formatSliderValue(mode, key, ui.pending.targetValue)} (pending)`;
         name.textContent = sliderDisplayLabel(key) + "  " + val.textContent;
@@ -2658,7 +2675,7 @@ function renderControlSliders(forceBuild=false){
       }
     }
     const pct = commandValueToPercent(mode, key, readback);
-    slider.value = String(Math.round(pct));
+    slider.value = sliderUiPercentString(mode, key, pct);
     setRangeFillFromValue(slider, "--controlSliderPct");
     val.textContent = formatSliderValue(mode, key, readback);
     name.textContent = sliderDisplayLabel(key) + "  " + val.textContent;
