@@ -6,6 +6,15 @@
   <title>Hydravision MVP UI 3</title>
   <script src="./mvp_ui_3_layout.js"></script>
   <style>
+    html, body, * {
+      cursor: none !important;
+      user-select: none !important;
+      -webkit-user-select: none !important;
+      -webkit-touch-callout: none !important;
+      -webkit-tap-highlight-color: transparent !important;
+      caret-color: transparent !important;
+    }
+    *::before, *::after { cursor: none !important; }
     :root { --bg:#070b11; --card:#0d131d; --card2:#101722; --border:#1b2433; --text:#d2d8e3; --muted:#8791a1; --accent:#9bd85a; --warn:#9bd85a; --ok:#9bd85a; --danger:#9bd85a; --nav-link-x:10%; --nav-link-x2:10%; --nav-link-color:#9bd85a; }
     *{ box-sizing:border-box; }
     html, body { width:100vw; height:100vh; margin:0; overflow:hidden; background:#060a10; color:var(--text); font-family:Inter, "Segoe UI", system-ui, -apple-system, sans-serif; letter-spacing:.005em; line-height:1.35; text-rendering:optimizeLegibility; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
