@@ -71,6 +71,7 @@ class CanonLens:
         self._last_focus_feedback = None
         self._last_iris_feedback = None
         self._suspend_rx_consume = False
+        self._quiet_until_ms = 0
         # Fuji-baseline parity mode: no default focus/iris smoothing.
         self._filter_enabled = {"focus": False, "iris": False}
         self._filter_num = FILTER_DEFAULT_NUM
@@ -165,6 +166,11 @@ class CanonLens:
         self.iris_target = v
 
     def periodic(self, now_ms):
+        if _ticks_diff(self._quiet_until_ms, now_ms) > 0:
+            # Quiet mode: suppress periodic Canon TX while name acquisition runs.
+            if not self._suspend_rx_consume:
+                self._consume_runtime_feedback()
+            return
         if _time_after(now_ms, self._next_keepalive_ms):
             self.transport.write(CTRL_CMD)
             self._next_keepalive_ms = now_ms + CONTROL_KEEPALIVE_MS
@@ -220,6 +226,8 @@ class CanonLens:
     def read_lens_name(self):
         # Keep this bounded and quiet; this function can be called from boot paths.
         # Avoid periodic() traffic while waiting for name reply.
+        quiet_ms = (LENS_NAME_READ_ATTEMPTS * (80 + LENS_NAME_WAIT_MS + 50))
+        self._quiet_until_ms = _ticks_ms() + quiet_ms
         self._drain_rx()
         attempts = LENS_NAME_READ_ATTEMPTS
         for _ in range(attempts):
@@ -236,9 +244,12 @@ class CanonLens:
                     name = _extract_lens_name_from_bytes(rx)
                     if name:
                         self.lens_name_cached = name
+                        self._quiet_until_ms = 0
                         return name
                 else:
                     _sleep_ms(5)
+        # Allow periodic traffic to resume immediately after attempts complete.
+        self._quiet_until_ms = 0
         return None
 
     def run_bit(self):

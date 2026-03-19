@@ -270,6 +270,8 @@ _last_fast_debug_ms = 0
 _last_slow_sender_ip = None
 _last_telem_ms = 0
 _lens_name_last_try_ms = 0
+_last_lens_name_debug_ms = 0
+_last_lens_name_debug_value = ""
 _last_bgc_imu_attitude = None
 _last_bgc_battery_voltage_v = None
 SLOW_TELEM_INTERVAL_MS = 50
@@ -558,7 +560,8 @@ def _update_i2c_status_frame():
 
 
 def _send_slow_telem():
-    global _last_telem_ms, _lens_name_last_try_ms, _last_bgc_imu_attitude, _last_bgc_battery_voltage_v
+    global _last_telem_ms, _lens_name_last_try_ms, _last_lens_name_debug_ms, _last_lens_name_debug_value
+    global _last_bgc_imu_attitude, _last_bgc_battery_voltage_v
     if not _last_slow_sender_ip:
         return
     now = time.ticks_ms()
@@ -571,6 +574,15 @@ def _send_slow_telem():
             if not lens_name and time.ticks_diff(now, _lens_name_last_try_ms) >= 5000:
                 _lens_name_last_try_ms = now
                 lens_name = lens.refresh_lens_full_name()
+            if lens.get_lens_type() == LENS_CANON:
+                if lens_name:
+                    if str(lens_name) != str(_last_lens_name_debug_value):
+                        print("[LENS][Canon][NAME] resolved:", lens_name)
+                        _last_lens_name_debug_value = str(lens_name)
+                        _last_lens_name_debug_ms = now
+                elif time.ticks_diff(now, _last_lens_name_debug_ms) >= 5000:
+                    print("[LENS][Canon][NAME] unavailable (no payload)")
+                    _last_lens_name_debug_ms = now
             active_lens = getattr(lens, "active_lens", None)
             zoom_mode = str(getattr(active_lens, "zoom_mode", "position"))
             zoom_velocity_cmd = int((_last_fast_fields or {}).get("zoom", 0))
