@@ -16,6 +16,9 @@ CMD_ZOOM_POS = 0x87
 CMD_FOCUS_POS = 0x88
 CMD_IRIS_POS = 0x96
 SUBCMD_C0 = 0xC0
+SUBCMD_C1 = 0xC1
+ZOOM_SPEED_MAX = 18360
+ZOOM_SPEED_STOP = 0x8000
 
 
 def pack_type_b_value(v):
@@ -34,6 +37,21 @@ def unpack_type_b_value(d1, d2, d3):
 def build_type_b(cmd, subcmd, v):
     d1, d2, d3 = pack_type_b_value(v)
     return bytes([cmd, subcmd, d1, d2, d3, 0xBF])
+
+
+def build_zoom_speed_control_signed(signed_speed):
+    """
+    Canon zoom speed control (CMD=0x87, SUBCMD=0xC1).
+    API range is signed speed around STOP at 0x8000:
+      -18360 (wide max) .. 0 .. +18360 (tele max)
+    """
+    s = int(signed_speed)
+    if s > ZOOM_SPEED_MAX:
+        s = ZOOM_SPEED_MAX
+    elif s < -ZOOM_SPEED_MAX:
+        s = -ZOOM_SPEED_MAX
+    v = ZOOM_SPEED_STOP + s
+    return build_type_b(CMD_ZOOM_POS, SUBCMD_C1, v)
 
 
 def build_type_c_switch(scmd, src_bits):
