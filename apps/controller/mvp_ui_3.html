@@ -1212,6 +1212,10 @@
               <div class="command-row-name">Calibrate Inputs</div>
               <button id="touchCalibrateInputs">Run</button>
             </div>
+            <div class="command-row">
+              <div class="command-row-name">Check for Lens</div>
+              <button id="touchCheckLens">Reboot &amp; Re-detect</button>
+            </div>
           </div>
         </div>
         <div class="card stack-row-card"><div id="connectionState" class="info">Connection: -</div></div>
@@ -4674,6 +4678,10 @@ function bindUI(){
   if ($("touchSaveDefaults")) $("touchSaveDefaults").onclick = () => send({ type: "SAVE_USER_DEFAULTS" });
   if ($("touchResetDefaults")) $("touchResetDefaults").onclick = () => send({ type: "RESET_USER_DEFAULTS" });
   $("touchCalibrateInputs").onclick = () => send({ type: "CALIBRATE_INPUTS", duration_s: 2.5 });
+  if ($("touchCheckLens")) $("touchCheckLens").onclick = () => {
+    setEvent("Lens check requested (head reboot)");
+    send({ type: "SET_SLOW_CONTROL", key: "lens_check", value: 1 });
+  };
   $("themeSelect").onchange = (e) => applyTheme(e.target.value);
   if ($("themeLabToggle")) {
     $("themeLabToggle").onclick = () => {

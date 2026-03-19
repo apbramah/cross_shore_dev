@@ -8,6 +8,8 @@
 - Deploy process now explicitly includes `position_map_standalone.html` runtime installation, which is required for map-based Position Display features on Pi.
 - Head network configuration now uses an explicit transaction concept on slow channel (`NETCFG_ENTER`, field updates, `NETCFG_APPLY`, `NETCFG_EXIT`) to isolate config writes from routine slow traffic.
 - Bridge-side push status handling now tolerates duplicate late APPLY ACKs and can infer successful apply when target IP becomes reachable after transition.
+- Lens lifecycle now treats detection as tri-state (`fuji` / `canon` / `none`): if no supported lens responds at boot, head continues in no-lens mode (`lens = None`) instead of forcing Fuji runtime.
+- Added one-shot slow key `lens_check` (`key_id=19`) to request head reboot and re-run boot-time lens detection; periodic slow table push intentionally skips this key.
 
 ## Top-level architecture: three layers
 

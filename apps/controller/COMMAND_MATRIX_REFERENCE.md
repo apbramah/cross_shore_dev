@@ -33,7 +33,7 @@ Each row: **key** (and key_id), **value encoding**, **hardware** (BGC / Fuji / C
 |-----|--------|----------------|-----|------|--------|------|
 | `motors_on` | 1 | 0 = off, 1 = on | ✓ | — | — | BGC CMD motors enable |
 | `control_mode` | 2 | 0 = speed, 1 = angle | ✓ | — | — | BGC speed vs angle mode |
-| `lens_select` | 3 | 0 = fuji, 1 = canon | — | ✓ | ✓ | Selects lens type; Fuji/Canon lens controller |
+| `lens_select` | 3 | 0 = fuji, 1 = canon | — | ✓ | ✓ | Compatibility key; runtime override ignored (head selects lens at boot) |
 | `source_zoom` | 4 | 0 = pc, 1 = camera, 2 = off | — | ✓ | ✓ | Zoom source (PC/camera/off) |
 | `source_focus` | 5 | 0 = pc, 1 = camera, 2 = off | — | ✓ | ✓ | Focus source |
 | `source_iris` | 6 | 0 = pc, 1 = camera, 2 = off | — | ✓ | ✓ | Iris source |
@@ -49,6 +49,7 @@ Each row: **key** (and key_id), **value encoding**, **hardware** (BGC / Fuji / C
 | `pan_gain` | 16 | 0–255 | ✓ | — | — | BGC pan (yaw) gain |
 | `tilt_gain` | 17 | 0–255 | ✓ | — | — | BGC tilt (pitch) gain |
 | `roll_gain` | 18 | 0–255 | ✓ | — | — | BGC roll gain |
+| `lens_check` | 19 | 0/1 (one-shot) | — | ✓ | ✓ | ACK then reboot head to re-run boot lens detection |
 
 **Dead-ahead (DA) slow keys** (if present in UI/state): `da_enabled`, `da_yaw_range`, `da_pitch_range`, `da_roll_range`, `da_deadband`, `da_speed` — typically drive BGC/behavior config; exact key_ids and encoding are defined where they are added to the protocol.
 
@@ -86,11 +87,11 @@ These are not separate wire commands; they configure how the **controller** shap
 | Hardware | Role | Slow commands that target it | Fast / shaping |
 |----------|------|------------------------------|----------------|
 | **BGC** | Gimbal (pan/tilt/roll); motors; gyro; wash/wipe; accel/gain | `motors_on`, `control_mode`, `gyro_heading_correction`, `wash_wipe`, `pan_accel`, `tilt_accel`, `roll_accel`, `pan_gain`, `tilt_gain`, `roll_gain` | Receives continuous yaw/pitch/roll (and zoom) from fast UDP; shaping is applied on controller before send. |
-| **Fuji** | ENG lens (zoom/focus/iris) | `lens_select` (when fuji), `source_zoom`, `source_focus`, `source_iris`, `filter_enable_focus`, `filter_enable_iris`, `filter_num`, `filter_den` | Zoom/focus/iris from fast packet; Fuji protocol (e.g. serial). |
-| **Canon** | ENG lens (zoom/focus/iris) | `lens_select` (when canon), `source_*`, `filter_*` same as Fuji | Zoom/focus/iris from fast packet; Canon protocol (Type-B, etc.). |
+| **Fuji** | ENG lens (zoom/focus/iris) | `source_zoom`, `source_focus`, `source_iris`, `filter_enable_focus`, `filter_enable_iris`, `filter_num`, `filter_den`, `lens_check` | Zoom/focus/iris from fast packet; Fuji protocol (e.g. serial). |
+| **Canon** | ENG lens (zoom/focus/iris) | `source_*`, `filter_*`, `lens_check` | Zoom/focus/iris from fast packet; Canon protocol (Type-B, etc.). |
 | **Sony VISCA** | Camera/lens (e.g. head_zoom / head apps) | Not in current slow key set; different head variant | Sony camera/lens control in `head_zoom` / `camera_sony` path; not the same as ENG lens slow keys above. |
 
-**Canon / Fuji:** Value encoding for `lens_select`, `source_*`, and filter keys is in `mvp_protocol.encode_slow_value()`. Head applies them in `apps/head_eng/main.py` → `apply_slow_command()`; lens-specific code in `canon_lens.py`, `fuji_lens*.py`, `lens_controller.py`.
+**Canon / Fuji:** Value encoding for `lens_select`, `lens_check`, `source_*`, and filter keys is in `mvp_protocol.encode_slow_value()`. Head applies them in `apps/head_eng/main.py` → `apply_slow_command()`; lens-specific code in `canon_lens.py`, `fuji_lens*.py`, `lens_controller.py`.
 
 **Sony VISCA:** Documented in head_zoom/head camera flow; add a row here when a slow key or fast axis is explicitly mapped to Sony VISCA in the controller/head.
 

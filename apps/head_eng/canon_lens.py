@@ -27,13 +27,15 @@ AXES = ("zoom", "focus", "iris")
 ZOOM_DELTA_SCALE = 10
 ZOOM_INPUT_MAX = 64
 ZOOM_DEADBAND = 1
-AXIS_HOLD_THRESHOLD = 120
+AXIS_HOLD_THRESHOLD = 0
 CONTROL_TX_PERIOD_MS = 10
 CONTROL_KEEPALIVE_MS = 200
 SOURCE_REFRESH_MS = 1500
 FILTER_DEFAULT_NUM = 1
 FILTER_DEFAULT_DEN = 8
 FILTER_MAX_RATE_PER_S = 6000
+LENS_NAME_READ_ATTEMPTS = 3
+LENS_NAME_WAIT_MS = 1200
 
 # Set True from main to log zoom/focus/iris when we send to the lens (like Fuji FOCUS debug).
 CANON_DEBUG = False
@@ -65,8 +67,12 @@ class CanonLens:
         self._last_control_update_ms = 0
         self._last_control_tx_ms = 0
         self._rx_buf = bytearray()
-        # Default-on smoothing for Canon to suppress input jitter and command oscillation.
-        self._filter_enabled = {"focus": True, "iris": True}
+        self._last_zoom_feedback = None
+        self._last_focus_feedback = None
+        self._last_iris_feedback = None
+        self._suspend_rx_consume = False
+        # Fuji-baseline parity mode: no default focus/iris smoothing.
+        self._filter_enabled = {"focus": False, "iris": False}
         self._filter_num = FILTER_DEFAULT_NUM
         self._filter_den = FILTER_DEFAULT_DEN
 
@@ -169,6 +175,8 @@ class CanonLens:
             self._update_control_targets(now_ms)
             self._send_axis_controls(now_ms)
             self._next_control_tx_ms = now_ms + CONTROL_TX_PERIOD_MS
+        if not self._suspend_rx_consume:
+            self._consume_runtime_feedback()
 
     def set_input_filter_enabled(self, axis, enabled):
         if axis not in ("focus", "iris"):
@@ -210,15 +218,28 @@ class CanonLens:
         return ok
 
     def read_lens_name(self):
+        # Keep this bounded and quiet; this function can be called from boot paths.
+        # Avoid periodic() traffic while waiting for name reply.
         self._drain_rx()
-        self.transport.write(LENS_NAME_REQ)
-        frame = self._wait_for_prefix((0xBE, 0x80, 0x81), 1200)
-        if not frame:
-            return None
-        name = decode_lens_name_type_c(frame)
-        if name:
-            self.lens_name_cached = name
-        return name
+        attempts = LENS_NAME_READ_ATTEMPTS
+        for _ in range(attempts):
+            self.transport.write(CTRL_CMD)
+            _sleep_ms(80)
+            self._drain_rx()
+            self.transport.write(LENS_NAME_REQ)
+            deadline = _ticks_ms() + LENS_NAME_WAIT_MS
+            rx = bytearray()
+            while _ticks_diff(deadline, _ticks_ms()) > 0:
+                data = self.transport.read()
+                if data:
+                    rx.extend(data)
+                    name = _extract_lens_name_from_bytes(rx)
+                    if name:
+                        self.lens_name_cached = name
+                        return name
+                else:
+                    _sleep_ms(5)
+        return None
 
     def run_bit(self):
         # Similar to tester: init, source PC for all axes, sweep and expect Type-B feedback.
@@ -304,7 +325,9 @@ class CanonLens:
     def _apply_axis_filter(self, axis, current, target, dt_ms):
         cur = int(current)
         tgt = int(target)
-        if axis in ("focus", "iris") and self._filter_enabled.get(axis, False):
+        if axis in ("focus", "iris") and not self._filter_enabled.get(axis, False):
+            return _clamp_u16_60000(tgt)
+        if axis in ("focus", "iris"):
             num = int(self._filter_num)
             den = int(self._filter_den)
             if den > 0:
@@ -355,12 +378,16 @@ class CanonLens:
 
     def _wait_for_prefix(self, prefix, timeout_ms):
         start = _ticks_ms()
-        while _ticks_diff(_ticks_ms(), start) < timeout_ms:
-            for frame in self._poll_frames():
-                if frame.startswith(bytes(prefix)):
-                    return frame
-            self.periodic(_ticks_ms())
-            _sleep_ms(10)
+        self._suspend_rx_consume = True
+        try:
+            while _ticks_diff(_ticks_ms(), start) < timeout_ms:
+                for frame in self._poll_frames():
+                    if frame.startswith(bytes(prefix)):
+                        return frame
+                self.periodic(_ticks_ms())
+                _sleep_ms(10)
+        finally:
+            self._suspend_rx_consume = False
         return None
 
     def _poll_frames(self):
@@ -389,6 +416,37 @@ class CanonLens:
             self._rx_buf = self._rx_buf[1:]
         return frames
 
+    def _consume_runtime_feedback(self):
+        try:
+            frames = self._poll_frames()
+        except Exception:
+            return
+        for frame in frames:
+            if not frame:
+                continue
+            # Type-B feedback frames (cmd, subcmd, d1, d2, d3, BF)
+            if len(frame) == 6 and frame[-1] == 0xBF:
+                cmd = frame[0]
+                sub = frame[1]
+                if sub == SUBCMD_C0:
+                    value = unpack_type_b_value(frame[2], frame[3], frame[4])
+                    if cmd == CMD_ZOOM_POS:
+                        self._last_zoom_feedback = int(value)
+                    elif cmd == CMD_FOCUS_POS:
+                        self._last_focus_feedback = int(value)
+                    elif cmd == CMD_IRIS_POS:
+                        self._last_iris_feedback = int(value)
+                continue
+            # Opportunistic async name capture.
+            if not self.lens_name_cached:
+                name = decode_lens_name_type_c(frame)
+                if name:
+                    self.lens_name_cached = name
+                    try:
+                        print("[LENS][Canon] Lens ID (async):", name)
+                    except Exception:
+                        pass
+
 
 def _clamp_u16_60000(v):
     if v < 0:
@@ -399,20 +457,15 @@ def _clamp_u16_60000(v):
 
 
 def _normalize_input(raw_value, out_max):
+    # Fuji-baseline parity: fast path already provides u16-domain values.
+    # Keep clamp-only behavior and ignore legacy remap ranges.
+    _ = out_max
     v = int(raw_value)
     if v < 0:
-        v = 0
-    # Legacy controller path: 0..64
-    if v <= 64:
-        return int((v * out_max) // 64)
-    # MVP/controller-main path observed on hardware: 0..16384
-    if v <= 16384:
-        return int((v * out_max) // 16384)
-    if v <= out_max:
-        return v
+        return 0
     if v > 0xFFFF:
-        v = 0xFFFF
-    return int((v * out_max) // 0xFFFF)
+        return 0xFFFF
+    return v
 
 
 def _time_after(now_ms, target_ms):
@@ -448,3 +501,24 @@ def _index_of(buf, value, start):
             return i
         i += 1
     return -1
+
+
+def _extract_lens_name_from_bytes(buf):
+    if not buf or len(buf) < 7:
+        return None
+    i = 0
+    n = len(buf)
+    while i + 3 <= n:
+        # Find Type-C lens-name prefix.
+        if not (buf[i] == 0xBE and (i + 2) < n and buf[i + 1] == 0x80 and buf[i + 2] == 0x81):
+            i += 1
+            continue
+        j = _index_of(buf, 0xBF, i + 3)
+        if j < 0:
+            break
+        frame = bytes(buf[i : j + 1])
+        name = decode_lens_name_type_c(frame)
+        if name:
+            return name
+        i = j + 1
+    return None

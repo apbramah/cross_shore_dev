@@ -128,6 +128,7 @@ def _default_slow_state() -> dict[str, Any]:
         "pan_gain": 100,
         "tilt_gain": 100,
         "roll_gain": 100,
+        "lens_check": 0,
     }
 
 
@@ -984,7 +985,7 @@ def _write_zoom_feedback_runtime() -> None:
         pass
 
 
-def _send_one_slow_key_now(key: str) -> bool:
+def _send_one_slow_key_now(key: str, value_override: Any = None) -> bool:
     global slow_seq, slow_apply_id
     if not heads or not (0 <= selected_index < len(heads)):
         return False
@@ -1002,7 +1003,8 @@ def _send_one_slow_key_now(key: str) -> bool:
     # Canon policy: zoom/focus source are fixed to PC; only iris source is switchable.
     if lens_type == "canon" and key in ("source_zoom", "source_focus"):
         return False
-    enc = mvp_protocol.encode_slow_value(key, dual_slow_state.get(key))
+    src_value = dual_slow_state.get(key) if value_override is None else value_override
+    enc = mvp_protocol.encode_slow_value(key, src_value)
     if enc is None:
         return False
     port = int(head.get("port_slow_cmd", mvp_protocol.SLOW_CMD_PORT))
@@ -1236,8 +1238,8 @@ async def slow_sender_task() -> None:
         if head_network_push_pending:
             continue
         for key in mvp_protocol.SLOW_KEY_IDS.keys():
-            # Never send lens_select: head detects lens at boot; controller must not override it.
-            if key == "lens_select":
+            # Never send boot/one-shot keys in periodic table pushes.
+            if key in ("lens_select", "lens_check"):
                 continue
             _send_one_slow_key_now(key)
 
@@ -1720,11 +1722,16 @@ async def handler(websocket: Any) -> None:
             elif msg_type == "SET_SLOW_CONTROL":
                 key = str(data.get("key", "")).strip()
                 if key in mvp_protocol.SLOW_KEY_IDS:
-                    dual_slow_state[key] = _normalize_slow_value(key, data.get("value"))
-                    _save_state()
                     slow_apply_status[key]["state"] = "pending"
                     slow_apply_status[key]["updated_at"] = time.time()
-                    _send_one_slow_key_now(key)
+                    if key == "lens_check":
+                        dual_slow_state[key] = 0
+                        one_shot_value = data.get("value", 1)
+                    else:
+                        dual_slow_state[key] = _normalize_slow_value(key, data.get("value"))
+                        _save_state()
+                        one_shot_value = None
+                    _send_one_slow_key_now(key, one_shot_value)
             elif msg_type == "SET_SHAPING":
                 payload = data.get("value", {}) or {}
                 if not isinstance(shaping_state.get("top_speed"), dict):

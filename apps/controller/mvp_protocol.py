@@ -36,6 +36,7 @@ SLOW_KEY_ROLL_ACCEL = 15
 SLOW_KEY_PAN_GAIN = 16
 SLOW_KEY_TILT_GAIN = 17
 SLOW_KEY_ROLL_GAIN = 18
+SLOW_KEY_LENS_CHECK = 19
 SLOW_KEY_NETCFG_IP_HI = 40
 SLOW_KEY_NETCFG_IP_LO = 41
 SLOW_KEY_NETCFG_GW_HI = 42
@@ -64,6 +65,7 @@ SLOW_KEY_IDS = {
     "pan_gain": SLOW_KEY_PAN_GAIN,
     "tilt_gain": SLOW_KEY_TILT_GAIN,
     "roll_gain": SLOW_KEY_ROLL_GAIN,
+    "lens_check": SLOW_KEY_LENS_CHECK,
 }
 
 NETWORK_SLOW_KEY_IDS = {
@@ -298,7 +300,7 @@ def _encode_lens_control(control_state: Dict[str, Any]) -> tuple[int, int]:
 # Active runtime uses v2 fast decode on head (decode_fast_packet_v2). Fast packet format:
 #   struct "<BBBHhHHHHHH": magic, ver, PKT_FAST_CTRL, seq(16), zoom(s16), focus(u16), iris(u16), yaw(u16), pitch(u16), roll(u16), reserved(u16).
 # All axis control (yaw, pitch, roll, zoom, focus, iris) is carried ONLY on fast UDP (port 8888).
-# Slow channel (port 8890) carries only config: motors_on, control_mode, lens_select, axis sources, filter keys — no axis values.
+# Slow channel (port 8890) carries only config: motors_on, control_mode, lens_select, lens_check, axis sources, filter keys — no axis values.
 
 # -------------------------------
 # Gate 1 dual-channel scaffolding
@@ -462,6 +464,8 @@ def encode_slow_value(key: str, value: Any) -> Optional[int]:
     if key == "lens_select":
         s = str(value).lower().strip()
         return 1 if s == "canon" else 0
+    if key == "lens_check":
+        return 1 if int(value) != 0 else 0
     if key in ("source_zoom", "source_focus", "source_iris"):
         s = str(value).lower().strip()
         if s == "camera":

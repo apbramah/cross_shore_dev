@@ -102,7 +102,7 @@ Evidence: `apps/controller/mvp_protocol.py::{build_slow_cmd_packet,build_slow_ac
 |---|---:|---|---|
 | `motors_on` | 1 | bool -> `0/1` | set `slow_motors_on`; gate BGC send path |
 | `control_mode` | 2 | `"speed"->0`, `"angle"->1` | track mode; `speed` disables angle mode; `angle` accepted with pending apply message |
-| `lens_select` | 3 | `"fuji"->0`, `"canon"->1` | switch active lens implementation |
+| `lens_select` | 3 | `"fuji"->0`, `"canon"->1` | compatibility key; runtime override ignored (head selects lens at boot) |
 | `source_zoom` | 4 | `pc=0`, `camera=1`, `off=2` | set zoom source ownership |
 | `source_focus` | 5 | `pc=0`, `camera=1`, `off=2` | set focus source ownership |
 | `source_iris` | 6 | `pc=0`, `camera=1`, `off=2` | set iris source ownership |
@@ -110,6 +110,7 @@ Evidence: `apps/controller/mvp_protocol.py::{build_slow_cmd_packet,build_slow_ac
 | `filter_enable_iris` | 8 | bool -> `0/1` | delegate to lens filter-enable hook for iris |
 | `filter_num` | 9 | integer | delegate to lens filter numerator hook |
 | `filter_den` | 10 | integer | delegate to lens filter denominator hook |
+| `lens_check` | 19 | bool/integer (`0/1`) | one-shot reboot request to force lens re-detect |
 
 Evidence: `apps/controller/mvp_protocol.py::SLOW_KEY_IDS`, `encode_slow_value`; `apps/head_eng/main.py::apply_slow_command`.
 
@@ -133,6 +134,10 @@ Key handlers inside `apply_slow_command`:
 - Filter keys -> `apps/head_eng/lens_controller.py::{set_input_filter_enabled,set_input_filter_num,set_input_filter_den}` (dynamic `getattr` dispatch on active lens implementation).
 - Motor/mode keys -> `slow_motors_on` and `slow_control_mode`; `speed` mode calls `apps/head_eng/bgc.py::BGC.disable_angle_mode`.
 
+Lens boot lifecycle:
+- Boot probes Fuji then Canon (`apps/head_eng/lens_detect.py::detect_lens`).
+- If neither responds with a valid payload, runtime enters no-lens mode (`lens = None`) and continues full BGC/network boot.
+
 ## Numbering Registry
 
 | Category | Symbol | Value | Source |
@@ -154,6 +159,7 @@ Key handlers inside `apply_slow_command`:
 | Slow key | `SLOW_KEY_FILTER_ENABLE_IRIS` | 8 | same |
 | Slow key | `SLOW_KEY_FILTER_NUM` | 9 | same |
 | Slow key | `SLOW_KEY_FILTER_DEN` | 10 | same |
+| Slow key | `SLOW_KEY_LENS_CHECK` | 19 | same |
 | Lens enum | `LENS_FUJI` / `LENS_CANON` | `"fuji"` / `"canon"` | `apps/head_eng/lens_controller.py` |
 | Source enum | `SOURCE_PC` / `SOURCE_CAMERA` / `SOURCE_OFF` | `"pc"` / `"camera"` / `"off"` | `apps/head_eng/fuji_lens_from_calibration.py`, `apps/head_eng/canon_lens.py` |
 | Mode encoding | `control_mode` wire | `speed=0`, `angle=1` | `apps/controller/mvp_protocol.py::encode_slow_value` |
@@ -189,7 +195,7 @@ Short call-chain snippets:
 |---|---|---|
 | `motors_on` | implemented and active | `apply_slow_command` updates `slow_motors_on`; main loop gates `bgc.send_joystick_control` |
 | `control_mode` | partially implemented | `speed` branch calls `bgc.disable_angle_mode`; `angle` branch logs `"accepted; apply pending"` |
-| `lens_select` | implemented and active | `apply_slow_command` calls `lens.set_lens_type`; `lens_controller.py::set_lens_type` switches active lens and transport config |
+| `lens_select` | implemented but ignored at runtime | `apply_slow_command` explicitly ignores runtime override; head lens type is chosen only during boot detection |
 | `source_zoom` | implemented and active | `apply_slow_command` calls `lens.set_axis_source("zoom", ...)`; runtime lens methods gate by source |
 | `source_focus` | implemented and active | same pattern for focus |
 | `source_iris` | implemented and active | same pattern for iris |
@@ -197,6 +203,7 @@ Short call-chain snippets:
 | `filter_enable_iris` | accepted but no-op (active Fuji runtime) | same evidence pattern |
 | `filter_num` | accepted but no-op (active Fuji runtime) | delegated by `lens_controller.py::set_input_filter_num`; no method in active `FujiLens` |
 | `filter_den` | accepted but no-op (active Fuji runtime) | delegated by `lens_controller.py::set_input_filter_den`; no method in active `FujiLens` |
+| `lens_check` | implemented and active (one-shot) | `apply_slow_command` ACKs then calls reboot path (`machine.reset`) when value is non-zero |
 
 Active Fuji runtime evidence: `apps/head_eng/lens_controller.py` imports `FujiLens` from `apps/head_eng/fuji_lens_from_calibration.py`.
 

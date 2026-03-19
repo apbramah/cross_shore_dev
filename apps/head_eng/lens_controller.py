@@ -20,14 +20,19 @@ class LensController:
         self.set_lens_type(default_lens_type)
 
     def detect_and_switch_lens_type(self):
-        """Probe transport for Fuji then Canon; if Canon responds, switch to Canon. Returns True if fuji or canon detected, False if none."""
+        """
+        Probe transport for Fuji then Canon.
+        Returns "fuji", "canon", or None.
+        """
         result = lens_detect.detect_lens(self.transport)
         if result == "canon":
             self.set_lens_type(LENS_CANON)
-            return True
+            return LENS_CANON
         if result == "fuji":
-            return True
-        return False
+            if self.active_lens_type != LENS_FUJI:
+                self.set_lens_type(LENS_FUJI)
+            return LENS_FUJI
+        return None
 
     def get_lens_type(self):
         return self.active_lens_type
@@ -38,14 +43,24 @@ class LensController:
         cached = getattr(self.active_lens, "lens_name_cached", None)
         if cached:
             return cached
+        return None
+
+    def refresh_lens_full_name(self):
+        """
+        Explicitly perform a lens-name read once.
+        Keep this separate from get_lens_full_name() so telemetry reads stay non-blocking.
+        """
+        if self.active_lens is None:
+            return None
         fn = getattr(self.active_lens, "read_lens_name", None)
-        if callable(fn):
-            try:
-                name = fn()
-                if name:
-                    return name
-            except Exception:
-                pass
+        if not callable(fn):
+            return None
+        try:
+            name = fn()
+            if name:
+                return name
+        except Exception:
+            pass
         return None
 
     def get_axis_sources(self):

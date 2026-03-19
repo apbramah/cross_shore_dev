@@ -10,7 +10,7 @@ import struct
 import json
 
 from bgc import BGC
-from lens_controller import LensController, LENS_FUJI
+from lens_controller import LensController, LENS_FUJI, LENS_CANON
 import fuji_lens_from_calibration
 import fuji_control_calibration
 from i2c_status_payload import build_status_frame_from_runtime
@@ -34,6 +34,7 @@ MVP_FAST_DEBUG_INTERVAL_MS = 5000
 SLOW_DEBUG = False
 # Set True to log Fuji focus input/target and UART connection (SW4 poll, FOCUS TX).
 FUJI_DEBUG = False
+CANON_DEBUG = False
 I2C_STATUS_ENABLE = True
 I2C_STATUS_BUS_ID = 1
 I2C_STATUS_SDA_PIN = 4
@@ -248,8 +249,12 @@ if I2C_STATUS_ENABLE:
 bgc = BGC()
 if ENABLE_LENS:
     lens = LensController(default_lens_type=LENS_FUJI)
-    detected = lens.detect_and_switch_lens_type()
-    print("[LENS] detection:", lens.get_lens_type() if detected else "none (no reply, left as fuji)")
+    detected_type = lens.detect_and_switch_lens_type()
+    if detected_type in (LENS_FUJI, LENS_CANON):
+        print("[LENS] detection:", detected_type)
+    else:
+        print("[LENS] detection: none (no supported lens reply)")
+        lens = None
 else:
     lens = None
 last_applied_lens_type = None
@@ -290,8 +295,9 @@ if FUJI_DEBUG and lens is not None:
 
 if lens is not None and lens.get_lens_type() == "canon":
     import canon_lens
-    canon_lens.CANON_DEBUG = True
-    print("Canon control debug ON")
+    canon_lens.CANON_DEBUG = bool(CANON_DEBUG)
+    if CANON_DEBUG:
+        print("Canon control debug ON")
 
 if lens is not None:
     # Lens startup is timing-sensitive on real hardware; give it a short settle window.
@@ -348,7 +354,7 @@ apply_fuji_ownership_mode_once()
 if lens is not None:
     last_applied_lens_type = lens.get_lens_type()
     last_applied_sources = lens.get_axis_sources()
-    name = lens.get_lens_full_name()
+    name = lens.refresh_lens_full_name()
     if name:
         print("[LENS] Connected lens:", name)
     else:
@@ -383,6 +389,7 @@ SLOW_KEY_ROLL_ACCEL = 15
 SLOW_KEY_PAN_GAIN = 16
 SLOW_KEY_TILT_GAIN = 17
 SLOW_KEY_ROLL_GAIN = 18
+SLOW_KEY_LENS_CHECK = 19
 SLOW_KEY_NETCFG_IP_HI = 40
 SLOW_KEY_NETCFG_IP_LO = 41
 SLOW_KEY_NETCFG_GW_HI = 42
@@ -410,6 +417,7 @@ SLOW_KEY_NAMES = {
     SLOW_KEY_PAN_GAIN: "pan_gain",
     SLOW_KEY_TILT_GAIN: "tilt_gain",
     SLOW_KEY_ROLL_GAIN: "roll_gain",
+    SLOW_KEY_LENS_CHECK: "lens_check",
     SLOW_KEY_NETCFG_IP_HI: "netcfg_ip_hi",
     SLOW_KEY_NETCFG_IP_LO: "netcfg_ip_lo",
     SLOW_KEY_NETCFG_GW_HI: "netcfg_gw_hi",
@@ -562,27 +570,52 @@ def _send_slow_telem():
             lens_name = lens.get_lens_full_name()
             if not lens_name and time.ticks_diff(now, _lens_name_last_try_ms) >= 5000:
                 _lens_name_last_try_ms = now
-                lens_name = lens.get_lens_full_name()
+                lens_name = lens.refresh_lens_full_name()
             active_lens = getattr(lens, "active_lens", None)
             zoom_mode = str(getattr(active_lens, "zoom_mode", "position"))
             zoom_velocity_cmd = int((_last_fast_fields or {}).get("zoom", 0))
-            zoom_speed_raw = int(getattr(active_lens, "zoom_speed", 0))
+            zoom_speed_raw = int(getattr(active_lens, "zoom_speed_raw", getattr(active_lens, "zoom_speed", 0)))
+            canon_zoom_velocity = int(getattr(active_lens, "zoom_velocity_cmd", 0))
             zoom_feedback = getattr(active_lens, "_last_zoom_feedback", None)
             focus_feedback = getattr(active_lens, "_last_focus_feedback", None)
             iris_feedback = getattr(active_lens, "_last_iris_feedback", None)
             zoom_pos = int(zoom_feedback) if zoom_feedback is not None else int(getattr(active_lens, "zoom", 0))
             focus_pos = int(focus_feedback) if focus_feedback is not None else int(getattr(active_lens, "focus", 0))
             iris_pos = int(iris_feedback) if iris_feedback is not None else int(getattr(active_lens, "iris", 0))
+            focus_target = int(getattr(active_lens, "focus_target", focus_pos))
+            iris_target = int(getattr(active_lens, "iris_target", iris_pos))
+            zoom_target = int(getattr(active_lens, "zoom_target", zoom_pos))
+            control_tx_period_ms = int(getattr(active_lens, "control_tx_period_ms", 0))
+            last_control_tx_ms = int(getattr(active_lens, "_last_control_tx_ms", 0))
+            control_tx_age_ms = 0
+            if last_control_tx_ms > 0:
+                control_tx_age_ms = int(time.ticks_diff(now, last_control_tx_ms))
+                if control_tx_age_ms < 0:
+                    control_tx_age_ms = 0
+            filter_enabled = getattr(active_lens, "_filter_enabled", None)
+            if not isinstance(filter_enabled, dict):
+                filter_enabled = {}
+            filter_num = int(getattr(active_lens, "_filter_num", 0))
+            filter_den = int(getattr(active_lens, "_filter_den", 0))
             lens_id = lens.get_lens_type()
         else:
             lens_name = ""
             zoom_mode = "disabled"
             zoom_velocity_cmd = int((_last_fast_fields or {}).get("zoom", 0))
             zoom_speed_raw = 0
+            canon_zoom_velocity = 0
             zoom_pos = 0
             focus_pos = 0
             iris_pos = 0
-            lens_id = "disabled"
+            focus_target = 0
+            iris_target = 0
+            zoom_target = 0
+            control_tx_period_ms = 0
+            control_tx_age_ms = 0
+            filter_enabled = {}
+            filter_num = 0
+            filter_den = 0
+            lens_id = "none"
 
         bgc_payload = {
             "power_level_main": None,
@@ -611,10 +644,25 @@ def _send_slow_telem():
                 "zoom_control_mode": zoom_mode,
                 "zoom_velocity_cmd": zoom_velocity_cmd,
                 "zoom_speed_raw": zoom_speed_raw,
+                "zoom_velocity_runtime": canon_zoom_velocity,
                 "positions": {
                     "zoom": zoom_pos,
                     "focus": focus_pos,
                     "iris": iris_pos,
+                },
+                "targets": {
+                    "zoom": zoom_target,
+                    "focus": focus_target,
+                    "iris": iris_target,
+                },
+                "runtime": {
+                    "control_tx_period_ms": control_tx_period_ms,
+                    "control_tx_age_ms": control_tx_age_ms,
+                    "filter_enabled": {
+                        "focus": 1 if filter_enabled.get("focus") else 0,
+                        "iris": 1 if filter_enabled.get("iris") else 0,
+                    },
+                    "filter_ratio": {"num": filter_num, "den": filter_den},
                 },
                 "zoom_position": zoom_pos,
                 "focus_position": focus_pos,
@@ -666,6 +714,21 @@ def _decode_source(v):
     if iv == 2:
         return "off"
     return "pc"
+
+
+def _request_head_reboot(reason):
+    try:
+        print("[HEAD] reboot requested:", str(reason or "unspecified"))
+    except Exception:
+        pass
+    try:
+        if hasattr(time, "sleep_ms"):
+            time.sleep_ms(80)
+        else:
+            time.sleep(0.08)
+    except Exception:
+        pass
+    machine.reset()
 
 
 def _network_push_u32_from_hi_lo(hi, lo):
@@ -827,9 +890,20 @@ def apply_slow_command(cmd):
     if key == SLOW_KEY_LENS_SELECT:
         # Ignore: lens type is determined by head at boot (Fuji/Canon detection). Controller must not override.
         return
+    if key == SLOW_KEY_LENS_CHECK:
+        if int(value) != 0:
+            _request_head_reboot("lens_check")
+        return
 
     if key == SLOW_KEY_SOURCE_ZOOM:
         if lens is None:
+            return
+        if lens.get_lens_type() == LENS_CANON:
+            if last_applied_sources.get("zoom") != "pc":
+                lens.set_axis_source("zoom", "pc")
+                last_applied_sources["zoom"] = "pc"
+            if SLOW_DEBUG:
+                print("Slow apply source_zoom ignored for Canon (fixed -> pc)")
             return
         src = _decode_source(value)
         if src != last_applied_sources.get("zoom"):
@@ -840,6 +914,13 @@ def apply_slow_command(cmd):
 
     if key == SLOW_KEY_SOURCE_FOCUS:
         if lens is None:
+            return
+        if lens.get_lens_type() == LENS_CANON:
+            if last_applied_sources.get("focus") != "pc":
+                lens.set_axis_source("focus", "pc")
+                last_applied_sources["focus"] = "pc"
+            if SLOW_DEBUG:
+                print("Slow apply source_focus ignored for Canon (fixed -> pc)")
             return
         src = _decode_source(value)
         if src != last_applied_sources.get("focus"):
@@ -852,6 +933,10 @@ def apply_slow_command(cmd):
         if lens is None:
             return
         src = _decode_source(value)
+        if lens.get_lens_type() == LENS_CANON and src not in ("pc", "camera"):
+            if SLOW_DEBUG:
+                print("Slow apply source_iris rejected for Canon (allowed: pc|camera)")
+            return
         if src != last_applied_sources.get("iris"):
             if lens.set_axis_source("iris", src):
                 last_applied_sources["iris"] = src

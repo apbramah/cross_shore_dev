@@ -113,14 +113,26 @@ def _probe_canon(transport):
         data = transport.read()
         if data:
             buf.extend(data)
-        # Canon protocol: response starts BE 80 81, ends BF (per tester / canon_protocol)
+        # Canon protocol: response starts BE 80 81, ends BF.
+        # Reject a pure echo of LENS_NAME_REQ (BE 80 81 00 00 00 BF).
         if len(buf) >= len(prefix):
-            for i in range(len(buf) - len(prefix) + 1):
-                if (buf[i], buf[i + 1], buf[i + 2]) == prefix:
-                    for j in range(i + 3, len(buf)):
-                        if buf[j] == terminator:
-                            return True
+            i = 0
+            while i <= (len(buf) - len(prefix)):
+                if (buf[i], buf[i + 1], buf[i + 2]) != prefix:
+                    i += 1
+                    continue
+                j = i + 3
+                while j < len(buf) and buf[j] != terminator:
+                    j += 1
+                if j >= len(buf):
+                    # Need more bytes for complete frame.
                     break
+                frame = bytes(buf[i : j + 1])
+                if frame != LENS_NAME_REQ:
+                    return True
+                # Drop pure-echo frame and keep scanning for payload-bearing frame.
+                buf = buf[j + 1 :]
+                i = 0
         if not data:
             try:
                 import time
@@ -149,7 +161,5 @@ def detect_lens(transport):
     if _probe_canon(transport):
         print("[DETECT] Canon: lens name response -> canon")
         return "canon"
-    print("[DETECT] Canon: no response -> none (leave as Fuji)")
-    # No response: leave as Fuji so existing default behaviour is unchanged
-    transport.configure(FUJI_BAUD, bits=FUJI_BITS, parity=FUJI_PARITY, stop=FUJI_STOP)
+    print("[DETECT] Canon: no payload response -> none")
     return None
