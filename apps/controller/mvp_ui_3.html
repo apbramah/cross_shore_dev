@@ -1810,7 +1810,7 @@ function sliderCommandMeta(mode, key){
     if (key === "lens_select") return { type:"enum", values:["fuji","canon"], labels:["Fuji","Canon"] };
     if (key === "source_zoom" || key === "source_focus" || key === "source_iris") return { type:"enum", values:["pc","camera","off"], labels:["PC","Camera","Off"] };
     if (key === "filter_num" || key === "filter_den") return { type:"enum", values:[1,2,4,8,16], labels:["1","2","4","8","16"] };
-    if (key === "gyro_heading_correction") return { min:-8192, max:8192, step:64 };
+    if (key === "gyro_heading_correction") return { min:-8192, max:8192, step:1 };
     if (key === "wash_wipe") return { type:"enum", values:["parked","wiping"], labels:["Wash park","Wash wipe"] };
     if (key === "pan_accel" || key === "tilt_accel" || key === "roll_accel") return { min:0, max:255, step:1 };
     if (key === "pan_gain" || key === "tilt_gain" || key === "roll_gain") return { min:0, max:255, step:1 };
@@ -2455,6 +2455,15 @@ function sliderUiPercentString(mode, key, pct){
   return String(Math.round(n));
 }
 
+const PAN_TRIM_ENCODER_FULL_SPAN_TURNS = 10 * 360;
+const PAN_TRIM_ENCODER_NORM_STEP = 10 / PAN_TRIM_ENCODER_FULL_SPAN_TURNS;
+
+function encoderNormStep(mode, key){
+  // Very fine encoder nudge for PAN TRIM: full travel in ~10x360 turns.
+  if (mode === "slow" && key === "gyro_heading_correction") return PAN_TRIM_ENCODER_NORM_STEP;
+  return 1;
+}
+
 function normalizeAxisValue(raw){
   const v = Number(raw);
   if (!Number.isFinite(v)) return null;
@@ -2612,7 +2621,9 @@ function adjustActiveControlSlider(page, dir){
   if (!mode || mode === "none" || !key || key === "none") return;
   const readback = getSliderReadbackValue(mode, key);
   const currentNorm = commandValueToNormalized10(mode, key, readback);
-  const nextNorm = clamp(Math.round(currentNorm) + (dir > 0 ? 1 : -1), 0, 10);
+  const stepNorm = encoderNormStep(mode, key);
+  const baseNorm = stepNorm < 1 ? currentNorm : Math.round(currentNorm);
+  const nextNorm = clamp(baseNorm + (dir > 0 ? stepNorm : -stepNorm), 0, 10);
   const targetValue = normalized10ToCommandValue(mode, key, nextNorm);
   if (mode === "fast"){
     applyFastSliderValue(key, targetValue);
@@ -2784,7 +2795,9 @@ function adjustActiveSlowItem(dir){
     if (!key || key === "none") return;
     const readback = getSliderReadbackValue("slow", key);
     const currentNorm = commandValueToNormalized10("slow", key, readback);
-    const nextNorm = clamp(Math.round(currentNorm) + (dir > 0 ? 1 : -1), 0, 10);
+    const stepNorm = encoderNormStep("slow", key);
+    const baseNorm = stepNorm < 1 ? currentNorm : Math.round(currentNorm);
+    const nextNorm = clamp(baseNorm + (dir > 0 ? stepNorm : -stepNorm), 0, 10);
     const cmdValue = normalized10ToCommandValue("slow", key, nextNorm);
     applySlowSliderValue(key, cmdValue);
   } else {
@@ -2827,7 +2840,9 @@ function adjustActiveCommandRow(page, dir){
   if (!cmdKey) return;
   const readback = getSliderReadbackValue(mode, cmdKey);
   const currentNorm = commandValueToNormalized10(mode, cmdKey, readback);
-  const nextNorm = clamp(Math.round(currentNorm) + (dir > 0 ? 1 : -1), 0, 10);
+  const stepNorm = encoderNormStep(mode, cmdKey);
+  const baseNorm = stepNorm < 1 ? currentNorm : Math.round(currentNorm);
+  const nextNorm = clamp(baseNorm + (dir > 0 ? stepNorm : -stepNorm), 0, 10);
   const cmdValue = normalized10ToCommandValue(mode, cmdKey, nextNorm);
   if (mode === "fast") applyFastSliderValue(cmdKey, cmdValue);
   else applySlowSliderValue(cmdKey, cmdValue);
