@@ -140,7 +140,11 @@ async def slow_sender_task():
             continue
         port = int(head.get("port_slow_cmd", mvp_protocol.SLOW_CMD_PORT))
         slow_apply_id = (slow_apply_id + 1) & 0xFFFF
+        lens_type = str(dual_slow_state.get("lens_select", "fuji")).lower().strip()
         for key, key_id in mvp_protocol.SLOW_KEY_IDS.items():
+            # Canon policy: zoom/focus source are fixed to PC; only iris source is switchable.
+            if lens_type == "canon" and key in ("source_zoom", "source_focus"):
+                continue
             raw = dual_slow_state.get(key)
             enc = mvp_protocol.encode_slow_value(key, raw)
             if enc is None:

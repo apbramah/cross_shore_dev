@@ -995,6 +995,13 @@ def _send_one_slow_key_now(key: str) -> bool:
     key_id = mvp_protocol.SLOW_KEY_IDS.get(key)
     if not key_id:
         return False
+    lens_payload = head_feedback.get("lens", {}) if isinstance(head_feedback, dict) else {}
+    lens_runtime = str((lens_payload or {}).get("lens_id", "")).lower().strip()
+    lens_cfg = str(dual_slow_state.get("lens_select", "fuji")).lower().strip()
+    lens_type = lens_runtime if lens_runtime in ("canon", "fuji") else lens_cfg
+    # Canon policy: zoom/focus source are fixed to PC; only iris source is switchable.
+    if lens_type == "canon" and key in ("source_zoom", "source_focus"):
+        return False
     enc = mvp_protocol.encode_slow_value(key, dual_slow_state.get(key))
     if enc is None:
         return False
